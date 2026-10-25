@@ -134,7 +134,7 @@ export async function privateMigrationArchive(workspaceId: string, userId: strin
     sourceRevision: mode.sourceRevision,
     identities: accounts.map((a) => ({ userId: a.userId, identity: a.identity })),
     members: members.map((m) => ({ userId: m.userId, role: m.role, canViewOthersTime: m.canViewOthersTime, canViewOthersMoney: m.canViewOthersMoney })),
-    records: rows.map((r) => ({ id: r.id, kind: r.kind, authorId: r.authorId, revision: r.revision, box: r.box, grants: r.grants, deleted: r.deleted })),
+    records: rows.map((r) => ({ id: r.id, kind: r.kind, authorId: r.authorId, revision: r.revision, keyCommitment: r.keyCommitment, box: r.box, grants: r.grants, deleted: r.deleted })),
   };
   return { archive, hash: hash(archive) };
 }

@@ -102,3 +102,25 @@ it("shares member details without disclosing rates to colleagues without money a
   await assert.rejects(encryptPrivateRecord("workspace", { ...original, value: { ...original.value, hourlyRate: 100 } }, members, 1), /private or unknown fields/);
   await assert.rejects(encryptPrivateRecord("workspace", { ...original, value: { ...original.value, unknownNote: "Do not share this" } }, members, 1), /private or unknown fields/);
 });
+
+it("commits every recipient to one random record key and authenticates commitment removal/substitution", async () => {
+  const plain = { id: "shared", kind: "tags" as const, authorId: null, value: { name: "Same original for every reader" } };
+  const record = await encryptPrivateRecord("workspace", plain, members, 1);
+  assert.match(record.keyCommitment!, /^[A-Za-z0-9_-]{43}$/);
+  for (const recipient of members) assert.deepEqual(await decryptPrivateRecord("workspace", record, recipient.userId, pair.privateKey), plain);
+  await assert.rejects(decryptPrivateRecord("workspace", { ...record, keyCommitment: "A".repeat(43) }, "author", pair.privateKey));
+  const { keyCommitment: _commitment, ...downgraded } = record;
+  await assert.rejects(decryptPrivateRecord("workspace", downgraded, "author", pair.privateKey));
+  const different = randomSecret(), replaced = structuredClone(record), context = privateRecordContext("workspace", record);
+  replaced.grants.find((g) => g.userId === "author")!.envelope = await sealForRecipient(pair.publicKey, encodeSecret(different), `${context}:author`);
+  different.fill(0);
+  await assert.rejects(decryptPrivateRecord("workspace", replaced, "author", pair.privateKey), /record key commitment/);
+});
+it("retains authenticated legacy record reading without silently downgrading new records", async () => {
+  const metadata = { id: "legacy", kind: "tags" as const, authorId: null, revision: 1 }, value = { name: "Original legacy work" };
+  const secret = randomSecret(), context = privateRecordContext("workspace", metadata);
+  try {
+    const legacy = { ...metadata, box: await seal(secret, value, context), grants: [{ userId: "owner", envelope: await sealForRecipient(pair.publicKey, encodeSecret(secret), `${context}:owner`) }] };
+    assert.deepEqual(await decryptPrivateRecord("workspace", legacy, "owner", pair.privateKey), { id: "legacy", kind: "tags", authorId: null, value });
+  } finally { secret.fill(0); }
+});

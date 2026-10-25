@@ -119,7 +119,7 @@ export const privacyRouter = router({
     if (mode.head || mode.directoryDigest) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Use the verified initial snapshot and chained history for this workspace." });
     const rows = await PrivateRecord.find({ workspaceId: ctx.workspaceId, "grants.userId": ctx.user.id, revision: { $gt: input.after }, ...(input.cursor ? { _id: { $gt: input.cursor } } : {}) }).sort({ _id: 1 }).limit(201).lean();
     const page = rows.slice(0, 200);
-    return { revision: mode.revision, next: rows.length > 200 ? String(page.at(-1)!._id) : null, records: page.map((row) => ({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, box: row.box, deleted: row.deleted, grants: row.grants.filter((g) => g.userId === ctx.user.id) })) };
+    return { revision: mode.revision, next: rows.length > 200 ? String(page.at(-1)!._id) : null, records: page.map((row) => ({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, keyCommitment: row.keyCommitment, box: row.box, deleted: row.deleted, grants: row.grants.filter((g) => g.userId === ctx.user.id) })) };
   }),
   write: privateWorkspaceProcedure.input(scopeSchema.extend({ expectedRevision: z.number().int().nonnegative(), records: z.array(encryptedRecordSchema).min(1).max(100), remove: z.array(z.object({ kind: encryptedRecordSchema.shape.kind, id: z.string().min(1).max(100) })).max(100).default([]) })).mutation(async ({ ctx, input }) => {
     requirePrivateWorkspaceRollout();

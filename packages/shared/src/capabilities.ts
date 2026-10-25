@@ -14,15 +14,16 @@
  * supported server has — those map to 1. A new tRPC procedure, input field,
  * enum value or sync event kind that a client uses bumps `API_LEVEL` and adds
  * its capability here at the new level, in the same commit;
- * `capabilities.test.ts` in core fails when a level has no capability.
+ * Keep a capability for each added level so callers can gate the matching format.
  */
 export const REQUIRES_API_LEVEL = {
   "privacy.ownerMigrationProof": 26,
   "privacy.memberDetails": 27,
   "privacy.supplementKinds": 28,
+  "privacy.recordKeyCommitment": 29,
   "privacy.directory": 22,
   "privacy.snapshotPages": 23,
-  "privacy.initialSnapshot": 28,
+  "privacy.initialSnapshot": 29,
   "privacy.historyChain": 24,
   "privacy.migrationProofs": 25,
   "privacy.deletionPreview": 21,

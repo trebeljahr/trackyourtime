@@ -565,6 +565,31 @@ server/user/session/workspace scope when the future router mounts these engines;
 no challenge/source endpoint is public in this build. A fresh login/password
 reset alone cannot produce the existing account root signature.
 
+## Record key binding (API level 29)
+
+New records include `keyCommitment`, a domain-separated SHA-256 commitment to
+the random 256-bit record key and workspace/kind/ID/author/revision context.
+The commitment enters the v2 authenticated-encryption context for both content
+and recipient envelopes. Each reader checks its unwrapped key against the same
+commitment before decrypting content. Signed record hashes, immutable snapshots
+and history include that field; materialized storage and projections preserve it.
+Migration footprint estimates include the extra bytes.
+
+AES-GCM alone is not key-committing; multi-reader wrapping must not assume it
+proves that different recipient envelopes contain one key. See the primary
+[USENIX analysis of authenticated encryption without key commitment](https://www.usenix.org/conference/usenixsecurity22/presentation/albertini).
+This application binding uses random record keys, not password/plaintext
+checksums. It does not substitute for signature, source-content or audience
+verification, or claim a general password-encryption fix.
+
+Authenticated legacy record reading retains its original v1 context. Removing
+or replacing a new commitment cannot downgrade a v2 ciphertext because its
+content/envelope authentication then fails. New initial snapshots and new
+signed journal writes refuse missing commitments; old immutable operation replay
+is retained. Initial-snapshot capability now requires API 29. Standard minimum
+client level remains 1; workspace rollout remains closed. Complete migration
+proof/delivery and private app adapter dependencies below still apply.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes

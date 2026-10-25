@@ -27,6 +27,13 @@ describe("signed private workspace journal", { skip: skipWithoutDatabase }, () =
     await PrivateWorkspace.create({ workspaceId: WS, ownerId: OWNER, state: "encrypted", revision: 0, leaseUntil: new Date(), migrationId: crypto.randomUUID(), sourceRevision: "synthetic" });
   });
   after(dropTestDatabase);
+  it("refuses a signed new edit without its record-key binding before changing stored state", async () => {
+    const input = await edit(0, "missing-binding"), { keyCommitment: _key, ...legacyShape } = input.edit.records[0]!;
+    const stripped = await signPrivateWorkspaceEdit({ ...input.edit, records: [legacyShape] }, signing.privateKey, members.map((row) => row.userId));
+    await assert.rejects(commitPrivateWorkspaceEdit(OWNER, stripped), { code: "BAD_REQUEST", message: "New private edits require committed record keys." });
+    assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await PrivateWorkspaceCommit.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.revision, 0);
+  });
   it("commits atomically, persists only ciphertext, retries after later saves, and refuses operation-ID reuse", async () => {
     const first = await edit(0, "first");
     assert.deepEqual(await commitPrivateWorkspaceEdit(OWNER, first), { revision: 1 });

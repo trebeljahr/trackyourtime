@@ -34,6 +34,7 @@ function orderedRecords(input: readonly unknown[]): EncryptedRecord[] {
   rows.sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
   let previous: string | null = null;
   for (const row of rows) {
+    if (!row.keyCommitment) throw new Error("Initial private snapshots require committed record keys");
     if (row.revision !== 1 || previous === address(row)) throw new Error("Duplicate or unexpected initial snapshot record");
     previous = address(row);
   }

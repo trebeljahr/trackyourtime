@@ -13,7 +13,7 @@ export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ 
 }, { timestamps: true }));
 const privateRecordSchema = new Schema<EncryptedRecord & { workspaceId: string; deleted: boolean }>({
   workspaceId: { type: String, required: true }, id: { type: String, required: true }, kind: { type: String, required: true }, authorId: { type: String, default: null },
-  revision: { type: Number, required: true }, box: { type: Schema.Types.Mixed, required: true }, grants: { type: Schema.Types.Mixed, required: true }, deleted: { type: Boolean, default: false },
+  revision: { type: Number, required: true }, keyCommitment: { type: String }, box: { type: Schema.Types.Mixed, required: true }, grants: { type: Schema.Types.Mixed, required: true }, deleted: { type: Boolean, default: false },
 }, { timestamps: true });
 privateRecordSchema.index({ workspaceId: 1, kind: 1, id: 1 }, { unique: true });
 privateRecordSchema.index({ workspaceId: 1, revision: 1 });

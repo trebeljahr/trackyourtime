@@ -20,7 +20,19 @@ export function readersForPrivateRecord(kind: PrivateKind, authorId: string | nu
     return true;
   });
 }
-export const privateRecordContext = (workspace: string, row: Pick<EncryptedRecord, "kind" | "id" | "revision" | "authorId">): string => JSON.stringify(["trackyourtime-record-v1", workspace, row.kind, row.id, row.authorId, row.revision]);
+type RecordContext = Pick<EncryptedRecord, "kind" | "id" | "revision" | "authorId" | "keyCommitment">;
+export const privateRecordContext = (workspace: string, row: RecordContext): string => row.keyCommitment
+  ? JSON.stringify(["trackyourtime-record-v2", workspace, row.kind, row.id, row.authorId, row.revision, row.keyCommitment])
+  : JSON.stringify(["trackyourtime-record-v1", workspace, row.kind, row.id, row.authorId, row.revision]);
+/** Commit to the random 256-bit record key and its scope before wrapping it
+ * for multiple readers. This digest is not a password/plaintext checksum. */
+export async function privateRecordKeyCommitment(secret: Uint8Array, workspace: string, row: RecordContext): Promise<string> {
+  if (secret.length !== 32) throw new Error("A 256-bit record key is required");
+  const context = new TextEncoder().encode(JSON.stringify(["trackyourtime-record-key-v1", workspace, row.kind, row.id, row.authorId, row.revision]));
+  const input = new Uint8Array(context.length + secret.length); input.set(context); input.set(secret, context.length);
+  try { return encodeSecret(new Uint8Array(await crypto.subtle.digest("SHA-256", input))); }
+  finally { input.fill(0); }
+}
 function privateAuthorField(kind: PrivateKind, id: string): string | null {
   if (["entries", "entryMoney", "approvals"].includes(kind)) return "authorId";
   if (kind === "favorites" || kind === "members" || kind === "memberMoney") return "userId";
@@ -55,9 +67,10 @@ export async function encryptPrivateRecord(workspace: string, input: PlainPrivat
   const recipients = readersForPrivateRecord(plain.kind, plain.authorId, members);
   if (!recipients.length) throw new Error("No authorized recipient for private data");
   const secret = randomSecret();
-  const record = { id: plain.id, kind: plain.kind, authorId: plain.authorId, revision };
-  const context = privateRecordContext(workspace, record);
   try {
+    const base = { id: plain.id, kind: plain.kind, authorId: plain.authorId, revision };
+    const record = { ...base, keyCommitment: await privateRecordKeyCommitment(secret, workspace, base) };
+    const context = privateRecordContext(workspace, record);
     const box = await seal(secret, plain.value, context);
     const grants = [];
     for (const recipient of recipients) grants.push({ userId: recipient.userId, envelope: await sealForRecipient(recipient.publicKey, encodeSecret(secret), `${context}:${recipient.userId}`) });
@@ -71,6 +84,7 @@ export async function decryptPrivateRecord(workspace: string, input: EncryptedRe
   const context = privateRecordContext(workspace, row);
   const secret = decodeSecret(await unsealForRecipient<string>(privateKey, grant.envelope, `${context}:${userId}`), 32);
   try {
+    if (row.keyCommitment && await privateRecordKeyCommitment(secret, workspace, row) !== row.keyCommitment) throw new Error("Recipient key does not match the record key commitment");
     const plain = { id: row.id, kind: row.kind, authorId: row.authorId, value: await unseal<Record<string, unknown>>(secret, row.box, context) };
     assertPrivateValueBinding(workspace, plain); return plain;
   } finally { secret.fill(0); }

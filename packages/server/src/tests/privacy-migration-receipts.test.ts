@@ -77,7 +77,7 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     await PrivateRecord.deleteMany({}); await PrivateSnapshotChunk.deleteMany({}); await PrivateSnapshotReader.deleteMany({});
     let offset: number | null = 0;
     do { offset = (await stagePrivateMigrationBatch(scope.workspaceId, "owner", migrationId, offset)).next; } while (offset !== null);
-    const records = (await PrivateRecord.find().lean()).map(({ id, kind, authorId, revision, box, grants }) => ({ id, kind, authorId, revision, box, grants }));
+    const records = (await PrivateRecord.find().lean()).map(({ id, kind, authorId, revision, keyCommitment, box, grants }) => ({ id, kind, authorId, revision, keyCommitment, box, grants }));
     const signed = await signPrivateInitialSnapshot({ records, migrationId, userId: "owner", directory, secrets: owner, current: () => true });
     await preparePrivateInitialSnapshot({ ...scope, userId: "owner", migrationId }, signed.readers);
     const ownScope = { ...scope, userId: "owner" };

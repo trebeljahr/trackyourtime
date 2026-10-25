@@ -1,5 +1,5 @@
 {
-  "apiLevel": 28,
+  "apiLevel": 29,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4573,6 +4573,10 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "keyCommitment": {
+                      "pattern": "^[A-Za-z0-9_-]{43}$",
+                      "type": "string"
+                    },
                     "kind": {
                       "enum": [
                         "entries",
@@ -5606,6 +5610,10 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "keyCommitment": {
+                      "pattern": "^[A-Za-z0-9_-]{43}$",
+                      "type": "string"
+                    },
                     "kind": {
                       "enum": [
                         "entries",
@@ -6153,6 +6161,10 @@
                 "id": {
                   "maxLength": 100,
                   "minLength": 1,
+                  "type": "string"
+                },
+                "keyCommitment": {
+                  "pattern": "^[A-Za-z0-9_-]{43}$",
                   "type": "string"
                 },
                 "kind": {

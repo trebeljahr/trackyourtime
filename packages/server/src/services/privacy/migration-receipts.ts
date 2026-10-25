@@ -37,7 +37,7 @@ export async function recordPrivateFavoritesMigrationProof(scope: { server: stri
     try {
       for await (const row of cursor) {
         if (row.deleted || row.revision !== 1) throw new TRPCError({ code: "CONFLICT" });
-        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, box: row.box, grants: row.grants });
+        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, keyCommitment: row.keyCommitment, box: row.box, grants: row.grants });
         bytes += Buffer.byteLength(JSON.stringify(record)) + 1;
         if (records.length >= RECOVERY_MAX_RECORDS || bytes > PRIVATE_SNAPSHOT_MAX_BYTES) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE" });
         records.push(record);
@@ -118,7 +118,7 @@ async function recordOwnerProof(scope: { server: string; workspaceId: string; us
     try {
       for await (const row of staged) {
         if (row.deleted || row.revision !== 1) throw changed();
-        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, box: row.box, grants: row.grants });
+        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, keyCommitment: row.keyCommitment, box: row.box, grants: row.grants });
         bytes += Buffer.byteLength(JSON.stringify(record)) + 1;
         if (bytes > PRIVATE_SNAPSHOT_MAX_BYTES || records.length >= 400_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE" });
         const readers = readersForPrivateRecord(record.kind, record.authorId, directory.signed.directory.members).map((member) => member.userId).sort();

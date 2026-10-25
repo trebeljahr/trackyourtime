@@ -8,6 +8,7 @@ export type PrivateKind = typeof PRIVATE_KINDS[number];
 export const encryptedRecordSchema = z.object({
   id: z.string().min(1).max(100), kind: privateKindSchema, authorId: z.string().min(1).max(100).nullable(),
   revision: z.number().int().nonnegative(),
+  keyCommitment: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
   box: cipherSchema,
   grants: z.array(z.object({ userId: z.string().min(1).max(100), envelope: recipientBoxSchema }).strict()).min(1).max(200),
 }).strict();

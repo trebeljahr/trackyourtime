@@ -43,6 +43,7 @@ async function commitWorkspaceEdit(userId: string, input: SignedPrivateWorkspace
       }
       return { revision: prior.revision, ...(prior.head ? { head: prior.head } : {}) };
     }
+    if (edit.records.some((record) => !record.keyCommitment)) throw new TRPCError({ code: "BAD_REQUEST", message: "New private edits require committed record keys." });
     const account = await PrivateAccount.findOne({ userId }).lean();
     if (!account) throw new TRPCError({ code: "PRECONDITION_FAILED" });
     await verifyPrivateChange(account.identity.signingPublicKey, manifest, signature);

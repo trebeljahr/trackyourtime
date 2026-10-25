@@ -57,7 +57,8 @@ export async function preparePrivateInitialSnapshot(scope: Scope, input: readonl
     const cursor = PrivateRecord.find({ workspaceId }).lean().cursor({ batchSize: 10 });
     try {
       for await (const row of cursor) {
-        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, box: row.box, grants: row.grants });
+        const record = encryptedRecordSchema.parse({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, keyCommitment: row.keyCommitment, box: row.box, grants: row.grants });
+        if (!record.keyCommitment) throw new TRPCError({ code: "BAD_REQUEST", message: "Initial private snapshots require committed record keys." });
         bytes += size(record) + 1;
         if (bytes > PRIVATE_SNAPSHOT_MAX_BYTES || records.length >= 400_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE" });
         const audience = record.grants.map((grant) => grant.userId).sort();

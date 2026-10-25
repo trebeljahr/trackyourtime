@@ -24,7 +24,7 @@ export function estimatePrivateMigrationStorage(workspaceId: string, records: re
     if (!recipients.length) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Every private original needs a verified recipient. Source data was kept." });
     const payload = Math.ceil((size(row.value) + 16) * 4 / 3);
     if (payload > 2_000_000) throw tooLarge();
-    const prototype = { id: row.id, kind: row.kind, authorId: row.authorId, revision: 1, box: { v: 1, nonce, data: "" }, grants: recipients.map((recipient) => ({ userId: recipient.userId, envelope: { v: 1, ephemeral, box: keyBox } })) };
+    const prototype = { id: row.id, kind: row.kind, authorId: row.authorId, revision: 1, keyCommitment: "A".repeat(43), box: { v: 1, nonce, data: "" }, grants: recipients.map((recipient) => ({ userId: recipient.userId, envelope: { v: 1, ephemeral, box: keyBox } })) };
     const json = size(prototype) + payload + 1;
     ciphertextBytes += json; grants += recipients.length;
     if (json > PRIVATE_SNAPSHOT_PAGE_MAX_BYTES - 4096 || ciphertextBytes > PRIVATE_SNAPSHOT_MAX_BYTES) throw tooLarge();
