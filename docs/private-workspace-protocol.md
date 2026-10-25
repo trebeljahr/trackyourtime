@@ -807,6 +807,41 @@ and storage/process retirement requirements. Account erasure cancels pending
 preparation atomically with its guarded write; encrypted shared modes retain
 their ciphertext and verification history.
 
+## Operator originals and isolated restore tooling (internal)
+
+An operator-only archive now captures all seventeen original collections from
+the frozen preparation, including every creator's favorites and integration
+originals. It requires current content readiness and binds the exact preparation
+row, migration, directory and signed initial root. This format is deliberately
+separate from owner/member files, which exclude peers' private originals. It
+has no user API and must never be returned through one.
+
+On the trusted operator machine, an independent random 256-bit key derives an
+HKDF-SHA256 purpose key bound to that checkpoint. AES-256-GCM authenticates the
+distinct file header and complete typed archive. No account password or private
+root participates. The library never saves or returns the operator key; keeping
+it independently off the application host remains an operational requirement.
+
+The writer exclusively creates a new 0600 file, syncs it, reopens the saved
+bytes and compares/decrypts them. It then starts its own temporary authenticated
+MongoDB process to restore and reread every typed document. It accepts a local
+`mongod` executable, not an arbitrary restore database connection. A socket in a
+0700 directory prevents a loopback-port race from redirecting bootstrap commands;
+the authenticated process must report the expected private data path. Restored
+document digests must equal both full-source checksums. Successful return binds
+the checkpoint and encrypted file SHA-256. Existing files are never overwritten;
+failure returns no verification result and preserves encrypted file evidence.
+The throwaway process/database/directory are cleaned on success and failure.
+
+This is a bounded workspace-originals drill, not a complete installation backup
+or an activation authorization. Indexes, auth/account tables, external files,
+backup key custody, post-cutover work/rollback and operational attestation still
+need integration. The drill necessarily creates transient plaintext on the
+trusted operator machine; removing temporary files does not prove physical
+storage erasure. Operator storage/copies join the required retirement inventory.
+No customer archive, live restore, cutover or server-side backup approval has
+been performed by these synthetic checks.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes

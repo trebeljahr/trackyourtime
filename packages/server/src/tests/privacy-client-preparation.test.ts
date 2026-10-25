@@ -18,6 +18,7 @@ import { captureCompleteProjectionPreparation, privateProjectionProposal } from 
 import { preparePrivateProjectionSnapshot } from "../services/privacy/projection-snapshots.js";
 import { privateProjectionPreparationReadiness, recordPrivateProjectionOwnerProof, recordPrivateProjectionPersonalProof } from "../services/privacy/projection-receipts.js";
 import { personalMigrationSource } from "../services/privacy/personal-migration.js";
+import { captureOperatorRecoveryArchive } from "../services/privacy/operator-recovery.js";
 import { stagePrivateMigrationBatch, runVerifiedPrivateOriginalStage } from "../services/privacy/migration.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { auditPrivateWorkspaceRetirement } from "../services/privacy/retirement-audit.js";
@@ -106,6 +107,25 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     await recordPrivateProjectionOwnerProof(scope, await f.proof("owner"));
     assert.deepEqual(await f.readiness(), { status: "content-verified" });
     assert.equal(await PrivateMigrationReceipt.countDocuments(), 1);
+  });
+  it("captures complete operator originals only after current content verification and never substitutes an owner-readable backup", async () => {
+    const f = await contentVerification();
+    await assert.rejects(captureOperatorRecoveryArchive(f.workerScope, f.root), /verification is incomplete/);
+    await recordPrivateProjectionOwnerProof(scope, await f.proof("owner"));
+    await recordPrivateProjectionPersonalProof({ ...scope, userId: "member" }, await f.proof("member"));
+    const archive = await captureOperatorRecoveryArchive(f.workerScope, f.root);
+    assert.equal(archive.snapshot.collections.favorites.length, 2);
+    assert.equal(archive.supplement.collections.webhooksubscriptions.length, 2);
+    assert.match(JSON.stringify(archive), /Member original secret/);
+    const mode = (await PrivateWorkspace.findOne().lean())!;
+    assert.equal(archive.snapshot.sourceRevision, mode.sourceRevision); assert.equal(archive.supplement.sourceRevision, mode.supplementRevision);
+    assert.equal(archive.modeId, String(mode._id)); assert.equal(archive.snapshotRoot, f.root);
+    assert.equal(mode.state, "migrating"); assert.equal(mode.backupVerified, false);
+    const own = await combinedWorkspaceRecovery(scope.workspaceId, "owner", scope.server);
+    assert.notEqual(own.snapshot.sourceRevision, archive.snapshot.sourceRevision);
+    assert.notEqual(own.supplement.sourceRevision, archive.supplement.sourceRevision);
+    await assert.rejects(captureOperatorRecoveryArchive({ ...f.workerScope, userId: "member" }, f.root), { code: "NOT_FOUND" });
+    await assert.rejects(captureOperatorRecoveryArchive(f.workerScope, "A".repeat(43)), { code: "CONFLICT" });
   });
   it("revalidates saved receipt signatures and source bindings instead of trusting row presence", async () => {
     const f = await contentVerification();
