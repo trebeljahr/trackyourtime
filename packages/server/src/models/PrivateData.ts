@@ -89,6 +89,26 @@ const privateSnapshotReaderSchema = new Schema<{
 privateSnapshotReaderSchema.index({ workspaceId: 1, migrationId: 1, userId: 1 }, { unique: true });
 export const PrivateSnapshotReader = mongoose.model("PrivateSnapshotReader", privateSnapshotReaderSchema);
 
+type ProjectionLocation = { chunk: number; before: number; count: number };
+const privateProjectionRootSchema = new Schema<{
+  workspaceId: string; migrationId: string; root: string; fullRecordsDigest: string;
+  signed: import("@starter/shared").SignedPrivateInitialProjectionRoot;
+}>({
+  workspaceId: { type: String, required: true }, migrationId: { type: String, required: true }, root: { type: String, required: true },
+  fullRecordsDigest: { type: String, required: true }, signed: { type: Schema.Types.Mixed, required: true },
+}, { timestamps: true });
+privateProjectionRootSchema.index({ workspaceId: 1, migrationId: 1 }, { unique: true });
+export const PrivateProjectionRoot = mongoose.model("PrivateProjectionRoot", privateProjectionRootSchema);
+const privateProjectionReaderSchema = new Schema<{
+  workspaceId: string; migrationId: string; userId: string;
+  sharedLocations: ProjectionLocation[]; personalLocations: ProjectionLocation[];
+}>({
+  workspaceId: { type: String, required: true }, migrationId: { type: String, required: true }, userId: { type: String, required: true },
+  sharedLocations: { type: Schema.Types.Mixed, required: true }, personalLocations: { type: Schema.Types.Mixed, required: true },
+}, { timestamps: true });
+privateProjectionReaderSchema.index({ workspaceId: 1, migrationId: 1, userId: 1 }, { unique: true });
+export const PrivateProjectionReader = mongoose.model("PrivateProjectionReader", privateProjectionReaderSchema);
+
 /** Signed content-verification receipts contain checksums and counts only,
  * never the member's original plaintext preferences or private keys. */
 const privateMigrationReceiptSchema = new Schema<{
@@ -103,4 +123,4 @@ export const PrivateMigrationReceipt = mongoose.model("PrivateMigrationReceipt",
 
 // Charge materialized ciphertext, immutable duplicates, reader projections,
 // directory history and temporary preparation state through the shared ledger.
-for (const model of [PrivateRecord, PrivateWorkspaceCommit, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateDirectory, PrivateMigrationReceipt, PrivateWorkspace]) installStorageQuota(model);
+for (const model of [PrivateRecord, PrivateWorkspaceCommit, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateDirectory, PrivateMigrationReceipt, PrivateWorkspace, PrivateProjectionRoot, PrivateProjectionReader]) installStorageQuota(model);

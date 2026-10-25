@@ -56,7 +56,7 @@ describe("encrypted storage budgets", { skip: skipWithoutDatabase }, () => {
     await assert.rejects(PrivateRecord.create({ workspaceId: WS, ...await cipher("new") }), isQuota);
     assert.equal(await PrivateRecord.countDocuments(), 1);
     await PrivateRecord.deleteOne({ workspaceId: WS, id: "legacy" });
-    assert.equal(await used(), 8192); assert.equal((await StorageUsage.findById(WS).lean())!.version, 2);
+    assert.equal(await used(), 8192); assert.equal((await StorageUsage.findById(WS).lean())!.version, 3);
   });
   it("serializes encrypted growth across workspaces owned by the same account", async () => {
     const other = "private-quota-other";

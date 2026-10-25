@@ -3,7 +3,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { canonicalJson, privateInitialSnapshotProjection, privateInitialSnapshotRoot, privateRecordDigest } from "@starter/core";
 import { encryptedRecordSchema, PRIVATE_SNAPSHOT_MAX_BYTES, PRIVATE_SNAPSHOT_PAGE_MAX_BYTES, signedPrivateInitialSnapshotSchema, type EncryptedRecord, type SignedPrivateInitialSnapshot } from "@starter/shared";
-import { PrivateDirectory, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
+import { PrivateDirectory, PrivateRecord, PrivateProjectionRoot, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 import { requireActivePrivatePreparation } from "./preparation.js";
@@ -38,6 +38,7 @@ export async function preparePrivateInitialSnapshot(scope: Scope, input: readonl
       if (manifest.server !== server || manifest.workspaceId !== workspaceId || manifest.migrationId !== migrationId || manifest.directoryDigest !== directory.digest || manifest.signerId !== userId) throw new TRPCError({ code: "BAD_REQUEST", message: "Initial snapshot belongs to another scope." });
       await verifyPrivateChange(owner.signingPublicKey, manifest, signed.signature);
     }
+    if (await PrivateProjectionRoot.exists({ workspaceId, migrationId })) throw new TRPCError({ code: "CONFLICT", message: "A different snapshot protocol is already prepared. Cancel before restarting." });
     const existing = await PrivateSnapshotReader.find({ workspaceId, migrationId }).lean();
     if (existing.length) {
       if (existing.length !== readers.length || readers.some((row) => canonicalJson(existing.find((prior) => prior.userId === row.manifest.readerId)?.signed.manifest) !== canonicalJson(row.manifest)) || new Set(existing.map((row) => row.fullRecordsDigest)).size !== 1) throw new TRPCError({ code: "CONFLICT", message: "The initial snapshot was already prepared with different data." });

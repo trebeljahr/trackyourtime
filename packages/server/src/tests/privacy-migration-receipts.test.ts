@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
 import mongoose from "mongoose";
 import { Long } from "mongodb";
-import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, createPrivateCombinedOwnerMigrationProof, createPrivatePersonalMigrationProof, createPrivateProjectionOwnerProof, signPrivateInitialProjectionRoot, verifyPrivateInitialProjection, encryptCombinedRecoveryKeyBackup, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
+import { createKeyPair, createSigningPair, createPrivateFavoritesMigrationProof, createPrivateOwnerMigrationProof, createPrivateCombinedOwnerMigrationProof, createPrivatePersonalMigrationProof, createPrivateProjectionOwnerProof, signPrivateInitialProjectionRoot, verifyPrivateInitialProjection, encryptCombinedRecoveryKeyBackup, deriveRecoveryBackupKey, encryptRecoveryKeyBackup, encodeSecret, encryptPrivateRecord, partitionPrivateRecovery, privateRecordDigest, privateMemberKeyFingerprint, privateInitialSnapshotProjection, randomSecret, seal, signPrivateChange, signPrivateInitialSnapshot, signPrivateWorkspaceDirectory, verifyPrivateInitialSnapshot, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
 import type { PrivateDirectoryMember, SignedPrivateFavoritesMigrationProof, SignedPrivateOwnerMigrationProof } from "@starter/shared";
-import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace } from "../models/PrivateData.js";
+import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateWorkspace } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { migrationFavoritesSource, workspaceRecovery } from "../services/privacy/recovery.js";
@@ -12,6 +12,8 @@ import { commitPrivateDirectory } from "../services/privacy/directories.js";
 import { preparePrivateInitialSnapshot } from "../services/privacy/initial-snapshots.js";
 import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof, recordPrivateCombinedOwnerMigrationProof } from "../services/privacy/migration-receipts.js";
 import { personalMigrationSource, recordPrivatePersonalMigrationProof } from "../services/privacy/personal-migration.js";
+import { preparePrivateProjectionSnapshot, privateProjectionSnapshotRoot, privateProjectionSnapshotPage } from "../services/privacy/projection-snapshots.js";
+import { discardPrivatePreparation } from "../services/privacy/preparation.js";
 import { privateProjectionProposal } from "../services/privacy/projection-proposal.js";
 import { combinedWorkspaceRecovery } from "../services/privacy/combined-recovery.js";
 import { capturePrivateMigrationSupplement } from "../services/privacy/recovery-supplement.js";
@@ -26,7 +28,7 @@ let ownerProof: SignedPrivateOwnerMigrationProof;
 let migrationId: string, directory: VerifiedPrivateDirectory, people: PrivateDirectoryMember[], proof: SignedPrivateFavoritesMigrationProof;
 let owner: { privateKey: PublicKey; signingPrivateKey: PublicKey }, member: typeof owner;
 describe("private preferences conversion receipts", { skip: skipWithoutDatabase }, () => {
-  before(() => connectTestDatabase("private-migration-receipts", [PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, WorkspaceMember, WorkspaceWriteFence] as never));
+  before(() => connectTestDatabase("private-migration-receipts", [PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateWorkspace, WorkspaceMember, WorkspaceWriteFence] as never));
   beforeEach(async () => {
     await clearTestDatabase(); migrationId = crypto.randomUUID();
     const ownerPair = await createKeyPair(), ownerSigning = await createSigningPair(), memberPair = await createKeyPair(), memberSigning = await createSigningPair();
@@ -95,6 +97,94 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     const personalProof = await createPrivatePersonalMigrationProof({ readBackup: async () => memberRaw, backupKey: memberKey, snapshot: memberSnapshot, directory, userId: "member", secrets: member, current: () => true }); memberKey.fill(0);
     return { combinedProof, ownScope, complete, personalProof, personal };
   }
+  async function separatedFixture(extraTags = 0) {
+    const f = await combinedFixture();
+    const legacyReaders = (await PrivateSnapshotReader.find().lean()).map((row) => row.signed);
+    await PrivateSnapshotReader.deleteMany({}); await PrivateSnapshotChunk.deleteMany({});
+    if (extraTags) {
+      await mongoose.connection.db!.collection<{ _id: string; workspaceId: string; name: string }>("tags").insertMany(Array.from({ length: extraTags }, (_, index) => ({ _id: `projection-tag-${index}`, workspaceId: scope.workspaceId, name: `Shared tag ${index}` })));
+      const source = await workspaceRecovery(scope.workspaceId, "owner", true);
+      await PrivateWorkspace.updateOne({}, { $set: { sourceRevision: source.sourceRevision } });
+      let offset: number | null = 0;
+      do { offset = (await stagePrivateMigrationBatch(scope.workspaceId, "owner", migrationId, offset)).next; } while (offset !== null);
+    }
+    const proposal = await privateProjectionProposal({ ...f.ownScope, migrationId });
+    const signed = await signPrivateInitialProjectionRoot({ ...proposal, personalDigests: new Map(proposal.personalDigests.map((row) => [row.userId, row.digest])), directory, userId: "owner", secrets: owner, current: () => true });
+    return { ...f, proposal, signed, legacyReaders };
+  }
+  async function projectionReader(userId: string, secrets: typeof owner) {
+    const readerScope = { ...scope, userId }, signed = await privateProjectionSnapshotRoot(readerScope);
+    async function lane(kind: "shared" | "personal") {
+      const rows = []; let offset: number | null = 0, pages = 0;
+      do {
+        const page = await privateProjectionSnapshotPage({ ...readerScope, migrationId }, kind, offset);
+        assert.equal(page.offset, offset); assert.ok(page.records.length <= 100);
+        assert.ok(page.records.every((record) => record.grants.length === 1 && record.grants[0]!.userId === userId));
+        rows.push(...page.records); offset = page.next; pages++;
+      } while (offset !== null);
+      return { rows, pages };
+    }
+    const shared = await lane("shared"), personal = await lane("personal");
+    return { snapshot: await verifyPrivateInitialProjection({ signed, sharedRecords: shared.rows, personalRecords: personal.rows, scope: readerScope, directory, secrets, current: () => true }), shared, personal };
+  }
+  it("stores one common immutable root, paginates independent reader lanes and rechecks idempotent publication", async () => {
+    const { ownScope, signed, legacyReaders } = await separatedFixture(105);
+    const prepared = await preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed);
+    assert.deepEqual(await preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed), prepared);
+    await assert.rejects(preparePrivateInitialSnapshot({ ...ownScope, migrationId }, legacyReaders), { code: "CONFLICT" });
+    const memberView = await projectionReader("member", member), ownerView = await projectionReader("owner", owner);
+    assert.equal(memberView.snapshot.root, prepared.root); assert.equal(ownerView.snapshot.root, prepared.root);
+    assert.ok(memberView.shared.pages >= 2); assert.equal(memberView.personal.rows.length, 2); assert.equal(ownerView.personal.rows.length, 3);
+    assert.equal(await PrivateProjectionRoot.countDocuments(), 1); assert.equal(await PrivateProjectionReader.countDocuments(), 2);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating"); assert.equal((await PrivateWorkspace.findOne().lean())!.backupVerified, false);
+    await PrivateProjectionReader.deleteOne({ userId: "member" });
+    await assert.rejects(preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed), /incomplete/);
+  });
+  it("refuses stale preparation, invalid offsets, a changed stored root and unrelated readers", async () => {
+    const { ownScope, signed } = await separatedFixture();
+    await preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed);
+    await assert.rejects(privateProjectionSnapshotRoot({ ...scope, userId: "stranger" }), { code: "NOT_FOUND" });
+    await assert.rejects(privateProjectionSnapshotRoot({ ...scope, server: "https://different.invalid" }), { code: "NOT_FOUND" });
+    for (const offset of [-1, 0.5, 400001]) await assert.rejects(privateProjectionSnapshotPage({ ...scope, migrationId }, "personal", offset), { code: "BAD_REQUEST" });
+    await assert.rejects(privateProjectionSnapshotPage({ ...scope, migrationId: "different" }, "shared", 0), { code: "NOT_FOUND" });
+    await PrivateProjectionRoot.updateOne({}, { $set: { root: "A".repeat(43) } });
+    await assert.rejects(privateProjectionSnapshotRoot(scope), /incomplete/);
+    await PrivateProjectionRoot.updateOne({}, { $set: { root: await privateRecordDigest(signed.manifest) } });
+    await PrivateWorkspace.updateOne({}, { $set: { leaseUntil: new Date(0) } });
+    await assert.rejects(privateProjectionSnapshotRoot(scope), { code: "PRECONDITION_FAILED" });
+  });
+  it("rejects forged/wrong projection roots and mixed old storage before writing any v3 snapshot", async () => {
+    const { ownScope, signed } = await separatedFixture();
+    const forged = structuredClone(signed); forged.signature = await signPrivateChange(member.signingPrivateKey, forged.manifest);
+    await assert.rejects(preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, forged), { code: "FORBIDDEN" });
+    const wrong = structuredClone(signed); wrong.manifest.readers[0]!.personalDigest = "A".repeat(43); wrong.signature = await signPrivateChange(owner.signingPrivateKey, wrong.manifest);
+    await assert.rejects(preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, wrong), { code: "BAD_REQUEST" });
+    assert.equal(await PrivateProjectionRoot.countDocuments(), 0); assert.equal(await PrivateSnapshotChunk.countDocuments(), 0);
+    await PrivateSnapshotReader.collection.insertOne({ workspaceId: scope.workspaceId, migrationId, userId: "legacy" });
+    await assert.rejects(preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed), { code: "CONFLICT" });
+    assert.equal(await PrivateProjectionRoot.countDocuments(), 0);
+  });
+  it("does not recreate deleted staged rows after a v3 root is frozen and cancellation removes every new artifact", async () => {
+    const { ownScope, signed } = await separatedFixture();
+    await preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed);
+    const row = (await PrivateRecord.findOne().lean())!; await PrivateRecord.deleteOne({ _id: row._id });
+    await assert.rejects(stagePrivateMigrationBatch(scope.workspaceId, "owner", migrationId, 0), /already frozen/);
+    assert.equal(await PrivateRecord.countDocuments({ _id: row._id }), 0);
+    assert.equal(await discardPrivatePreparation(scope.workspaceId, migrationId), true);
+    for (const model of [PrivateRecord, PrivateSnapshotChunk, PrivateProjectionRoot, PrivateProjectionReader, PrivateWorkspace]) assert.equal(await model.countDocuments(), 0);
+    assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
+  });
+  it("keeps another reader's signed projections verifiable after account erasure removes personal ciphertext and indexes", async () => {
+    const { ownScope, signed } = await separatedFixture();
+    const { root } = await preparePrivateProjectionSnapshot({ ...ownScope, migrationId }, signed);
+    await PrivateWorkspace.updateOne({}, { $set: { state: "encrypted", revision: 1, head: root, directoryDigest: directory.digest, sourceRevision: "retired", supplementRevision: "retired", backupVerified: true } });
+    await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: scope.workspaceId, userId: "member" });
+    await mongooseRowStore.erasePrivateUserData("member"); await mongooseRowStore.deleteMany("privateAccounts", { userId: "member" });
+    assert.equal(await PrivateProjectionReader.countDocuments({ userId: "member" }), 0);
+    assert.equal((await projectionReader("owner", owner)).snapshot.root, root);
+    assert.equal(await PrivateProjectionRoot.countDocuments(), 1);
+    await assert.rejects(privateProjectionSnapshotRoot(scope), { code: "NOT_FOUND" });
+  });
   it("delivers a bounded owner proposal without peer private IDs, source checksums or root wrappers and verifies its saved-file approval", async () => {
     const { ownScope } = await combinedFixture();
     const proposal = await privateProjectionProposal({ ...ownScope, migrationId });

@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
 import { canonicalJson, encryptPrivateRecord, partitionPrivateRecovery, partitionPrivateRecoverySupplement, type PrivateRecipient } from "@starter/core";
 import { RECOVERY_KINDS, RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS, type EncryptedRecord } from "@starter/shared";
-import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateSnapshotReader, PrivateWorkspace } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateSnapshotReader, PrivateProjectionRoot, PrivateWorkspace } from "../../models/PrivateData.js";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceRecovery } from "./recovery.js";
 import { capturePrivateMigrationSupplement } from "./recovery-supplement.js";
@@ -100,7 +100,7 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     const source = await workspaceRecovery(workspaceId, userId, true);
     const supplement = mode.supplementRevision ? await capturePrivateMigrationSupplement(workspaceId, userId) : null;
     if ((mode.supplementRevision ?? null) !== prepared.supplementRevision || (supplement?.sourceRevision ?? null) !== prepared.supplementRevision || directory?.digest !== prepared.directoryDigest || mode.sourceRevision !== prepared.sourceRevision || source.sourceRevision !== prepared.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Preparation changed while encrypting. Source data was kept." });
-    const frozen = await PrivateSnapshotReader.exists({ workspaceId, migrationId });
+    const frozen = await PrivateSnapshotReader.exists({ workspaceId, migrationId }) || await PrivateProjectionRoot.exists({ workspaceId, migrationId });
     for (const record of encrypted) {
       const existing = await PrivateRecord.findOne({ workspaceId, kind: record.kind, id: record.id }).lean();
       if (existing) {

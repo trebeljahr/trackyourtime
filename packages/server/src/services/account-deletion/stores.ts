@@ -1,7 +1,7 @@
 import { PRIVATE_USER_ONLY_KINDS } from "@starter/shared";
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
-import { PrivateAccount, PrivateDirectory, PrivateDeviceRequest, PrivateSourceChallengeRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateDirectory, PrivateDeviceRequest, PrivateSourceChallengeRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
 import { fenceWorkspace, withBusinessTransaction } from "../business-transaction.js";
@@ -51,6 +51,8 @@ const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateDirectories: PrivateDirectory,
   privateSnapshotChunks: PrivateSnapshotChunk,
   privateSnapshotReaders: PrivateSnapshotReader,
+  privateProjectionRoots: PrivateProjectionRoot,
+  privateProjectionReaders: PrivateProjectionReader,
   privateMigrationReceipts: PrivateMigrationReceipt,
   privateDeviceRequests: PrivateDeviceRequest,
   privateSourceChallenges: PrivateSourceChallengeRequest,
@@ -119,6 +121,7 @@ export const mongooseRowStore: DeletionRowStore = {
       ...await PrivateRecord.distinct("workspaceId", { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId }),
       ...await PrivateSnapshotChunk.distinct("workspaceId", { records: { $elemMatch: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId } } }),
       ...await PrivateSnapshotReader.distinct("workspaceId", { userId }),
+      ...await PrivateProjectionReader.distinct("workspaceId", { userId }),
       ...await PrivateWorkspaceCommit.distinct("workspaceId", { $or: [
         { records: { $elemMatch: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId } } },
         { "readerSignatures.userId": userId },
@@ -130,6 +133,7 @@ export const mongooseRowStore: DeletionRowStore = {
         await PrivateRecord.deleteMany({ workspaceId, kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId });
         await PrivateSnapshotChunk.updateMany({ workspaceId }, { $pull: { records: { kind: { $in: [...PRIVATE_USER_ONLY_KINDS] }, authorId: userId } } });
         await PrivateSnapshotReader.deleteMany({ workspaceId, userId });
+        await PrivateProjectionReader.deleteMany({ workspaceId, userId });
         // Never delete a whole mixed commit: others still need its shared
         // ciphertext. Their separately signed projections excluded these
         // personal records from the start. Keep immutable manifest commitments and

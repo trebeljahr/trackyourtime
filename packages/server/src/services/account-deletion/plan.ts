@@ -29,6 +29,8 @@ export type DeletionCollection =
   | "privateDirectories"
   | "privateSnapshotChunks"
   | "privateSnapshotReaders"
+  | "privateProjectionRoots"
+  | "privateProjectionReaders"
   | "privateMigrationReceipts"
   | "privateWorkspaceCommits"
   | "privateRecords"
@@ -108,6 +110,8 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     scoped("privateDirectories"),
     scoped("privateSnapshotChunks"),
     scoped("privateSnapshotReaders"),
+    scoped("privateProjectionRoots"),
+    scoped("privateProjectionReaders"),
     scoped("privateMigrationReceipts"),
     scoped("privateSourceChallenges"),
     scoped("privateWorkspaces"),
@@ -225,6 +229,7 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     { collection: "privateDeviceRequests", filter: { userId: user.id } },
     { collection: "privateSourceChallenges", filter: { userId: user.id } },
     { collection: "privateSnapshotReaders", filter: { userId: user.id } },
+    { collection: "privateProjectionReaders", filter: { userId: user.id } },
     { collection: "privateMigrationReceipts", filter: { userId: user.id } },
     ...(email ? [{ collection: "authInvitations" as const, filter: { email } }] : []),
   ];

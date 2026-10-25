@@ -15,6 +15,8 @@ const privateFields: Record<string, string[]> = {
   privatesourcechallengerequests: ["userId", "workspaceId", "challenge", "expiresAt"],
   privatedirectories: ["workspaceId", "revision", "digest", "signerPublicKey", "signed"],
   privatesnapshotchunks: ["workspaceId", "migrationId", "index", "records"],
+  privateprojectionroots: ["workspaceId", "migrationId", "root", "fullRecordsDigest", "signed"],
+  privateprojectionreaders: ["workspaceId", "migrationId", "userId", "sharedLocations", "personalLocations"],
   privatesnapshotreaders: ["workspaceId", "migrationId", "userId", "fullRecordsDigest", "signed", "locations"],
   privaterecords: ["workspaceId", "id", "kind", "authorId", "revision", "keyCommitment", "box", "grants", "deleted"],
   privateworkspacecommits: ["workspaceId", "userId", "operationId", "revision", "manifest", "signature", "readerSignatures", "records", "chain", "head"],

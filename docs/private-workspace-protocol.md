@@ -496,7 +496,7 @@ The shared workspace/account quota ledger now includes materialized encrypted
 records, immutable journal and snapshot copies, reader indexes, public directory
 history, temporary content receipts and workspace mode rows. Recipient grants
 count at their full stored BSON size. Every row retains the ordinary 4 KiB
-record/index floor. Ledger version 2 rebaselines existing data before the next
+record/index floor. Ledger version 3 rebaselines existing data before the next
 accounted mutation; old version 1 totals cannot hide pre-existing private bytes.
 
 These private models use the same transactional workspace/account storage fences
@@ -526,7 +526,7 @@ The estimate is not a source-content or restoration proof.
 
 The headroom check recounts actual registered collections across the current
 workspace and its owners' other workspaces under the shared account storage
-fences. It does not trust cached v2 ledgers when legacy/native maintenance may
+fences. It does not trust cached ledgers when legacy/native maintenance may
 have bypassed accounting. Insufficient temporary capacity rejects before record
 encryption; original rows stay intact. Existing staged batches still face the
 actual transactional limits on each later write.
@@ -609,8 +609,8 @@ from unverified persisted/network objects; unlock invalidation revokes their use
 This primitive authenticates initial content, not global freshness after every
 device/checkpoint is lost. Durable mode/root pins remain required.
 
-This does not yet replace v2 server storage, transport, receipts or replica
-bootstrap. Source correctness still needs the reopened original backup proof;
+Separate internal v3 storage/reader transport now exists below. Public transport,
+receipts and replica bootstrap still use the guarded v2 path. Source correctness still needs the reopened original backup proof;
 owner signatures alone cannot authorize retirement. The future public migration
 should stage shared data in the owner's client and each creator's personal data
 in that creator's client. Bind staging to the current source/preparation/directory
@@ -651,6 +651,29 @@ exact personal counts never enter that response. The separately named complete
 capture engine is server-internal only and must not be returned from a user API.
 The proposal does not freeze or publish a root. It is a transaction snapshot;
 the later storage/receipt controller must recheck state before accepting it.
+
+## Immutable projection storage and delivery (internal)
+
+`preparePrivateProjectionSnapshot` rechecks the complete fenced preparation and
+owner signature, recomputes every reader's two ciphertext digests, then stores one
+signed v3 root, bounded immutable chunks and separate shared/personal indexes.
+Retries compare the complete frozen chunks and reader indexes; mixed protocols,
+partial storage and changed roots refuse publication. The v2 helper likewise
+refuses a prepared v3 root, including an empty snapshot. Preparation does not
+activate encryption, approve backups or delete originals.
+
+Internal root/page reads require current membership, matching server/preparation,
+a live lease before cutover and a consistent encrypted-mode head afterwards.
+They use the account-erasure workspace fence. Independent shared/personal pages
+return only the caller's grants and logical offsets, not foreign personal IDs,
+counts or physical indexes. Each result still needs client signature/content
+verification. Frozen initial records survive later materialized edits.
+
+Cancellation/expiry and solo workspace deletion remove both new collections.
+Shared account deletion removes only that account's reader index and personal
+ciphertext; the common root and other readers' projections remain verifiable.
+Quota ledger version 3 includes the root and reader indexes. No public v3 route,
+replica bootstrap or live activation is enabled by these internal helpers.
 
 ## Remaining rollout dependencies
 

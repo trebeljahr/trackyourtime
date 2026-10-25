@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { PrivateMigrationReceipt, PrivateSourceChallengeRequest, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
+import { PrivateMigrationReceipt, PrivateSourceChallengeRequest, PrivateProjectionRoot, PrivateProjectionReader, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 
 export function requireActivePrivatePreparation(mode: { state: string; revision: number; head: string | null; leaseUntil: Date; backupVerified: boolean }, now = Date.now()): void {
@@ -19,6 +19,8 @@ export async function discardPrivatePreparation(workspaceId: string, migrationId
     await PrivateRecord.deleteMany({ workspaceId });
     await PrivateSnapshotChunk.deleteMany({ workspaceId, migrationId });
     await PrivateSnapshotReader.deleteMany({ workspaceId, migrationId });
+    await PrivateProjectionReader.deleteMany({ workspaceId, migrationId });
+    await PrivateProjectionRoot.deleteMany({ workspaceId, migrationId });
     await PrivateMigrationReceipt.deleteMany({ workspaceId, migrationId });
     await PrivateSourceChallengeRequest.deleteMany({ workspaceId });
     await PrivateWorkspace.deleteOne({ _id: mode._id });
