@@ -1,7 +1,7 @@
 import { PRIVATE_USER_ONLY_KINDS } from "@starter/shared";
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
-import { PrivateAccount, PrivateDirectory, PrivateDeviceRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
+import { PrivateAccount, PrivateDirectory, PrivateDeviceRequest, PrivateSourceChallengeRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
 import { fenceWorkspace, withBusinessTransaction } from "../business-transaction.js";
@@ -53,6 +53,7 @@ const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateSnapshotReaders: PrivateSnapshotReader,
   privateMigrationReceipts: PrivateMigrationReceipt,
   privateDeviceRequests: PrivateDeviceRequest,
+  privateSourceChallenges: PrivateSourceChallengeRequest,
   privateRecords: PrivateRecord,
   privateWorkspaceCommits: PrivateWorkspaceCommit,
   privateWorkspaces: PrivateWorkspace,

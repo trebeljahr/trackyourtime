@@ -113,3 +113,15 @@ export const privatePersonalMigrationProofSchema = privateCombinedOwnerMigration
 }).strict();
 export const signedPrivatePersonalMigrationProofSchema = z.object({ proof: privatePersonalMigrationProofSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivatePersonalMigrationProof = z.infer<typeof signedPrivatePersonalMigrationProofSchema>;
+
+export const PRIVATE_SOURCE_CHALLENGE_TTL_MS = 120_000;
+export const privateSourceChallengeSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-source-challenge-v1"), requestId: z.uuid(),
+  server: z.string().url().max(2048), workspaceId: id, userId: id,
+  purpose: z.enum(["workspace-originals", "personal-originals"]), migrationId: z.uuid().nullable(),
+  sessionBinding: z.string().regex(/^[A-Za-z0-9_-]{43}$/), keyFingerprint: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  issuedAt: z.number().int().positive(), expiresAt: z.number().int().positive(),
+}).strict();
+export const signedPrivateSourceChallengeSchema = z.object({ challenge: privateSourceChallengeSchema, signature: privateSignatureSchema }).strict();
+export type PrivateSourceChallenge = z.infer<typeof privateSourceChallengeSchema>;
+export type SignedPrivateSourceChallenge = z.infer<typeof signedPrivateSourceChallengeSchema>;

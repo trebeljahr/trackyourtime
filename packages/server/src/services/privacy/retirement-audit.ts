@@ -12,6 +12,7 @@ export function privateWorkspaceRoutingIdentity(workspaceId: string) {
 type RawRow = Document & { _id: string | ObjectId };
 export type PrivateRetirementLeak = { collection: string; reason: "original-records" | "integration-content" | "personal-labels" | "source-checksums" | "unknown-fields" | "unclassified-records"; records: number };
 const privateFields: Record<string, string[]> = {
+  privatesourcechallengerequests: ["userId", "workspaceId", "challenge", "expiresAt"],
   privatedirectories: ["workspaceId", "revision", "digest", "signerPublicKey", "signed"],
   privatesnapshotchunks: ["workspaceId", "migrationId", "index", "records"],
   privatesnapshotreaders: ["workspaceId", "migrationId", "userId", "fullRecordsDigest", "signed", "locations"],

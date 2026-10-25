@@ -483,8 +483,8 @@ single-creator grants, staged ciphertext and frozen chunks before storing an
 idempotent `personal` receipt. Replays repeat those checks. Account deletion and
 preparation cancellation remove these receipts with the existing scoped cleanup.
 
-These source/proof functions are not mounted publicly. A trusted root/device
-challenge still must authorize sensitive original reads before that happens.
+These source/proof functions are not mounted publicly. The internal trusted-root
+challenge boundary below must authorize sensitive original reads when mounted.
 The cutover controller must require personal receipts only for non-owner members
 with private originals; no records means no content approval to wait for. Neither
 a personal nor owner receipt replaces complete operational restoration or permits
@@ -537,6 +537,33 @@ refuse work near the bound even if a tighter packing might fit. The future v2
 begin controller must run the same preflight before creating its mode/lease.
 Maintenance/raw-writer fencing, a durable reservation policy and retention still
 need completion before public conversion is enabled.
+
+## Session-bound original-read authorization (internal)
+
+A source read needs a one-use signed challenge in addition to the authenticated
+login. The challenge binds canonical server origin, account, workspace, source
+purpose, current preparation ID (or null before owner preparation), a digest of
+the current session ID and both unlocked account keys' fingerprint. It contains
+no session token, private key, original value or plaintext source checksum.
+The signer checks expected operation/session/root, bounded two-minute lifetime
+and unlock generation before signing. Expired or substituted scopes are refused.
+
+The server issues at most three outstanding challenges per account using the
+account-key transaction fence. Consumption repeats live role/mode, scope/session,
+root fingerprint, stored challenge and expiry checks, verifies the root signature
+and deletes the nonce in the same fenced transaction as the source read.
+Concurrent replays can release originals only once. Owner source reads still
+exclude other creators' private records; personal source reads contain only the
+caller's favorites/integrations. Converted workspaces refuse original reads.
+
+Challenges are bounded transient control metadata with a TTL, separate from the
+content quota so a full account can still request recovery originals. Cancellation
+removes workspace challenges; account deletion removes the person's challenges
+across workspaces. Key changes, role loss, another login session and source mode
+changes invalidate pending authorization. Authentication context must supply
+server/user/session/workspace scope when the future router mounts these engines;
+no challenge/source endpoint is public in this build. A fresh login/password
+reset alone cannot produce the existing account root signature.
 
 ## Remaining rollout dependencies
 

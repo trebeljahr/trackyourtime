@@ -53,3 +53,4 @@ export * from "./privacy/combined-recovery.js";
 export * from "./privacy/combined-recovery-backup.js";
 export * from "./privacy/combined-migration-proof.js";
 export * from "./privacy/personal-migration-proof.js";
+export * from "./privacy/source-challenge.js";

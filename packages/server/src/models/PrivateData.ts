@@ -28,6 +28,16 @@ privateDeviceRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 privateDeviceRequestSchema.index({ userId: 1, expiresAt: 1 });
 export const PrivateDeviceRequest = mongoose.model("PrivateDeviceRequest", privateDeviceRequestSchema);
 
+const privateSourceChallengeModelSchema = new Schema<{
+  _id: string; userId: string; workspaceId: string; challenge: import("@starter/shared").PrivateSourceChallenge; expiresAt: Date;
+}>({
+  _id: { type: String, required: true }, userId: { type: String, required: true }, workspaceId: { type: String, required: true },
+  challenge: { type: Schema.Types.Mixed, required: true }, expiresAt: { type: Date, required: true },
+}, { timestamps: true });
+privateSourceChallengeModelSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+privateSourceChallengeModelSchema.index({ userId: 1, expiresAt: 1 });
+export const PrivateSourceChallengeRequest = mongoose.model("PrivateSourceChallengeRequest", privateSourceChallengeModelSchema);
+
 /** Immutable ciphertext journal and replay receipt. One revision per workspace
  * edit; no TTL, so a client that was offline cannot miss a deletion. */
 const privateWorkspaceCommitSchema = new Schema<{
