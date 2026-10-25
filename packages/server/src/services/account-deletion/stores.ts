@@ -1,4 +1,5 @@
 import { PRIVATE_USER_ONLY_KINDS } from "@starter/shared";
+import { PrivateInventoryVersion } from "../../models/PrivateInventoryVersion.js";
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
 import { PrivateAccount, PrivatePreparationRequest, PrivateDirectory, PrivateDeviceRequest, PrivateSourceChallengeRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
@@ -48,6 +49,7 @@ type AppCollection = Exclude<
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateAccounts: PrivateAccount,
+  privateInventoryVersions: PrivateInventoryVersion,
   privateDirectories: PrivateDirectory,
   privateSnapshotChunks: PrivateSnapshotChunk,
   privateSnapshotReaders: PrivateSnapshotReader,

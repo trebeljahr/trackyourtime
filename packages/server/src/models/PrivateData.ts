@@ -1,9 +1,10 @@
 import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema } from "mongoose";
 import type { EncryptedRecord, PrivateIdentity, PrivateDeviceApproval, PrivateDeviceInvite } from "@starter/shared";
-export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number; keySerial: number }>({
+export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number; keySerial: number; inventoryRevision: number; inventoryRoot: string | null; inventoryBytes: number }>({
   userId: { type: String, required: true, unique: true }, identity: { type: Schema.Types.Mixed, required: true }, revision: { type: Number, default: 1 },
   deviceSerial: { type: Number, default: 0 }, keySerial: { type: Number, default: 0 },
+  inventoryRevision: { type: Number, default: 0 }, inventoryRoot: { type: String, default: null }, inventoryBytes: { type: Number, default: 0 },
 }, { timestamps: true }));
 export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; supplementRevision?: string | null; preparationProtocol?: "client-v2" | null; originalStage?: { signed: import("@starter/shared").SignedPrivateOriginalStageRequest; cursor: number; complete: boolean } | null; operatorBackup?: { proof: Record<string, unknown>; signature: string } | null; backupVerified: boolean }>({
   workspaceId: { type: String, required: true, unique: true }, state: { type: String, enum: ["migrating", "encrypted"], required: true },

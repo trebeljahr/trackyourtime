@@ -1,5 +1,5 @@
 {
-  "apiLevel": 30,
+  "apiLevel": 31,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -5267,6 +5267,137 @@
         "type": "object"
       },
       "type": "query"
+    },
+    "privacy.inventoryVersions": {
+      "input": {
+        "properties": {
+          "after": {
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "through": {
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "after"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.inventoryWrite": {
+      "input": {
+        "properties": {
+          "signed": {
+            "additionalProperties": false,
+            "properties": {
+              "box": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "maxLength": 786432,
+                    "minLength": 22,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "type": "string"
+                  },
+                  "nonce": {
+                    "pattern": "^[A-Za-z0-9_-]{16}$",
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "v",
+                  "nonce",
+                  "data"
+                ],
+                "type": "object"
+              },
+              "header": {
+                "additionalProperties": false,
+                "properties": {
+                  "keyFingerprint": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  },
+                  "operationId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "previousRoot": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "protocol": {
+                    "const": "trackyourtime-account-inventory-version-v1",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "server": {
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "userId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "v",
+                  "protocol",
+                  "server",
+                  "userId",
+                  "operationId",
+                  "revision",
+                  "previousRoot",
+                  "keyFingerprint"
+                ],
+                "type": "object"
+              },
+              "signature": {
+                "pattern": "^[A-Za-z0-9_-]{86}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "header",
+              "box",
+              "signature"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "signed"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
     },
     "privacy.migrationArchive": {
       "input": {

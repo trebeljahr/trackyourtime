@@ -20,6 +20,9 @@ import { TRPCError } from "@trpc/server";
 import { encryptedRecordSchema, privateIdentitySchema, privateDeviceApprovalSchema, publicEncryptionKeySchema, type PrivateIdentity, type EncryptedRecord } from "@starter/shared";
 import { approvePrivateDevice, cancelPrivateDevice, createPrivateDeviceRequest, privateDeviceStatus } from "../../services/privacy/devices.js";
 import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateWorkspace } from "../../models/PrivateData.js";
+import { PrivateInventoryVersion } from "../../models/PrivateInventoryVersion.js";
+import { commitPrivateInventoryVersion, privateInventoryVersions, PRIVATE_INVENTORY_HISTORY_MAX_VERSIONS } from "../../services/privacy/inventory-versions.js";
+import { signedPrivateInventoryVersionSchema } from "@starter/shared";
 import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { workspaceIdFromInput, resolveWorkspace } from "../../auth/workspace.js";
 import { supportsBusinessTransactions, withBusinessTransaction, fenceWorkspace, transactionSession } from "../../services/business-transaction.js";
@@ -62,6 +65,10 @@ function validateRecordAudience(record: EncryptedRecord, members: Awaited<Return
 }
 const allMembers = (workspaceId: string) => WorkspaceMember.find({ workspaceId }).lean();
 export const privacyRouter = router({
+  inventoryWrite: privateAccountProcedure.input(z.object({ signed: signedPrivateInventoryVersionSchema })).mutation(({ ctx, input }) =>
+    commitPrivateInventoryVersion({ server: privateServerOrigin(), userId: ctx.user.id }, input.signed)),
+  inventoryVersions: privateAccountProcedure.input(z.object({ after: z.number().int().nonnegative().max(PRIVATE_INVENTORY_HISTORY_MAX_VERSIONS), through: z.number().int().nonnegative().max(PRIVATE_INVENTORY_HISTORY_MAX_VERSIONS).optional() })).mutation(({ ctx, input }) =>
+    privateInventoryVersions({ server: privateServerOrigin(), userId: ctx.user.id }, input.after, input.through)),
   deletionPreview: privateAccountProcedure.input(z.object({ userId: z.string().min(1).max(100) })).query(async ({ ctx, input }) => {
     if (input.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND" });
     const { adapter } = await getAuth().$context;
@@ -81,6 +88,7 @@ export const privacyRouter = router({
       if (canonicalJson(current.identity) === canonicalJson(input.identity)) return { revision: current.revision };
       throw new TRPCError({ code: "CONFLICT", message: "Private identity already exists. Unlock it before making changes." });
     }
+    if (await PrivateInventoryVersion.exists({ userId: ctx.user.id })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Existing encrypted account history needs recovery before enrolling new keys." });
     try { await PrivateAccount.create({ userId: ctx.user.id, identity: input.identity, revision: 1 }); }
     catch (error) {
       if ((error as { code?: number }).code !== 11000) throw error;
@@ -98,6 +106,7 @@ export const privacyRouter = router({
     const coordinates = ({ kty, crv, x, y }: PrivateIdentity["publicKey"]) => ({ kty, crv, x, y });
     const keySet = (identity: PrivateIdentity) => canonicalJson([coordinates(identity.publicKey), coordinates(identity.signingPublicKey)]);
     if (keySet(current.identity) !== keySet(input.identity)) {
+      if (await PrivateInventoryVersion.exists({ userId: ctx.user.id })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Encrypted account history requires a verified key transition before rotation." });
       const workspaces = await WorkspaceMember.distinct("workspaceId", { userId: ctx.user.id });
       if (transactionSession()) for (const workspaceId of [...workspaces].sort()) await fenceWorkspace(workspaceId);
       if (await PrivateWorkspace.exists({ workspaceId: { $in: workspaces } }) || await PrivateDirectory.exists({ workspaceId: { $in: workspaces } })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Verified workspace keys require a signed directory transition and regrant before rotation." });

@@ -915,8 +915,8 @@ without truncation.
 
 The client adapters and account-wide durable host bind this state to the current
 account/server/unlock generation. This remains a local library foundation:
-there is no account-inventory server transport, profile/device/recovery transfer,
-initial enrollment UI, active data routing or conversion controller yet. A new
+API 31 supplies ciphertext history below, but profile/device/recovery transfer,
+initial enrollment UI, active data routing and the conversion controller remain. A new
 device without an independently trusted checkpoint still needs an explicit
 decision. Callers must never start fresh enrollment automatically after stored
 or server metadata disappears. A complete local filesystem rollback or a stale
@@ -945,8 +945,8 @@ before decrypting, then checks the inner inventory signature and matching revisi
 It returns an unbranded signed document. Only the account inventory store can
 accept it through consecutive local history or independently anchored restoration;
 it cannot enroll an empty device merely because an API supplied valid ciphertext.
-This is an internal primitive, with no mounted endpoint/capability change or
-durable transport outbox yet. Workspace rollout remains disabled.
+API 31 now uses this primitive for the account-only endpoints below. A durable
+client transport outbox is still required. Workspace rollout remains disabled.
 
 ## Account erasure versus delayed private writes
 
@@ -972,6 +972,44 @@ formerly authorized device, a physical-storage wipe, or an old-client plaintext
 transport policy. Queries and existing standard account behavior retain their
 existing rules. No live account has been marked by the synthetic regression
 checks.
+
+## Account inventory persistence and API 31
+
+`privacy.inventoryWrite` and `privacy.inventoryVersions` now store and deliver
+only account-owned signed ciphertext under the `privacy.accountInventory`
+capability. Both use authenticated POSTs and `Cache-Control: no-store`. Account
+and origin come from the authenticated context/configuration, never a submitted
+workspace/user selector. They require the enrolled account's signing key and
+the account-erasure transaction fence. Workspace conversion stays disabled and
+the minimum API level for existing standard clients remains 1.
+
+The account head, immutable revision and charged metadata bytes commit together.
+Retries preserve the first accepted ciphertext/signature, including after later
+versions; a different valid signature over identical header/box keeps the same
+opaque root. Reusing an operation ID for different ciphertext refuses. Concurrent
+writers serialize against the account row. Failed head publication rolls back
+its ciphertext, and stale revision/root conflicts keep the pending version.
+
+History is bounded by 4096 versions and a separate 32 MiB account-metadata
+budget, conservatively charged for full BSON plus overhead. Counters are checked
+against the actual immutable rows and head; missing history/corrupt stored
+signatures refuse rather than acknowledging a vanished version or inventing an
+empty account. Four-version pages pin their requested high-water boundary even
+when later writes arrive. The server never receives the master or plaintext
+inventory and never interprets encrypted mode classifications.
+
+Existing key rows without inventory metadata adopt revision zero only while
+history is empty, then get metadata atomically on the first write. Orphaned
+encrypted history prevents fresh root enrollment; existing history prevents
+unsigned/unverified key rotation while still allowing same-key wrapper changes.
+Account deletion removes all private inventory versions before key cleanup, and
+the retained erasure fence blocks delayed re-creation. There is no silent history
+truncation or quota fallback.
+
+This is account metadata transport, not device readiness, initial enrollment UI,
+trusted recovery transfer, a durable client outbox or private content routing.
+Old/offline-client retirement, actual private CRUD/timers/reports, full backup
+and rollback, storage retirement and the conversion controller remain required.
 
 ## Remaining rollout dependencies
 
