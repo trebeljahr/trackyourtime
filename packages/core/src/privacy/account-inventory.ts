@@ -31,7 +31,7 @@ function freeze<T>(value: T): T {
 export class PrivateAccountInventoryMissingError extends Error {
   constructor() { super("Trusted account workspace inventory is missing. Restore it or explicitly enroll this device before accessing workspace data."); this.name = "PrivateAccountInventoryMissingError"; }
 }
-function assertCurrent(value: VerifiedPrivateAccountInventory, scope: Scope) {
+export function assertPrivateAccountInventory(value: VerifiedPrivateAccountInventory, scope: Scope) {
   if (!verified.has(value) || !value.current() || value.signed.inventory.server !== scope.server || value.signed.inventory.userId !== scope.userId) throw new Error("Use the current verified account workspace inventory");
 }
 function transition(previous: VerifiedPrivateAccountInventory, next: SignedPrivateAccountInventory["inventory"]) {
@@ -67,7 +67,7 @@ export async function signPrivateAccountInventory(options: Scope & {
   signingPrivateKey: PublicKey; current: () => boolean;
 }): Promise<SignedPrivateAccountInventory> {
   const scope = { server: options.server, userId: options.userId }, previous = options.previous, privateKey = structuredClone(options.signingPrivateKey);
-  const check = () => { if (!options.current()) throw new Error("Private account changed during inventory signing"); if (previous) assertCurrent(previous, scope); };
+  const check = () => { if (!options.current()) throw new Error("Private account changed during inventory signing"); if (previous) assertPrivateAccountInventory(previous, scope); };
   check(); if (!privateKey.d) throw new Error("The unlocked account signing key is required");
   const accountFingerprint = await fingerprint(privateKey);
   if (previous && previous.signed.inventory.accountFingerprint !== accountFingerprint) throw new Error("Account inventory key rotation requires a separate verified recovery flow");
@@ -114,8 +114,14 @@ export async function createPrivateAccountInventoryStore(options: Scope & {
 /** Unknown membership/mode is an explicit trust/enrollment decision, never a
  * standard-mode fallback. Former encrypted IDs stay pinned in the inventory. */
 export function accountWorkspacePolicy(value: VerifiedPrivateAccountInventory, scope: Scope, workspaceId: string): PrivateAccountWorkspace {
-  assertCurrent(value, scope);
+  assertPrivateAccountInventory(value, scope);
   const row = value.signed.inventory.workspaces.find((item) => item.workspaceId === workspaceId);
   if (!row) throw new Error("Workspace mode is absent from the trusted account inventory");
   return row;
+}
+/** Signature/scope checking only. This deliberately returns an unbranded raw
+ * document: feed it through the inventory store's consecutive-update or trusted
+ * restore path, never directly into a standard/private adapter decision. */
+export async function checkSignedPrivateAccountInventory(input: unknown, scope: Scope, signingPublicKey: PublicKey, current: () => boolean): Promise<SignedPrivateAccountInventory> {
+  return (await verify(input, scope, signingPublicKey, current)).signed;
 }

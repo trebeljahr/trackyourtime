@@ -924,6 +924,30 @@ recovery checkpoint cannot prove that the server has no newer history. Old-clien
 retirement, preservation of unsent work, and private CRUD/timer/report adapters
 remain mandatory before conversion can be enabled.
 
+## Encrypted account inventory versions (internal protocol)
+
+The portable transport primitive now encrypts a current verified account
+inventory under an account/server-bound HKDF-SHA256 purpose key derived from the
+unlocked random master secret. AES-256-GCM authenticates a strict header with
+revision, operation ID, previous ciphertext root and signing-key fingerprint.
+The account's ECDSA signature binds that header and ciphertext, allowing a blind
+server to authenticate/sequentially store it without the master secret.
+
+The ciphertext root commits to the header/box rather than ECDSA signature bytes,
+so a different valid signature of identical content does not fork its checkpoint.
+Operation intent, key material and checkpoints are captured before awaits;
+account/session changes discard late work. Bounds cover the complete signed
+inventory and encrypted version. The exact envelope must be saved durably before
+submission; retry must reuse it.
+
+Delivery verifies the public signature and exact preceding scope/key/root/revision
+before decrypting, then checks the inner inventory signature and matching revision.
+It returns an unbranded signed document. Only the account inventory store can
+accept it through consecutive local history or independently anchored restoration;
+it cannot enroll an empty device merely because an API supplied valid ciphertext.
+This is an internal primitive, with no mounted endpoint/capability change or
+durable transport outbox yet. Workspace rollout remains disabled.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes

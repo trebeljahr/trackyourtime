@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { encryptedRecordSchema, privateKindSchema, publicEncryptionKeySchema, type PrivateKind } from "./privacy.js";
+import { cipherSchema, encryptedRecordSchema, privateKindSchema, publicEncryptionKeySchema, type PrivateKind } from "./privacy.js";
 import { canUseInvoices } from "./visibility.js";
 const id = z.string().min(1).max(100);
 export const privateRecordRefSchema = z.object({ kind: privateKindSchema, id, authorId: id.nullable() }).strict();
@@ -165,3 +165,16 @@ export const privateOriginalStageRequestSchema = privatePreparationRequestSchema
 }).strict();
 export const signedPrivateOriginalStageRequestSchema = z.object({ request: privateOriginalStageRequestSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateOriginalStageRequest = z.infer<typeof signedPrivateOriginalStageRequestSchema>;
+
+/** Internal encrypted account-inventory transport. A checked ciphertext is
+ * not a trusted inventory/enrollment until its local checkpoint is verified. */
+export const privateInventoryVersionHeaderSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-account-inventory-version-v1"),
+  server: z.string().url().max(2048), userId: id, operationId: z.uuid(),
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), previousRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable(),
+  keyFingerprint: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+}).strict();
+export const signedPrivateInventoryVersionSchema = z.object({
+  header: privateInventoryVersionHeaderSchema, box: cipherSchema.extend({ data: cipherSchema.shape.data.max(768 * 1024) }), signature: privateSignatureSchema,
+}).strict();
+export type SignedPrivateInventoryVersion = z.infer<typeof signedPrivateInventoryVersionSchema>;
