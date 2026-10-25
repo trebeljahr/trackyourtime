@@ -74,6 +74,14 @@ describe("bounded private workspace preparation", { skip: skipWithoutDatabase },
     assert.equal(await mongoose.connection.db!.collection("tags").countDocuments(), 55);
     assert.equal(await PrivateDirectory.countDocuments(), 1);
   });
+  it("cannot publish into a replacement lease even when its migration ID was reused", async () => {
+    const hold = gate(), pending = batch(0, hold.encrypt); await hold.entered;
+    const mode = (await PrivateWorkspace.findOne().lean())!;
+    await discardPrivatePreparation(scope.workspaceId, migrationId);
+    await PrivateWorkspace.create({ workspaceId: scope.workspaceId, ownerId: "owner", state: "migrating", migrationId, sourceRevision: mode.sourceRevision, leaseUntil: new Date(Date.now() + 3600000) });
+    hold.release(); await assert.rejects(pending, { code: "CONFLICT" });
+    assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await mongoose.connection.db!.collection("tags").countDocuments(), 55);
+  });
   it("cannot publish into a replacement migration or after source data changes during encryption", async () => {
     const g = gate(), pending = batch(0, g.encrypt); await g.entered;
     try { await PrivateWorkspace.updateOne({}, { $set: { migrationId: crypto.randomUUID() } }); } finally { g.release(); }

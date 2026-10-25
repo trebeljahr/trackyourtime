@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
-import { before, beforeEach, after, describe, it } from "node:test";
+import { before, beforeEach, after, describe, it, mock } from "node:test";
 import mongoose from "mongoose";
-import { createKeyPair, createSigningPair, createPrivatePreparationRequest, privateMemberKeyFingerprint, privateSourceSessionBinding, signPrivateChange, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
-import type { PrivateDirectoryMember, SignedPrivatePreparationRequest } from "@starter/shared";
+import { createKeyPair, createSigningPair, createPrivatePreparationRequest, createPrivateOriginalStageRequest, canonicalJson, decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, partitionPrivateRecoverySupplement, privateMemberKeyFingerprint, privateSourceSessionBinding, signPrivateChange, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type PlainPrivateRecord, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
+import { canWritePrivateRecord, type PrivateDirectoryMember, type SignedPrivatePreparationRequest } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivatePreparationRequest, PrivateProjectionReader, PrivateProjectionRoot, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateSourceChallengeRequest, PrivateWorkspace, PrivateWorkspaceCommit } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { env } from "../config/env.js";
 import { beginPrivateClientPreparation } from "../services/privacy/begin-preparation.js";
 import { commitPrivateDirectory } from "../services/privacy/directories.js";
+import { workspaceRecovery } from "../services/privacy/recovery.js";
+import { capturePrivateMigrationSupplement } from "../services/privacy/recovery-supplement.js";
 import { combinedWorkspaceRecovery } from "../services/privacy/combined-recovery.js";
 import { discardPrivatePreparation } from "../services/privacy/preparation.js";
-import { stagePrivateMigrationBatch } from "../services/privacy/migration.js";
+import { authorizePrivateOriginalStage } from "../services/privacy/original-staging.js";
+import { captureCompleteProjectionPreparation, privateProjectionProposal } from "../services/privacy/projection-proposal.js";
+import { stagePrivateMigrationBatch, runVerifiedPrivateOriginalStage } from "../services/privacy/migration.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { auditPrivateWorkspaceRetirement } from "../services/privacy/retirement-audit.js";
 import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
@@ -38,11 +42,98 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     const db = mongoose.connection.db!;
     await db.collection<{ _id: string; kind: string; name: string }>("organization").insertOne({ _id: scope.workspaceId, kind: "team", name: "Original workspace" });
     await db.collection("tags").insertOne({ workspaceId: scope.workspaceId, name: "Original shared tag" });
+    await db.collection("timeentries").insertOne({ workspaceId: scope.workspaceId, authorId: "member", description: "Member read-only original", start: new Date("2026-10-24T00:00:00.000Z"), end: new Date("2026-10-24T01:00:00.000Z"), hourlyRate: 120, invoiceId: "issued-original" });
+    await db.collection<{ _id: string; workspaceId: string; createdBy: string; xml: string }>("invoices").insertOne({ _id: "issued-original", workspaceId: scope.workspaceId, createdBy: "owner", xml: "<Invoice>Original linked peer work</Invoice>" });
     await db.collection("favorites").insertMany([ { workspaceId: scope.workspaceId, userId: "owner", description: "Owner original pin" }, { workspaceId: scope.workspaceId, userId: "member", description: "Member original pin" } ]);
     await db.collection("webhooksubscriptions").insertMany([ { workspaceId: scope.workspaceId, createdBy: "owner", secret: "Owner original secret" }, { workspaceId: scope.workspaceId, createdBy: "member", secret: "Member original secret" } ]);
   });
   after(dropTestDatabase);
   const begin = (proof: SignedPrivatePreparationRequest) => beginPrivateClientPreparation(scope, proof);
+  async function staging(extraTags = 0) {
+    if (extraTags) await mongoose.connection.db!.collection("tags").insertMany(Array.from({ length: extraTags }, (_, index) => ({ workspaceId: scope.workspaceId, name: `Original extra tag ${index}` })));
+    const proof = await request(); await begin(proof);
+    const signed = await createPrivateOriginalStageRequest({ directory, userId: scope.userId, sessionId: scope.sessionId, migrationId: proof.request.migrationId, secrets: owner, current: () => true });
+    return { proof, signed, workerScope: { ...scope, migrationId: proof.request.migrationId } };
+  }
+  const gate = () => {
+    let enter!: () => void, release!: () => void;
+    const ready = new Promise<void>((resolve) => { enter = resolve; }), wait = new Promise<void>((resolve) => { release = resolve; });
+    const encrypt: typeof encryptPrivateRecord = async (...args) => { enter(); await wait; return encryptPrivateRecord(...args); };
+    return { ready, release, encrypt };
+  };
+  it("converts only exact frozen originals in bounded batches and atomically stores resumable progress", async () => {
+    const f = await staging(60);
+    assert.equal(canWritePrivateRecord("entries", "member", directory.signed.directory.members.find((person) => person.userId === "owner")!), false);
+    assert.deepEqual(await authorizePrivateOriginalStage(scope, f.signed), { status: "queued" });
+    assert.deepEqual(await authorizePrivateOriginalStage(scope, f.signed), { status: "working" });
+    assert.deepEqual(await runVerifiedPrivateOriginalStage(f.workerScope), { status: "working" });
+    assert.equal(await PrivateRecord.countDocuments(), 50);
+    const firstRows = await PrivateRecord.find().sort({ id: 1 }).lean(), first = canonicalJson(firstRows);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.originalStage!.cursor, 50);
+    assert.deepEqual(await runVerifiedPrivateOriginalStage(f.workerScope), { status: "complete" });
+    assert.equal((await PrivateWorkspace.findOne().lean())!.originalStage!.complete, true);
+    const captured = await captureCompleteProjectionPreparation(f.workerScope), plain: PlainPrivateRecord[] = [];
+    for (const row of captured.records) {
+      const reader = row.grants.some((grant) => grant.userId === "owner") ? "owner" : "member";
+      plain.push(await decryptPrivateRecord(scope.workspaceId, row, reader, (reader === "owner" ? owner : member).privateKey));
+    }
+    // The conversion worker takes no replacement values. Every original BSON
+    // value and author binding survives exactly, including opaque peer data.
+    const original = [...partitionPrivateRecovery(await workspaceRecovery(scope.workspaceId, "owner", true)), ...partitionPrivateRecoverySupplement(await capturePrivateMigrationSupplement(scope.workspaceId, "owner"))];
+    const ordered = (rows: typeof plain) => rows.sort((a, b) => JSON.stringify([a.kind, a.id]) < JSON.stringify([b.kind, b.id]) ? -1 : 1);
+    assert.equal(canonicalJson(ordered(plain)), canonicalJson(ordered(original)));
+    const ids = firstRows.map((row) => row._id);
+    assert.equal(canonicalJson(await PrivateRecord.find({ _id: { $in: ids } }).sort({ id: 1 }).lean()), first);
+    assert.deepEqual(await runVerifiedPrivateOriginalStage(f.workerScope), { status: "complete" });
+    const proposal = await privateProjectionProposal(f.workerScope);
+    for (const row of captured.records.filter((row) => ["favorites", "integrations"].includes(row.kind) && row.authorId === "member")) assert.equal(JSON.stringify(proposal).includes(row.id), false);
+    const mode = (await PrivateWorkspace.findOne().lean())!; assert.equal(mode.state, "migrating"); assert.equal(mode.backupVerified, false); assert.equal(mode.head, null);
+  });
+  it("rejects forged/replayed-scope job requests, missing authorization and replacement-content fields", async () => {
+    const f = await staging();
+    await assert.rejects(runVerifiedPrivateOriginalStage(f.workerScope), { code: "NOT_FOUND" });
+    const forged = structuredClone(f.signed); forged.signature = await signPrivateChange(member.signingPrivateKey, forged.request);
+    await assert.rejects(authorizePrivateOriginalStage(scope, forged), { code: "FORBIDDEN" });
+    await assert.rejects(authorizePrivateOriginalStage({ ...scope, sessionId: "different-session" }, f.signed), { code: "NOT_FOUND" });
+    await assert.rejects(authorizePrivateOriginalStage(scope, { ...f.signed, records: [] } as never));
+    assert.equal((await PrivateWorkspace.findOne().lean())!.originalStage, null); assert.equal(await PrivateRecord.countDocuments(), 0);
+  });
+  it("keeps concurrent worker retries on the first accepted ciphertext and never skips a cursor", async () => {
+    const f = await staging(60); await authorizePrivateOriginalStage(scope, f.signed);
+    const hold = gate(), first = runVerifiedPrivateOriginalStage(f.workerScope, hold.encrypt); await hold.ready;
+    assert.deepEqual(await runVerifiedPrivateOriginalStage(f.workerScope), { status: "working" });
+    const saved = canonicalJson(await PrivateRecord.find().sort({ id: 1 }).lean()); hold.release(); await first;
+    assert.equal(await PrivateRecord.countDocuments(), 50); assert.equal((await PrivateWorkspace.findOne().lean())!.originalStage!.cursor, 50);
+    assert.equal(canonicalJson(await PrivateRecord.find().sort({ id: 1 }).lean()), saved);
+  });
+  it("rolls ciphertext back with a failed cursor acknowledgement and safely resumes the job", async () => {
+    const f = await staging(60); await authorizePrivateOriginalStage(scope, f.signed);
+    const failure = mock.method(PrivateWorkspace, "updateOne", async () => { throw new Error("Injected cursor acknowledgement failure"); });
+    try { await assert.rejects(runVerifiedPrivateOriginalStage(f.workerScope), /Injected cursor/); } finally { failure.mock.restore(); }
+    assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal((await PrivateWorkspace.findOne().lean())!.originalStage!.cursor, 0);
+    assert.deepEqual(await runVerifiedPrivateOriginalStage(f.workerScope), { status: "working" });
+  });
+  it("cannot publish a late batch after cancellation or a changed member signing key", async () => {
+    const f = await staging(60); await authorizePrivateOriginalStage(scope, f.signed);
+    const hold = gate(), pending = runVerifiedPrivateOriginalStage(f.workerScope, hold.encrypt); await hold.ready;
+    await discardPrivatePreparation(scope.workspaceId, f.workerScope.migrationId); hold.release();
+    await assert.rejects(pending, { code: "NOT_FOUND" }); assert.equal(await PrivateRecord.countDocuments(), 0);
+    await assert.rejects(authorizePrivateOriginalStage(scope, f.signed), { code: "NOT_FOUND" });
+    const fresh = await staging(); await authorizePrivateOriginalStage(scope, fresh.signed);
+    const next = gate(), stale = runVerifiedPrivateOriginalStage(fresh.workerScope, next.encrypt); await next.ready;
+    await PrivateAccount.updateOne({ userId: "member" }, { $set: { "identity.signingPublicKey": (await createSigningPair()).publicKey } }); next.release();
+    await assert.rejects(stale, /account keys changed/); assert.equal(await PrivateRecord.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.originalStage!.cursor, 0);
+  });
+  it("refuses expired leases and changed original data even after the worker reports complete", async () => {
+    const f = await staging(); await authorizePrivateOriginalStage(scope, f.signed);
+    assert.deepEqual(await runVerifiedPrivateOriginalStage(f.workerScope), { status: "complete" });
+    await mongoose.connection.db!.collection("webhooksubscriptions").updateOne({ createdBy: "member" }, { $set: { secret: "Changed peer original" } });
+    await assert.rejects(runVerifiedPrivateOriginalStage(f.workerScope), /Original data changed/);
+    await PrivateWorkspace.updateOne({}, { $set: { leaseUntil: new Date(0) } });
+    await assert.rejects(runVerifiedPrivateOriginalStage(f.workerScope), { code: "PRECONDITION_FAILED" });
+    assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
+  });
   it("preflights before leasing, pins the complete source internally and keeps concurrent retries idempotent", async () => {
     const proof = await request(), [first, second] = await Promise.all([begin(proof), begin(proof)]);
     assert.deepEqual(first, second); assert.equal(first.migrationId, proof.request.migrationId);
@@ -52,7 +143,7 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     assert.equal(mode.preparationProtocol, "client-v2"); assert.equal(mode.directoryDigest, directory.digest);
     assert.equal(mode.backupVerified, false); assert.equal(mode.revision, 0); assert.equal(mode.head, null);
     assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
-    await assert.rejects(stagePrivateMigrationBatch(scope.workspaceId, "owner", mode.migrationId, 0), /signed client staging/);
+    await assert.rejects(stagePrivateMigrationBatch(scope.workspaceId, "owner", mode.migrationId, 0), /signed original-conversion authorization/);
   });
   it("keeps the consumed request after cancellation so a late retry cannot recreate its lease", async () => {
     const proof = await request(); await begin(proof);
@@ -95,7 +186,7 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     await mongoose.connection.db!.collection("timeentries").insertOne({ workspaceId: scope.workspaceId, authorId: "owner", end: null, description: "Running original" });
     await assert.rejects(begin(proof), /Original data changed/);
     await assert.rejects(begin(await request()), /Stop all workspace timers/);
-    await mongoose.connection.db!.collection("timeentries").deleteMany({});
+    await mongoose.connection.db!.collection("timeentries").deleteMany({ description: "Running original" });
     await PrivateRecord.collection.insertOne({ workspaceId: scope.workspaceId, id: "orphan", kind: "tags" } as never);
     await assert.rejects(begin(proof), /Existing private work/); await PrivateRecord.collection.deleteMany({});
     await PrivateDirectory.updateOne({}, { $set: { "signed.signature": "A".repeat(86) } });

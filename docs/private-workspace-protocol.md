@@ -1,8 +1,9 @@
 # Private workspace edits
 
-The workspace rollout guard is unconditional. `privacy.signedWrite` and
-`privacy.changes` cannot be enabled with an environment variable. Standard
-workspaces and their existing clients keep their current behavior.
+The workspace rollout guard is unconditional. Chained writes and conversion
+cannot be enabled with an environment variable. Legacy unsigned/unchained write
+and unchecked staging routes have independent refusals. Standard workspaces
+and their existing clients keep their current behavior.
 
 ## Signed edits and immutable feeds
 
@@ -611,13 +612,11 @@ from unverified persisted/network objects; unlock invalidation revokes their use
 This primitive authenticates initial content, not global freshness after every
 device/checkpoint is lost. Durable mode/root pins remain required.
 
-Separate internal v3 storage/reader transport now exists below. Public transport,
-migration controllers and public transport still use the guarded v2 path. Source correctness still needs the reopened original backup proof;
-owner signatures alone cannot authorize retirement. The future public migration
-should stage shared data in the owner's client and each creator's personal data
-in that creator's client. Bind staging to the current source/preparation/directory
-and preserve first accepted ciphertext on retries. Keep old raw/unsigned and
-server-staging entry points separately disabled when enabling new controllers.
+Internal v3 storage, reader delivery, receipts and replica bootstrap now exist.
+Public activation/transport controllers remain unmounted. Source correctness
+still needs reopened original-backup proofs; owner signatures alone cannot
+authorize retirement. Initial conversion uses the separately signed exact-source
+worker below. Legacy raw/unsigned and unchecked staging routes stay refused.
 
 ## Saved-file proofs for separated projections (internal)
 
@@ -740,11 +739,48 @@ of these source-bound request digests at cutover.
 
 New leases are marked `client-v2` and pin the directory. They refuse the legacy
 server-encryption stager. The source/chunk/proposal verifier reuses the same
-current-directory checks. No public begin endpoint or client staging controller
+current-directory checks. No public begin endpoint or staging controller
 is mounted. Source originals, workspace revision/head and backup verification
 remain unchanged. Preflight checks availability; it does not reserve headroom.
-Device/old-client readiness, signed client staging with existing actor rights,
+Device/old-client readiness, the exact-original staging worker below,
 complete operational restoration, cutover and app adapters remain required.
+
+## Exact-original conversion worker (internal)
+
+Read access does not grant permission to rewrite another member's work.
+Accepting arbitrary replacement ciphertext from the workspace owner would lose
+that distinction unless additional proofs/authorities were required. Existing
+plaintext conversion therefore accepts only a separate signed owner intent;
+it accepts no record values, replacement ciphertext or caller-selected offsets.
+The worker encrypts the exact frozen typed originals already held by the server,
+including creator-only records directly to their verified recipients. The owner
+still receives only authorized shared/own records and opaque personal digests.
+
+`client-v2` marks client-authorized preparation, not client-generated keys for
+historical plaintext. This is a transitional trust boundary: the existing server
+already knows the originals and briefly generates record keys for their initial
+conversion. No account private key is given to it. Blind-data protection can
+start only after file/content/operational verification and retirement of the old
+server process, active plaintext storage and retained copies. Clearing JavaScript
+arrays or deleting documents is insufficient. New private edits stay encrypted
+on devices with independent random record keys. No public worker or activation
+route is mounted, so this internal engine cannot bypass those obligations.
+
+The signed intent binds current session, scope, preparation, directory and a
+two-minute start window. The one-hour preparation lease bounds subsequent work.
+A durable internal cursor advances in the same transaction as each bounded
+ciphertext batch. Lost acknowledgements/concurrent workers preserve the first
+accepted ciphertext and never move the cursor backward. A failed progress save
+rolls back its batch. Mode identity prevents a late batch from publishing into a
+replacement lease even if its migration ID was reused. Cancellation, expiry,
+changed source or changed current keys prevent publication. Directory validation
+fences every participating account-key row, including signing keys.
+
+Only coarse queued/working/complete status leaves the job helpers. Internal
+cursors/counts must never be surfaced by an owner API. Complete retries recheck
+the full staged source. Temporary staging authorization must retire at cutover.
+This is not a background scheduler/controller, a content receipt or an
+operational restore proof. Legacy staging wrappers remain independently refused.
 
 ## Remaining rollout dependencies
 
@@ -766,7 +802,8 @@ complete operational restoration, cutover and app adapters remain required.
 - Audit legacy integration secrets/configuration and every unlisted plaintext
   collection. The fourteen-collection business backup does not cover auth or
   webhook credential storage.
-- Preflight before v2 begin, durable migration-headroom reservations and journal retention. Tombstones preserve the old
+- Durable migration-headroom reservations and journal retention. Begin now checks
+  availability before leasing, without reserving capacity. Tombstones preserve the old
   ciphertext context; this is not cryptographic erasure of historical journal
   records or ciphertext already copied by another authorized client.
 

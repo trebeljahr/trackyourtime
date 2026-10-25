@@ -22,6 +22,7 @@ export async function captureCurrentPreparationDirectory(scope: { server: string
     const members = await WorkspaceMember.find({ workspaceId }).lean();
     const permissions = (rows: readonly { userId: string; role: string; canViewOthersTime?: boolean; canViewOthersMoney?: boolean }[]) => [...rows].sort((a, b) => a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0).map((m) => ({ userId: m.userId, role: m.role, canViewOthersTime: m.role === "owner" || !!m.canViewOthersTime, canViewOthersMoney: m.role === "owner" || !!m.canViewOthersMoney }));
     if (canonicalJson(permissions(members)) !== canonicalJson(permissions(directory.signed.directory.members))) throw new TRPCError({ code: "CONFLICT", message: "Workspace sharing changed. Source data was kept." });
+    await PrivateAccount.updateMany({ userId: { $in: members.map((member) => member.userId) } }, { $inc: { keySerial: 1 } });
     const accounts = await PrivateAccount.find({ userId: { $in: members.map((member) => member.userId) } }).select({ userId: 1, "identity.publicKey": 1, "identity.signingPublicKey": 1 }).lean();
     const coordinates = ({ kty, crv, x, y }: typeof directory.signed.directory.members[number]["publicKey"]) => ({ kty, crv, x, y });
     for (const member of directory.signed.directory.members) {

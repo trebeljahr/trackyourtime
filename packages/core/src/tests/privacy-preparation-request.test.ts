@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { PRIVATE_PREPARATION_REQUEST_TTL_MS } from "@starter/shared";
 import { createKeyPair, createSigningPair, canonicalJson, decodeSecret } from "../privacy/crypto.js";
+import { createPrivateOriginalStageRequest } from "../privacy/original-stage-request.js";
 import { createPrivatePreparationRequest } from "../privacy/preparation-request.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { emptyRecoveryCollections, recoveryDigest } from "../privacy/recovery.js";
@@ -42,4 +43,16 @@ it("rejects substituted roots, unverified directory provenance and another accou
   await assert.rejects(createPrivatePreparationRequest({ ...f.options, directory: JSON.parse(JSON.stringify(f.options.directory)) }), /Verify.*directory/);
   const archive = { ...f.options.archive, ownerId: "another" };
   await assert.rejects(createPrivatePreparationRequest({ ...f.options, archive }), /another server or account|another account|scope/);
+});
+
+it("authorizes only exact existing-source conversion without accepting replacement data or leaking originals", async () => {
+  const f = await fixture(), signed = await createPrivateOriginalStageRequest(f.options);
+  assert.equal(signed.request.protocol, "trackyourtime-private-original-stage-v1");
+  assert.equal(signed.request.directoryDigest, f.options.directory.digest); assert.equal(signed.request.sessionBinding, await privateSourceSessionBinding(scope));
+  assert.equal(signed.request.migrationId, f.options.migrationId);
+  assert.doesNotMatch(JSON.stringify(signed), /sourceRevision|supplementRevision|Private original|current-session|records|"d":/);
+  const key = await crypto.subtle.importKey("jwk", f.signing.publicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+  assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, decodeSecret(signed.signature, 64), new TextEncoder().encode(canonicalJson(signed.request))));
+  let current = true; const pending = createPrivateOriginalStageRequest({ ...f.options, current: () => current }); current = false;
+  await assert.rejects(pending, /changed during original staging/);
 });

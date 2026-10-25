@@ -160,3 +160,8 @@ export const privatePreparationRequestSchema = z.object({
 }).strict();
 export const signedPrivatePreparationRequestSchema = z.object({ request: privatePreparationRequestSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivatePreparationRequest = z.infer<typeof signedPrivatePreparationRequestSchema>;
+export const privateOriginalStageRequestSchema = privatePreparationRequestSchema.omit({ sourceRevision: true, supplementRevision: true }).extend({
+  protocol: z.literal("trackyourtime-private-original-stage-v1"),
+}).strict();
+export const signedPrivateOriginalStageRequestSchema = z.object({ request: privateOriginalStageRequestSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivateOriginalStageRequest = z.infer<typeof signedPrivateOriginalStageRequestSchema>;

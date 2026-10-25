@@ -1,3 +1,5 @@
+import { advanceAuthorizedOriginalStage, captureAuthorizedOriginalStage, type OriginalStageScope } from "./original-staging.js";
+import { captureCompleteProjectionPreparation } from "./projection-proposal.js";
 import { createHash, randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
@@ -66,7 +68,21 @@ export async function beginPrivateMigration(workspaceId: string, userId: string,
  * A canceled/expired/replaced migration can never be recreated by a late job.
  * The optional encryptor is a local dependency for deterministic race checks,
  * never an API parameter. */
-export async function stagePrivateMigrationBatch(workspaceId: string, userId: string, migrationId: string, offset: number, encrypt = encryptPrivateRecord): Promise<{ next: number | null; total: number }> {
+export function stagePrivateMigrationBatch(workspaceId: string, userId: string, migrationId: string, offset: number, encrypt = encryptPrivateRecord): Promise<{ next: number | null; total: number }> {
+  return stageOriginalBatch(workspaceId, userId, migrationId, offset, encrypt, false);
+}
+/** Internal bounded worker for explicit, signed existing-plaintext conversion.
+ * Input contains no replacement ciphertext/content; user APIs receive no
+ * cursor/count. Server processes/copies still require retirement before the
+ * blind-data promise begins. All future private edits remain client encrypted. */
+export async function runVerifiedPrivateOriginalStage(inputScope: OriginalStageScope, encrypt = encryptPrivateRecord) {
+  const scope = { ...inputScope }, stage = await captureAuthorizedOriginalStage(scope);
+  if (stage.complete) { await captureCompleteProjectionPreparation(scope); return { status: "complete" as const }; }
+  const result = await stageOriginalBatch(scope.workspaceId, scope.userId, scope.migrationId, stage.cursor, encrypt, true,
+    (end, total) => advanceAuthorizedOriginalStage(scope, stage.authorizationDigest, stage.modeId, stage.cursor, end, end >= total), stage.modeId);
+  return { status: result.next === null ? "complete" as const : "working" as const };
+}
+async function stageOriginalBatch(workspaceId: string, userId: string, migrationId: string, offset: number, encrypt: typeof encryptPrivateRecord, authorizedOriginals: boolean, onPublish?: (end: number, total: number) => Promise<void>, expectedModeId?: string): Promise<{ next: number | null; total: number }> {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > 400_000) throw new TRPCError({ code: "BAD_REQUEST" });
   if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED" });
   const prepared = await withBusinessTransaction(async () => {
@@ -74,7 +90,8 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId }).lean();
     if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
     requireActivePrivatePreparation(mode);
-    if (mode.preparationProtocol === "client-v2") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This preparation requires signed client staging. Server-side staging is unavailable." });
+    if (expectedModeId && String(mode._id) !== expectedModeId) throw new TRPCError({ code: "CONFLICT", message: "Preparation changed before staging. Source data was kept." });
+    if (mode.preparationProtocol === "client-v2" && !authorizedOriginals) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This preparation requires signed original-conversion authorization. Legacy server staging is unavailable." });
     if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
     const source = await workspaceRecovery(workspaceId, userId, true);
     if (source.sourceRevision !== mode.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Original data changed. Cancel and prepare a new migration." });
@@ -93,7 +110,7 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     // v2 begin controller must also run this before creating its mode/lease.
     if (!await PrivateRecord.exists({ workspaceId })) await assertPrivateStorageHeadroom(workspaceId, estimatePrivateMigrationStorage(workspaceId, plain, directory.signed.directory.members).additionalBytes);
     if (offset > plain.length) throw new TRPCError({ code: "BAD_REQUEST" });
-    return { sourceRevision: source.sourceRevision, supplementRevision: supplement?.sourceRevision ?? null, directoryDigest: directory.digest, records: plain.slice(offset, offset + 50), total: plain.length, recipients: directory.signed.directory.members };
+    return { modeId: String(mode._id), sourceRevision: source.sourceRevision, supplementRevision: supplement?.sourceRevision ?? null, directoryDigest: directory.digest, records: plain.slice(offset, offset + 50), total: plain.length, recipients: directory.signed.directory.members };
   });
   const encrypted: EncryptedRecord[] = [];
   for (const row of prepared.records) encrypted.push(await encrypt(workspaceId, row, prepared.recipients, 1));
@@ -103,6 +120,7 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
     requireActivePrivatePreparation(mode);
     if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
+    if (String(mode._id) !== prepared.modeId || (mode.preparationProtocol === "client-v2" && !authorizedOriginals)) throw new TRPCError({ code: "CONFLICT", message: "Preparation changed while encrypting. Source data was kept." });
     const directory = await PrivateDirectory.findOne({ workspaceId }).sort({ revision: -1 }).lean();
     const source = await workspaceRecovery(workspaceId, userId, true);
     const supplement = mode.supplementRevision ? await capturePrivateMigrationSupplement(workspaceId, userId) : null;
@@ -118,6 +136,7 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
       await PrivateRecord.create({ workspaceId, ...record, deleted: false });
     }
     const end = offset + prepared.records.length;
+    if (onPublish) await onPublish(end, prepared.total);
     return { next: end >= prepared.total ? null : end, total: prepared.total };
   });
 }

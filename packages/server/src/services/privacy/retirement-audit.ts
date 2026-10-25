@@ -21,7 +21,7 @@ const privateFields: Record<string, string[]> = {
   privatesnapshotreaders: ["workspaceId", "migrationId", "userId", "fullRecordsDigest", "signed", "locations"],
   privaterecords: ["workspaceId", "id", "kind", "authorId", "revision", "keyCommitment", "box", "grants", "deleted"],
   privateworkspacecommits: ["workspaceId", "userId", "operationId", "revision", "manifest", "signature", "readerSignatures", "records", "chain", "head"],
-  privateworkspaces: ["workspaceId", "state", "ownerId", "revision", "head", "directoryDigest", "leaseUntil", "migrationId", "sourceRevision", "supplementRevision", "preparationProtocol", "backupVerified"],
+  privateworkspaces: ["workspaceId", "state", "ownerId", "revision", "head", "directoryDigest", "leaseUntil", "migrationId", "sourceRevision", "supplementRevision", "preparationProtocol", "originalStage", "backupVerified"],
 };
 const privateCollections = ["privateaccounts", "privatedevicerequests", ...Object.keys(privateFields)];
 const operationalCollections = ["storageusages", "storagefences", "workspacewritefences", "importbudgets", "importleases", "scheduledjobs"];
@@ -62,7 +62,7 @@ export async function auditPrivateWorkspaceRetirement(db: Db, workspaceId: strin
   await unknownFields("workspacemembers", { workspaceId }, ["_id", "workspaceId", "userId", "role", "name", "hourlyRate", "canViewOthersTime", "canViewOthersMoney", "createdAt", "updatedAt", "__v"]);
   await count("privatemigrationreceipts", "source-checksums", { workspaceId });
   await count("privatepreparationrequests", "source-checksums", { workspaceId });
-  await count("privateworkspaces", "source-checksums", { workspaceId, $or: [{ sourceRevision: { $ne: "retired" } }, { supplementRevision: { $exists: true, $nin: [null, "retired"] } }] });
+  await count("privateworkspaces", "source-checksums", { workspaceId, $or: [{ sourceRevision: { $ne: "retired" } }, { supplementRevision: { $exists: true, $nin: [null, "retired"] } }, { originalStage: { $exists: true, $ne: null } }] });
   for (const [collection, fields] of Object.entries(privateFields)) await unknownFields(collection, { workspaceId }, ["_id", "createdAt", "updatedAt", "__v", ...fields]);
   const ids: (string | ObjectId)[] = [workspaceId];
   if (ObjectId.isValid(workspaceId)) ids.push(new ObjectId(workspaceId));
