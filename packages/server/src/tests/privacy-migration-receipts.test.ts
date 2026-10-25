@@ -444,6 +444,16 @@ describe("private preferences conversion receipts", { skip: skipWithoutDatabase 
     await PrivateSnapshotChunk.deleteMany({ workspaceId: scope.workspaceId });
     await assert.rejects(recordPrivateOwnerMigrationProof(ownScope, ownerProof), { code: "CONFLICT" });
   });
+  it("permanently refuses obsolete unsigned/unchained writes independently of general rollout", async () => {
+    const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
+    const row = (await PrivateRecord.findOne().lean())!;
+    const { id, kind, authorId, revision, keyCommitment, box, grants } = row;
+    const record = { id, kind, authorId, revision, keyCommitment, box, grants }, before = await PrivateRecord.countDocuments();
+    const refusal = { code: "NOT_IMPLEMENTED", message: /legacy private-data protocol/ };
+    await assert.rejects(caller.write({ workspaceId: scope.workspaceId, expectedRevision: 0, records: [record], remove: [] }), refusal);
+    await assert.rejects(caller.signedWrite({ workspaceId: scope.workspaceId, edit: { v: 1, workspaceId: scope.workspaceId, userId: "owner", operationId: crypto.randomUUID(), expectedRevision: 0, records: [record], remove: [] }, signature: "A".repeat(86), readerSignatures: [{ userId: "owner", signature: "A".repeat(86) }] }), refusal);
+    assert.equal(await PrivateRecord.countDocuments(), before); assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+  });
   it("keeps the new owner endpoint and obsolete complete-archive endpoint closed", async () => {
     const caller = privacyRouter.createCaller({ user: { id: "owner" }, session: { user: { id: "owner" } } } as unknown as Context);
     await assert.rejects(caller.acknowledgeMigrationOwner({ workspaceId: scope.workspaceId, ...ownerProof }), { code: "NOT_IMPLEMENTED" });

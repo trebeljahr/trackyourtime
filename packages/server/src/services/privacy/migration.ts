@@ -17,6 +17,11 @@ import { assertPrivateStorageHeadroom } from "../storage-quota.js";
 export function requirePrivateWorkspaceRollout(): void {
   throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Encrypted workspace migration is not available in this build. Existing data is unchanged." });
 }
+/** Obsolete network protocols stay closed independently of the general rollout
+ * switch. New controllers must use signed client preparation and chained edits. */
+export function requirePrivateClientProtocol(): void {
+  throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "This legacy private-data protocol is unavailable. Use verified client preparation and signed chained edits. Original data is unchanged." });
+}
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 /** The original scaffold has no verified source-content proof or signed
  * history root. Opening unrelated rollout routes must never enable its wipe. */
@@ -41,6 +46,7 @@ export async function privateRecipients(workspaceId: string): Promise<PrivateRec
   });
 }
 export async function beginPrivateMigration(workspaceId: string, userId: string, sourceRevision: string, signature: string): Promise<{ migrationId: string }> {
+  requirePrivateClientProtocol();
   await privateMigrationAction(workspaceId, userId, { action: "begin-private-migration", workspaceId, userId, sourceRevision }, signature);
   return withBusinessTransaction(async () => {
     await fenceWorkspace(workspaceId);
@@ -115,6 +121,7 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
   });
 }
 export async function stagePrivateMigration(workspaceId: string, userId: string, migrationId: string, offset: number): Promise<{ next: number | null; total: number }> {
+  requirePrivateClientProtocol();
   requirePrivateWorkspaceRollout();
   return stagePrivateMigrationBatch(workspaceId, userId, migrationId, offset);
 }

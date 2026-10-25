@@ -10,7 +10,7 @@ import { previewAccountDeletion } from "../../services/account-deletion/delete-a
 import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
 import { commitPrivateChainedWorkspaceEdit, commitPrivateWorkspaceEdit, privateChainedWorkspaceChanges, privateWorkspaceChanges } from "../../services/privacy/workspace-edits.js";
 import { signedPrivateChainedEditSchema, signedPrivateWorkspaceEditSchema } from "@starter/shared";
-import { requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
+import { requirePrivateClientProtocol, requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -122,6 +122,7 @@ export const privacyRouter = router({
     return { revision: mode.revision, next: rows.length > 200 ? String(page.at(-1)!._id) : null, records: page.map((row) => ({ id: row.id, kind: row.kind, authorId: row.authorId, revision: row.revision, keyCommitment: row.keyCommitment, box: row.box, deleted: row.deleted, grants: row.grants.filter((g) => g.userId === ctx.user.id) })) };
   }),
   write: privateWorkspaceProcedure.input(scopeSchema.extend({ expectedRevision: z.number().int().nonnegative(), records: z.array(encryptedRecordSchema).min(1).max(100), remove: z.array(z.object({ kind: encryptedRecordSchema.shape.kind, id: z.string().min(1).max(100) })).max(100).default([]) })).mutation(async ({ ctx, input }) => {
+    requirePrivateClientProtocol();
     requirePrivateWorkspaceRollout();
     await requireTransactions();
     return withBusinessTransaction(async () => {
@@ -149,6 +150,7 @@ export const privacyRouter = router({
     });
   }),
   signedWrite: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateWorkspaceEditSchema.shape)).mutation(({ ctx, input }) => {
+    requirePrivateClientProtocol();
     requirePrivateWorkspaceRollout();
     if (input.edit.workspaceId !== ctx.workspaceId) throw new TRPCError({ code: "FORBIDDEN" });
     return commitPrivateWorkspaceEdit(ctx.user.id, { edit: input.edit, signature: input.signature, readerSignatures: input.readerSignatures });

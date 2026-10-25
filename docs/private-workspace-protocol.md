@@ -741,3 +741,13 @@ new-device policy and operational migration/rollback remain required.
 
 No live data conversion, production backup or deployment is implied by these
 internal engines or their synthetic integration tests.
+
+
+## Obsolete network protocol refusal
+
+Legacy begin/server-staging and unsigned/unchained write routes now call a
+separate unconditional refusal before the general rollout guard. Opening a
+future verified controller cannot enable these old paths accidentally. Existing
+complete-archive and unverified retirement routes retain their independent
+refusals. Internal staging remains available only for bounded synthetic checks
+and the transitional source engine; it is not a new network API.
