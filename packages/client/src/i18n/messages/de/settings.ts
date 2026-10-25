@@ -7,7 +7,8 @@ export const settings: Translation<typeof source> = {
   automaticBackups: {
     title: "Automatische lokale Sicherungen",
     description: "Speichere verschlüsselte Sicherungen dieses Arbeitsbereichs in einem Ordner deiner Wahl. Sie laufen, solange dieser Arbeitsbereich geöffnet und deine privaten Daten entsperrt sind.",
-    limits: "Sicherungen für Inhaber enthalten gespeicherte Serverdaten. Nicht synchronisierte Änderungen und lokale Aktivitätsdaten sind nicht enthalten. Vorhandene Sicherungsdateien bleiben beim Abschalten erhalten.",
+    limits: "Enthält gemeinsame Daten sowie deine eigenen Favoriten und Integrationen. Private Daten anderer Mitglieder, nicht synchronisierte Änderungen und Aktivitätsdaten sind ausgeschlossen. Vorhandene Dateien bleiben beim Abschalten erhalten.",
+    unsupported: "Aktualisiere diesen Server, um automatische kombinierte Sicherungen zu nutzen.",
     unavailable: "Automatische Ordnersicherungen brauchen einen Browser mit Schreibzugriff auf Ordner. Manuelle verschlüsselte Downloads bleiben verfügbar.",
     locked: "Richte private Daten unter Einstellungen → Konto ein und entsperre sie, um automatische Sicherungen einzuschalten.",
     recoveryKey: "Dein gespeicherter Wiederherstellungsschlüssel",

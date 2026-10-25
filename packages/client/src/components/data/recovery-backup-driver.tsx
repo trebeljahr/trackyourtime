@@ -3,6 +3,7 @@ import * as React from "react";
 import { RecoveryBackupPausedError } from "@starter/core";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
+import { readCombinedBackupSource } from "@/lib/combined-backup-source";
 import { recoveryBackupController } from "@/lib/recovery-backup-controller";
 import { supportsRecoveryBackupFolders } from "@/lib/recovery-backup-folder";
 import { privateDataOrigin, privateSession, privateSessionVersion, subscribePrivateSession } from "@/lib/private-session";
@@ -20,7 +21,7 @@ export function noteRecoveryBackupRun(userId: string, workspaceId: string, state
 export function RecoveryBackupDriver(): null {
   const { user } = useAuth(), { workspace } = useActiveWorkspace(), utils = trpc.useUtils();
   const version = React.useSyncExternalStore(subscribePrivateSession, privateSessionVersion, () => 0);
-  const supported = useServerSupports("privacy.keys"), userId = user?.id, workspaceId = workspace?.id, owner = workspace?.role === "owner";
+  const supported = useServerSupports("privacy.combinedRecovery"), userId = user?.id, workspaceId = workspace?.id, owner = workspace?.role === "owner";
   React.useEffect(() => {
     if (!userId || !workspaceId || !owner || !supported || !privateSession(userId) || !supportsRecoveryBackupFolders()) return;
     let controller: Awaited<ReturnType<typeof recoveryBackupController>> | null = null, cancelled = false, busy = false, retryAt = 0;
@@ -30,10 +31,13 @@ export function RecoveryBackupDriver(): null {
       try {
         controller ??= await recoveryBackupController(userId, workspaceId);
         if (cancelled) { controller.close(); return; }
-        const result = await controller.run(async () => ({
-          format: "trackyourtime-workspace-recovery-v1", server: privateDataOrigin(), ownerId: userId,
-          snapshot: await utils.client.privacy.recoverySnapshot.mutate({ workspaceId }, { signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30000)]) }),
-        }));
+        const result = await controller.run(() => {
+          const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(30000)]);
+          return readCombinedBackupSource(userId, workspaceId, {
+            challenge: () => utils.client.privacy.recoveryChallenge.mutate({ workspaceId }, { signal }),
+            originals: (proof) => utils.client.privacy.combinedRecovery.mutate({ workspaceId, ...proof }, { signal }),
+          }, signal);
+        });
         if (!cancelled && result.status === "saved") noteRecoveryBackupRun(userId, workspaceId, "saved");
         if (!cancelled && result.status === "folder-unavailable") { retryAt = Date.now() + 300000; noteRecoveryBackupRun(userId, workspaceId, "folder-unavailable"); }
       } catch (error) {

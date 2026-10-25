@@ -10,7 +10,8 @@ export const settings = {
   automaticBackups: {
     title: "Automatic local backups",
     description: "Save encrypted backups of this workspace to a folder you choose. Backups run while this workspace is open and private data is unlocked.",
-    limits: "Owner backups include saved server records. Unsynced device changes and local activity history are not included. Existing backup files stay when you turn this off.",
+    limits: "Includes shared records and your own favorites and integrations. Other members’ private data, unsynced changes and activity history are excluded. Existing files stay when backups are off.",
+    unsupported: "Update this server to use automatic combined backups.",
     unavailable: "Automatic folder backups need a browser with writable folder access. Manual encrypted downloads remain available.",
     locked: "Set up and unlock private data in Settings → Account to enable automatic backups.",
     recoveryKey: "Your saved recovery key",

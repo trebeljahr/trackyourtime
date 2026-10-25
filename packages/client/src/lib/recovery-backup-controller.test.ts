@@ -2,7 +2,7 @@
 import { webcrypto } from "node:crypto";
 import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { decryptRecoveryKeyBackup, emptyRecoveryCollections, recoveryDigest, type RecoveryBackupFolder } from "@starter/core";
+import { decryptRecoveryKeyBackup, decryptCombinedRecoveryKeyBackup, emptyRecoverySupplementCollections, recoverySupplementDigest, emptyRecoveryCollections, recoveryDigest, type RecoveryBackupFolder } from "@starter/core";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", destinations: new Map<string, unknown>() }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {} }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
@@ -88,4 +88,21 @@ it("changes an existing schedule and destination using its encrypted key cache w
   expect(settings.intervalDays).toBe(1); expect(settings.folderName).toBe("Changed folder");
   expect((await f.controller.run(async () => f.archive)).status).toBe("saved");
   expect(await decryptRecoveryKeyBackup(JSON.parse([...next.files.values()][0]!), f.root.recoveryKey)).toEqual(f.archive);
+});
+
+it("writes combined scheduled snapshots with supplemental originals and reopens them before advancing success", async () => {
+  const f = await fixture(); await f.configure();
+  const collections = emptyRecoverySupplementCollections();
+  collections.organization.push({ _id: "workspace", name: "Original workspace" });
+  collections.webhooksubscriptions.push({ _id: "hook", workspaceId: "workspace", createdBy: "owner", secret: "Private original webhook secret" });
+  const archive = { ...f.archive, format: "trackyourtime-workspace-recovery-v2" as const, supplement: { v: 1 as const, workspaceId: "workspace", createdAt: f.archive.snapshot.createdAt, collections, sourceRevision: await recoverySupplementDigest(collections) } };
+  expect((await f.controller.run(async () => archive)).status).toBe("saved");
+  const raw = [...f.directory.files.values()][0]!;
+  expect(JSON.parse(raw).header.format).toBe("trackyourtime-recovery-key-backup-v2");
+  expect(raw).not.toContain("Private original webhook secret");
+  expect(await decryptCombinedRecoveryKeyBackup(JSON.parse(raw), f.root.recoveryKey)).toEqual(archive);
+  const saved = await f.controller.read(), previous = new Map(f.directory.files);
+  f.directory.port.read = async () => "invalid combined file";
+  await expect(f.controller.run(async () => archive, true)).rejects.toThrow();
+  expect(await f.controller.read()).toEqual(saved); expect(f.directory.files).toEqual(previous);
 });

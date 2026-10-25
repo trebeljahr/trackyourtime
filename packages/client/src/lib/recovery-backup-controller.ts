@@ -1,4 +1,4 @@
-import { recoveryBackupConfigSchema, type RecoveryBackupConfiguration, canonicalJson, decodeSecret, deriveRecoveryBackupKey, encodeSecret, unseal, writeRecoveryBackup, type WorkspaceRecoveryArchive } from "@starter/core";
+import { recoveryBackupConfigSchema, type RecoveryBackupConfiguration, canonicalJson, decodeSecret, deriveRecoveryBackupKey, encodeSecret, unseal, writeRecoveryBackup, type WorkspaceRecoveryArchive, type CombinedWorkspaceRecoveryArchive } from "@starter/core";
 import type { PrivateIdentity } from "@starter/shared";
 import { privateDataOrigin, privateOperationScope, privateSession, privateWorkspaceStorage, type UnlockedIdentity } from "./private-session";
 import { privateWorkspaceStorageHost } from "./private-replica";
@@ -63,7 +63,7 @@ export async function recoveryBackupController(userId: string, workspaceId: stri
         assertCurrent(); const config = await load(); await storage.removeItem(CONFIG); assertCurrent();
         if (config) await recoveryBackupFolder({ ...scope, destinationId: config.destinationId }, null);
       }),
-      run: (snapshot: () => Promise<WorkspaceRecoveryArchive>, force = false) => host.exclusive(async () => {
+      run: (snapshot: () => Promise<WorkspaceRecoveryArchive | CombinedWorkspaceRecoveryArchive>, force = false) => host.exclusive(async () => {
         assertCurrent(); const config = await load();
         if (!config) return { status: "off" as const };
         const elapsed = config.lastBackupAt ? Date.now() - Date.parse(config.lastBackupAt) : null;

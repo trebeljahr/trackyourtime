@@ -2,9 +2,9 @@ import { verifyCombinedWorkspaceRecoveryArchive } from "@starter/core";
 import { withBusinessTransaction } from "../business-transaction.js";
 import { workspaceRecovery } from "./recovery.js";
 import { workspaceRecoverySupplement } from "./recovery-supplement.js";
-/** Internal owner-readable capture from one consistent database snapshot. No
- * public endpoint is mounted: sensitive original reads still need the verified
- * migration controller's authorization before a future client can request it. */
+/** Internal owner-readable capture from one consistent database snapshot. Public standard-mode backups use the separate
+ * session/root-authorized source challenge controller. Migration source access
+ * remains internal and guarded; never return this capture without authorization. */
 export function combinedWorkspaceRecovery(workspaceId: string, ownerId: string, server: string) {
   return withBusinessTransaction(async () => {
     const snapshot = await workspaceRecovery(workspaceId, ownerId);

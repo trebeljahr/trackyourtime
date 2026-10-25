@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { WorkspaceRecoveryArchive } from "@starter/shared";
+import type { CombinedWorkspaceRecoveryArchive, WorkspaceRecoveryArchive } from "@starter/shared";
+import { canonicalJson } from "./crypto.js";
+import { encryptCombinedRecoveryKeyBackup, verifyCombinedRecoveryKeyBackup } from "./combined-recovery-backup.js";
+import { verifyCombinedWorkspaceRecoveryArchive } from "./combined-recovery.js";
 import { encryptRecoveryKeyBackup, verifyRecoveryKeyBackup } from "./recovery-backup.js";
 import { verifyWorkspaceRecoveryArchive } from "./recovery.js";
 export type RecoveryBackupFolder = {
@@ -17,7 +20,7 @@ export class RecoveryBackupPausedError extends Error {
  * newly written file and verifying the complete original typed snapshot. */
 export async function writeRecoveryBackup(options: {
   scope: { server: string; ownerId: string; workspaceId: string }; key: Uint8Array;
-  current: () => boolean; folder: RecoveryBackupFolder; snapshot: () => Promise<WorkspaceRecoveryArchive>; now?: Date;
+  current: () => boolean; folder: RecoveryBackupFolder; snapshot: () => Promise<WorkspaceRecoveryArchive | CombinedWorkspaceRecoveryArchive>; now?: Date;
 }) {
   const { folder, current } = options, scope = { ...options.scope }, key = new Uint8Array(options.key), stamp = (options.now ?? new Date()).toISOString();
   const check = () => { if (!current()) throw new Error("Private data changed during backup"); };
@@ -25,17 +28,23 @@ export async function writeRecoveryBackup(options: {
   try {
     check(); if (!await folder.granted()) throw new RecoveryBackupPausedError(); check();
     const source = await options.snapshot(); check();
-    const archive = await verifyWorkspaceRecoveryArchive(structuredClone(source), scope); check();
-    const encrypted = await encryptRecoveryKeyBackup(archive, key, current, new Date(stamp)); check();
+    const archive = source.format === "trackyourtime-workspace-recovery-v2"
+      ? await verifyCombinedWorkspaceRecoveryArchive(structuredClone(source), scope)
+      : await verifyWorkspaceRecoveryArchive(structuredClone(source), scope); check();
+    const encrypted = archive.format === "trackyourtime-workspace-recovery-v2"
+      ? await encryptCombinedRecoveryKeyBackup(archive, key, current, new Date(stamp))
+      : await encryptRecoveryKeyBackup(archive, key, current, new Date(stamp)); check();
     // No names, projects, customer details or filesystem paths in filenames.
     const name = `trackyourtime-recovery-${stamp.replace(/[:.]/g, "-")}-${crypto.randomUUID()}.tytrecovery`;
     if (!await folder.granted()) throw new RecoveryBackupPausedError(); check();
     created = name; await folder.write(name, JSON.stringify(encrypted), current); check();
     const raw = await folder.read(name); check();
     if (raw.length > 36 * 1024 * 1024) throw new Error("Written backup exceeds its file limit");
-    const reopened = await verifyRecoveryKeyBackup(JSON.parse(raw), key, scope); check();
-    if (reopened.snapshot.sourceRevision !== archive.snapshot.sourceRevision) throw new Error("Written backup does not match the source snapshot");
-    return { fileName: name, createdAt: stamp, sourceRevision: archive.snapshot.sourceRevision };
+    const reopened = archive.format === "trackyourtime-workspace-recovery-v2"
+      ? await verifyCombinedRecoveryKeyBackup(JSON.parse(raw), key, scope)
+      : await verifyRecoveryKeyBackup(JSON.parse(raw), key, scope); check();
+    if (canonicalJson(reopened) !== canonicalJson(archive)) throw new Error("Written backup does not match the source snapshot");
+    return { fileName: name, createdAt: stamp, sourceRevision: archive.snapshot.sourceRevision, ...(archive.format === "trackyourtime-workspace-recovery-v2" ? { supplementRevision: archive.supplement.sourceRevision } : {}) };
   } catch (error) {
     if (created) { try { await folder.remove(created); } catch { /* Only this failed new file may remain; previous backups were kept. */ } }
     throw error;

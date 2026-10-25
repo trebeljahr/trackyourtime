@@ -1,5 +1,5 @@
 {
-  "apiLevel": 29,
+  "apiLevel": 30,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -4791,6 +4791,112 @@
       },
       "type": "query"
     },
+    "privacy.combinedRecovery": {
+      "input": {
+        "properties": {
+          "challenge": {
+            "additionalProperties": false,
+            "properties": {
+              "expiresAt": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "issuedAt": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "keyFingerprint": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "migrationId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "protocol": {
+                "const": "trackyourtime-private-source-challenge-v1",
+                "type": "string"
+              },
+              "purpose": {
+                "enum": [
+                  "workspace-originals",
+                  "personal-originals"
+                ],
+                "type": "string"
+              },
+              "requestId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "server": {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "sessionBinding": {
+                "pattern": "^[A-Za-z0-9_-]{43}$",
+                "type": "string"
+              },
+              "userId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              "v": {
+                "const": 1,
+                "type": "number"
+              },
+              "workspaceId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "v",
+              "protocol",
+              "requestId",
+              "server",
+              "workspaceId",
+              "userId",
+              "purpose",
+              "migrationId",
+              "sessionBinding",
+              "keyFingerprint",
+              "issuedAt",
+              "expiresAt"
+            ],
+            "type": "object"
+          },
+          "signature": {
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "privacy.commitMigration": {
       "input": {
         "properties": {
@@ -5437,6 +5543,19 @@
         "type": "object"
       },
       "type": "query"
+    },
+    "privacy.recoveryChallenge": {
+      "input": {
+        "properties": {
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "type": "mutation"
     },
     "privacy.recoverySnapshot": {
       "input": {

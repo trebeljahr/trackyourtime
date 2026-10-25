@@ -483,8 +483,10 @@ single-creator grants, staged ciphertext and frozen chunks before storing an
 idempotent `personal` receipt. Replays repeat those checks. Account deletion and
 preparation cancellation remove these receipts with the existing scoped cleanup.
 
-These source/proof functions are not mounted publicly. The internal trusted-root
-challenge boundary below must authorize sensitive original reads when mounted.
+These preparation source/proof functions are not mounted publicly. The trusted-root
+challenge boundary must authorize them when mounted. API 30 separately exposes
+owner-readable combined backups only for entirely standard workspaces; it cannot
+read preparation/private originals or activate migration. See `private-backups.md`.
 The cutover controller must require personal receipts only for non-owner members
 with private originals; no records means no content approval to wait for. Neither
 a personal nor owner receipt replaces complete operational restoration or permits

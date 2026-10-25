@@ -8,7 +8,7 @@ async function fixture() {
   const owner = await createKeyPair(), author = await createKeyPair();
   const members = [{ userId: "owner", role: "owner" as const, canViewOthersTime: true, canViewOthersMoney: true, publicKey: owner.publicKey }, { userId: "author", role: "member" as const, canViewOthersTime: false, canViewOthersMoney: false, publicKey: author.publicKey }];
   const collections = emptyRecoverySupplementCollections();
-  collections.organization.push({ _id: "workspace", name: "Private studio", slug: "private-studio", logo: "data:image/png;base64,original", metadata: { raw: { $numberLong: "9007199254740993" } } });
+  collections.organization.push({ _id: "workspace", name: "Private studio", slug: "private-studio", kind: "personal", logo: "data:image/png;base64,original", metadata: { raw: { $numberLong: "9007199254740993" } } });
   collections.apitokens.push({ _id: { $oid: "000000000000000000000001" }, workspaceId: "workspace", userId: "author", authorId: "owner", name: "Private customer token", tokenHash: "original credential hash", unknownLegacy: { $numberDecimal: "12.3400" } });
   collections.webhooksubscriptions.push({ _id: { $oid: "000000000000000000000001" }, workspaceId: "workspace", createdBy: "author", userId: "owner", url: "https://private.example.test/events", secret: "Original webhook signing secret", enabled: true });
   const source: WorkspaceRecoverySupplement = { v: 1, workspaceId: "workspace", createdAt: "2026-10-25T00:00:00.000Z", sourceRevision: await recoverySupplementDigest(collections), collections };
@@ -70,4 +70,15 @@ it("retains unknown organization originals in source but refuses to publish them
   await verifyWorkspaceRecoverySupplement(source);
   assert.throws(() => partitionPrivateRecoverySupplement(source), /explicit private audience/);
   await assert.rejects(encryptPrivateRecord("workspace", { kind: "workspaceIdentity", id: "organization", authorId: null, value: { workspaceId: "workspace", organization: source.collections.organization[0]! } }, members, 1), /explicit private audience/);
+});
+
+it("preserves both recognized workspace kinds and refuses unclassified kinds", async () => {
+  const { source } = await fixture();
+  for (const kind of ["personal", "team"]) {
+    source.collections.organization[0]!.kind = kind; source.sourceRevision = await recoverySupplementDigest(source.collections);
+    const records = partitionPrivateRecoverySupplement(source);
+    assert.deepEqual(await privateRecordsToRecoverySupplement("workspace", records, source.createdAt), source);
+  }
+  source.collections.organization[0]!.kind = "unclassified";
+  assert.throws(() => partitionPrivateRecoverySupplement(source), /Unknown workspace kind/);
 });

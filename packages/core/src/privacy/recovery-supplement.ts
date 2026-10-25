@@ -15,7 +15,8 @@ function organizationScope(row: Record<string, unknown>, workspaceId: string): v
  * legacy additions need an explicit audience decision before publication. */
 export function assertSharedOrganizationSupplement(row: Record<string, unknown>, workspaceId: string): void {
   organizationScope(row, workspaceId);
-  const allowed = new Set(["_id", "id", "name", "slug", "logo", "metadata", "createdAt", "updatedAt", "__v"]);
+  const allowed = new Set(["_id", "id", "name", "slug", "logo", "metadata", "kind", "createdAt", "updatedAt", "__v"]);
+  if (row.kind !== undefined && row.kind !== "personal" && row.kind !== "team") throw new Error("Unknown workspace kind requires an explicit migration decision");
   if (Object.keys(row).some((key) => !allowed.has(key))) throw new Error("Unknown organization fields require an explicit private audience");
 }
 export function emptyRecoverySupplementCollections(): WorkspaceRecoverySupplement["collections"] {

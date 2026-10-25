@@ -5,10 +5,14 @@ import { createKeyPair, createSigningPair, signPrivateChange, signPrivateSourceC
 import { PrivateAccount, PrivateSourceChallengeRequest, PrivateWorkspace } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { createPrivateSourceChallenge, readPrivateMigrationOriginals } from "../services/privacy/source-challenges.js";
+import { privacyRouter } from "../trpc/routers/privacy.js";
+import { env } from "../config/env.js";
+import type { Context } from "../trpc/context.js";
 import { discardPrivatePreparation } from "../services/privacy/preparation.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
 const scope: PrivateSourceScope = { server: "https://api.example.test", workspaceId: "workspace", userId: "owner", sessionId: "current-session", purpose: "workspace-originals", migrationId: null };
+const originalOrigin = env.BETTER_AUTH_URL;
 let owner: { privateKey: Awaited<ReturnType<typeof createKeyPair>>["privateKey"]; signingPrivateKey: Awaited<ReturnType<typeof createSigningPair>>["privateKey"] }, member: typeof owner;
 async function signed(s = scope, secrets = owner) { return signPrivateSourceChallenge(await createPrivateSourceChallenge(s), s, secrets, () => true); }
 async function preparation() {
@@ -17,7 +21,10 @@ async function preparation() {
   return migrationId;
 }
 describe("trusted-root original-source challenges", { skip: skipWithoutDatabase }, () => {
-  before(() => connectTestDatabase("privacy-source-challenges", [PrivateAccount, PrivateSourceChallengeRequest, PrivateWorkspace, WorkspaceMember] as never));
+  before(async () => {
+    Object.defineProperty(env, "BETTER_AUTH_URL", { value: scope.server, configurable: true, writable: true, enumerable: true });
+    await connectTestDatabase("privacy-source-challenges", [PrivateAccount, PrivateSourceChallengeRequest, PrivateWorkspace, WorkspaceMember] as never);
+  });
   beforeEach(async () => {
     await clearTestDatabase();
     for (const userId of ["owner", "member"]) {
@@ -27,11 +34,48 @@ describe("trusted-root original-source challenges", { skip: skipWithoutDatabase 
       await PrivateAccount.create({ userId, identity: { publicKey: pair.publicKey, signingPublicKey: signing.publicKey, recovery: {}, passkeys: [] } });
     }
     const db = mongoose.connection.db!;
-    await db.collection<{ _id: string; name: string }>("organization").insertOne({ _id: scope.workspaceId, name: "Original organization" });
+    await db.collection<{ _id: string; name: string; kind: string }>("organization").insertOne({ _id: scope.workspaceId, name: "Original organization", kind: "personal" });
     await db.collection("favorites").insertMany([ { workspaceId: scope.workspaceId, userId: "owner", description: "Owner original pin" }, { workspaceId: scope.workspaceId, userId: "member", description: "Member original pin" } ]);
     await db.collection("webhooksubscriptions").insertMany([ { workspaceId: scope.workspaceId, createdBy: "owner", secret: "Owner original secret" }, { workspaceId: scope.workspaceId, createdBy: "member", secret: "Member original secret" } ]);
   });
-  after(dropTestDatabase);
+  after(async () => { Object.defineProperty(env, "BETTER_AUTH_URL", { value: originalOrigin }); await dropTestDatabase(); });
+  const caller = (userId = "owner", sessionId: string | null = scope.sessionId) => privacyRouter.createCaller({ user: { id: userId }, session: { user: { id: userId } }, sessionId } as unknown as Context);
+  const routeScope = () => ({ ...scope, server: new URL(env.BETTER_AUTH_URL).origin });
+  it("serves owner-readable combined backups only through the authenticated session and unlocked root", async () => {
+    const api = caller(), challenge = await api.recoveryChallenge({ workspaceId: scope.workspaceId });
+    const proof = await signPrivateSourceChallenge(challenge, routeScope(), owner, () => true);
+    const archive = await api.combinedRecovery({ workspaceId: scope.workspaceId, ...proof });
+    assert.equal(archive.format, "trackyourtime-workspace-recovery-v2");
+    assert.equal(archive.supplement.collections.webhooksubscriptions.length, 1);
+    assert.doesNotMatch(JSON.stringify(archive), /Member original/);
+    assert.equal(await PrivateSourceChallengeRequest.countDocuments(), 0); assert.equal(await PrivateWorkspace.countDocuments(), 0);
+    await assert.rejects(api.combinedRecovery({ workspaceId: scope.workspaceId, ...proof }), { code: "NOT_FOUND" });
+    assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
+  });
+  it("rejects login-only, forged and cross-session combined backup reads and non-owner requests", async () => {
+    await assert.rejects(caller("owner", null).recoveryChallenge({ workspaceId: scope.workspaceId }), { code: "UNAUTHORIZED" });
+    await assert.rejects(caller("member").recoveryChallenge({ workspaceId: scope.workspaceId }), { code: "FORBIDDEN" });
+    const api = caller(), challenge = await api.recoveryChallenge({ workspaceId: scope.workspaceId });
+    const proof = await signPrivateSourceChallenge(challenge, routeScope(), owner, () => true);
+    const forged = { ...proof, signature: await signPrivateChange(member.signingPrivateKey, proof.challenge) };
+    await assert.rejects(api.combinedRecovery({ workspaceId: scope.workspaceId, ...forged }), { code: "FORBIDDEN" });
+    await assert.rejects(caller("owner", "different-session").combinedRecovery({ workspaceId: scope.workspaceId, ...proof }), { code: "NOT_FOUND" });
+    await assert.rejects(caller("member").combinedRecovery({ workspaceId: scope.workspaceId, ...proof }), { code: "NOT_FOUND" });
+    assert.equal(await PrivateSourceChallengeRequest.countDocuments(), 1);
+    await api.combinedRecovery({ workspaceId: scope.workspaceId, ...proof });
+  });
+  it("keeps the standard backup routes closed during preparation and after conversion without consuming the challenge", async () => {
+    const api = caller(), challenge = await api.recoveryChallenge({ workspaceId: scope.workspaceId });
+    const proof = await signPrivateSourceChallenge(challenge, routeScope(), owner, () => true);
+    await preparation();
+    await assert.rejects(api.recoveryChallenge({ workspaceId: scope.workspaceId }), /only for standard/);
+    await assert.rejects(api.recoverySnapshot({ workspaceId: scope.workspaceId }), /require a standard workspace/);
+    await assert.rejects(api.combinedRecovery({ workspaceId: scope.workspaceId, ...proof }), /only for standard/);
+    await PrivateWorkspace.updateOne({}, { $set: { state: "encrypted", revision: 1 } });
+    await assert.rejects(api.combinedRecovery({ workspaceId: scope.workspaceId, ...proof }), /only for standard/);
+    assert.equal(await PrivateSourceChallengeRequest.countDocuments(), 1);
+    assert.equal(await mongoose.connection.db!.collection("webhooksubscriptions").countDocuments(), 2);
+  });
   it("requires an unlocked root and releases only owner-readable originals once under concurrent replay", async () => {
     const proof = await signed();
     assert.doesNotMatch(JSON.stringify(await PrivateSourceChallengeRequest.find().lean()), /current-session|Original organization|original secret|original pin|sourceRevision/);

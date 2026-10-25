@@ -1,10 +1,11 @@
+import { createStandardBackupChallenge, readStandardBackupOriginals } from "../../services/privacy/standard-backup.js";
 import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
 import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
 import { migrationFavoritesSource } from "../../services/privacy/recovery.js";
 import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof } from "../../services/privacy/migration-receipts.js";
 import { discardPrivatePreparation } from "../../services/privacy/preparation.js";
 import { env } from "../../config/env.js";
-import { signedPrivateDirectorySchema, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema } from "@starter/shared";
+import { signedPrivateSourceChallengeSchema, signedPrivateDirectorySchema, signedPrivateFavoritesMigrationProofSchema, signedPrivateOwnerMigrationProofSchema } from "@starter/shared";
 import { getAuth } from "../../auth/auth.js";
 import { previewAccountDeletion } from "../../services/account-deletion/delete-account.js";
 import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
@@ -198,5 +199,22 @@ export const privacyRouter = router({
   migrationArchive: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid() })).mutation(({ctx, input}) => privateMigrationArchive(ctx.workspaceId, ctx.user.id, input.migrationId)),
   commitMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid(), backupHash: z.string().length(64), signature: signatureSchema })).mutation(({ctx, input}) => commitPrivateMigration(ctx.workspaceId, ctx.user.id, input.migrationId, input.backupHash, input.signature)),
   cancelMigration: privateWorkspaceProcedure.input(scopeSchema.extend({ migrationId: z.string().uuid(), signature: signatureSchema })).mutation(({ctx, input}) => cancelPrivateMigration(ctx.workspaceId, ctx.user.id, input.migrationId, input.signature)),
-  recoverySnapshot: privateWorkspaceProcedure.input(scopeSchema).mutation(async ({ ctx }) => workspaceRecovery(ctx.workspaceId, ctx.user.id)),
+  recoveryChallenge: privateWorkspaceProcedure.input(scopeSchema).mutation(({ ctx }) => {
+    ctx.res?.setHeader("Cache-Control", "no-store");
+    if (!ctx.sessionId) throw new TRPCError({ code: "UNAUTHORIZED" });
+    return createStandardBackupChallenge({ server: privateServerOrigin(), userId: ctx.user.id, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId });
+  }),
+  combinedRecovery: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateSourceChallengeSchema.shape)).mutation(({ ctx, input }) => {
+    ctx.res?.setHeader("Cache-Control", "no-store");
+    if (!ctx.sessionId) throw new TRPCError({ code: "UNAUTHORIZED" });
+    return readStandardBackupOriginals({ server: privateServerOrigin(), userId: ctx.user.id, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId }, { challenge: input.challenge, signature: input.signature });
+  }),
+  // Older clients keep their standard-mode export. Preparation/private mode
+  // must never bypass the trusted-root source authorization through this route.
+  recoverySnapshot: privateWorkspaceProcedure.input(scopeSchema).mutation(({ ctx }) => withBusinessTransaction(async () => {
+    await requireTransactions(); await fenceWorkspace(ctx.workspaceId);
+    if (await PrivateWorkspace.exists({ workspaceId: ctx.workspaceId })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Legacy original-data exports require a standard workspace. Existing backups were kept." });
+    ctx.res?.setHeader("Cache-Control", "no-store");
+    return workspaceRecovery(ctx.workspaceId, ctx.user.id);
+  })),
 });

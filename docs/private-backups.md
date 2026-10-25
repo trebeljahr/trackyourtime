@@ -41,8 +41,8 @@ is authenticated; relabeling a combined file as v1 cannot discard its supplement
 The offline opener and password-file opener recognize the combined payload and
 warn that a requested JSON export contains unencrypted integration secrets.
 Older files remain readable. A server-internal builder captures both datasets
-in one transaction. No combined-source public endpoint is mounted, and the
-recurring scheduler still creates v1 files. The internal combined owner proof
+in one transaction. The session/root-authorized standard-workspace endpoints
+and recurring v2 scheduler are described below. The internal combined owner proof
 reopens the actual saved file before signing a snapshot-bound approval. Public
 migration flow and per-creator verification remain separate unfinished work.
 
@@ -87,13 +87,29 @@ so a future saved timestamp cannot suppress jobs indefinitely.
 
 ## Current scope and limits
 
-The source is the existing lossless fourteen-collection owner recovery snapshot.
-It preserves saved server records and the owner's favorites. It excludes other
-members' private favorites, auth credentials, unsent device work and local
-activity history. Recovery limits remain 23 MiB and 200,000 records. It does not
-silently truncate. The legacy recovery endpoint refuses an encrypted workspace
-rather than backing up an empty plaintext database; connecting future encrypted
-replicas to this source is still required.
+Scheduled backups now use the combined v2 source: the fourteen typed business
+collections plus workspace identity and the owner's own integrations. Other
+members' private favorites/integrations, auth credentials, unsent device work and
+local activity history remain excluded. This is a user-readable backup, not the
+complete operator copy required before migration. Combined recovery limits are
+23 MiB and 200,000 records; oversized sources refuse without truncation.
+
+API 30 `privacy.recoveryChallenge`/`privacy.combinedRecovery` require the current
+authenticated owner/session, a nonce signature from the unlocked account root
+and an entirely standard workspace. Both calls share the workspace transaction
+fence; starting preparation between them refuses the original-data read. Source
+reads consume the two-minute, at-most-three/account nonce once, verify current
+root keys/session and return only owner-readable originals. Responses specify
+`Cache-Control: no-store`. Client-side source checks bind origin/account/workspace,
+and no private keys, recovery key or session token enter the proof. Old servers
+are reported as unsupported instead of falling back to a partial backup.
+
+The writer keeps the v2 outer format, reopens the actual new file and compares
+the entire verified archive, including both source checksums, before advancing
+its success checkpoint. Old v1 files remain readable. Prepared/encrypted
+workspaces refuse this source; the legacy fourteen-collection export is also
+fenced to standard mode. Connecting future verified encrypted replicas to
+backups remains required.
 
 Lock/account/server changes invalidate pending work. Client requests have a
 30-second bound. File errors leave the old success checkpoint and older files

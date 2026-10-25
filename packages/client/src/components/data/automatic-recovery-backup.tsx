@@ -6,6 +6,7 @@ import { useActiveWorkspace } from "@/components/members/use-active-workspace";
 import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { privateDataOrigin, privateSession, privateSessionVersion, subscribePrivateSession } from "@/lib/private-session";
+import { readCombinedBackupSource } from "@/lib/combined-backup-source";
 import { recoveryBackupController, type RecoveryBackupSettings } from "@/lib/recovery-backup-controller";
 import { chooseRecoveryBackupFolder, supportsRecoveryBackupFolders } from "@/lib/recovery-backup-folder";
 import { useServerSupports } from "@/lib/server-level";
@@ -20,7 +21,7 @@ export function AutomaticRecoveryBackup(): React.JSX.Element | null {
   return user && workspace?.role === "owner" ? <BackupForWorkspace key={`${privateDataOrigin()}:${user.id}:${workspace.id}:${version}`} userId={user.id} workspaceId={workspace.id} /> : null;
 }
 function BackupForWorkspace({ userId, workspaceId }: { userId: string; workspaceId: string }): React.JSX.Element {
-  const t = useT("settings"), utils = trpc.useUtils(), supported = useServerSupports("privacy.keys");
+  const t = useT("settings"), utils = trpc.useUtils(), supported = useServerSupports("privacy.combinedRecovery");
   const available = React.useSyncExternalStore(subscribeNothing, supportsRecoveryBackupFolders, () => false), unlocked = !!privateSession(userId);
   const status = React.useSyncExternalStore(subscribeRecoveryBackupRun, () => recoveryBackupRunState(userId, workspaceId), () => "idle" as const);
   const account = trpc.privacy.identity.useQuery({ userId }, { enabled: supported && available && unlocked, retry: false });
@@ -41,13 +42,14 @@ function BackupForWorkspace({ userId, workspaceId }: { userId: string; workspace
   }, [userId, workspaceId, unlocked, supported, available]);
   const run = async (task: () => Promise<void>) => {
     setPending(true); setFailed(false);
-    try { await task(); } catch (error) { if (alive.current) { if (error instanceof RecoveryBackupPausedError) noteRecoveryBackupRun(userId, workspaceId, "folder-unavailable"); else setFailed(true); } }
+    try { await task(); } catch (error) { if (alive.current) { if (error instanceof RecoveryBackupPausedError) noteRecoveryBackupRun(userId, workspaceId, "folder-unavailable"); else { setFailed(true); noteRecoveryBackupRun(userId, workspaceId, "failed"); } } }
     finally { if (alive.current) { setPending(false); setSecret(""); } }
   };
   return <section className="space-y-3 border-t pt-4" data-testid="automatic-recovery-backup">
     <h3 className="text-sm font-medium">{t("automaticBackups.title")}</h3>
     <p className="max-w-prose text-sm text-muted-foreground">{t("automaticBackups.description")}</p>
     <p className="max-w-prose text-xs text-muted-foreground">{t("automaticBackups.limits")}</p>
+    {!supported && <p className="text-sm text-muted-foreground">{t("automaticBackups.unsupported")}</p>}
     {!available ? <p className="text-sm text-muted-foreground">{t("automaticBackups.unavailable")}</p> : !unlocked ? <p className="text-sm text-muted-foreground">{t("automaticBackups.locked")}</p> : <>
       {settings && <p className="text-sm" data-testid="automatic-backup-folder">{t("automaticBackups.folder", { name: settings.folderName })}</p>}
       {settings?.lastBackupAt && <p className="text-xs text-muted-foreground">{t("automaticBackups.last", { date: new Date(settings.lastBackupAt).toLocaleString() })}</p>}
@@ -74,9 +76,15 @@ function BackupForWorkspace({ userId, workspaceId }: { userId: string; workspace
         }}>{t("automaticBackups.choose")}</Button>
       </div>
       {settings && <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={pending} data-testid="automatic-backup-now" onClick={() => void run(async () => {
+        <Button variant="outline" disabled={pending || !supported} data-testid="automatic-backup-now" onClick={() => void run(async () => {
           const active = controller.current; if (!active) throw new Error("Unlock private data first");
-          const result = await active.run(async () => ({ format: "trackyourtime-workspace-recovery-v1", server: privateDataOrigin(), ownerId: userId, snapshot: await utils.client.privacy.recoverySnapshot.mutate({ workspaceId }, { signal: AbortSignal.timeout(30000) }) }), true);
+          const result = await active.run(() => {
+            const signal = AbortSignal.timeout(30000);
+            return readCombinedBackupSource(userId, workspaceId, {
+              challenge: () => utils.client.privacy.recoveryChallenge.mutate({ workspaceId }, { signal }),
+              originals: (proof) => utils.client.privacy.combinedRecovery.mutate({ workspaceId, ...proof }, { signal }),
+            }, signal);
+          }, true);
           if (!alive.current) return;
           if (result.status === "saved" || result.status === "current") { setSettings(result.settings); noteRecoveryBackupRun(userId, workspaceId, "saved"); }
           else noteRecoveryBackupRun(userId, workspaceId, "folder-unavailable");
