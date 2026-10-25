@@ -782,6 +782,31 @@ the full staged source. Temporary staging authorization must retire at cutover.
 This is not a background scheduler/controller, a content receipt or an
 operational restore proof. Legacy staging wrappers remain independently refused.
 
+## Preparation content readiness (internal)
+
+The preparation controller can now revalidate content readiness against the
+owner's verified initial-root checkpoint. It accepts only the signed
+`client-v2` exact-original worker, requires completed progress equal to the
+complete staged set, and verifies the immutable root, chunks and all reader
+indexes against current originals and member keys in one fenced transaction.
+It then verifies the stored owner saved-file receipt and a personal saved-file
+receipt from every other member who has opaque personal originals. A member
+with no such originals needs no separate personal-data acknowledgement.
+
+Stored receipt presence is insufficient: protocol, signature, scope, directory,
+root, source checksums and projected ciphertext/count are rechecked. The full
+ciphertext set is captured once rather than rescanned for each member. Polling
+returns only `awaiting-verification` or `content-verified`, without missing-user
+lists, private record counts, source checksums or file details. Invalid/stale
+state refuses verification. No public route or mode transition is enabled.
+
+This status is neither an operational backup/restore proof nor permission to
+retire source records. A future cutover must repeat verification inside its own
+transaction and satisfy independent operational backup, rollback, device-policy
+and storage/process retirement requirements. Account erasure cancels pending
+preparation atomically with its guarded write; encrypted shared modes retain
+their ciphertext and verification history.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes
