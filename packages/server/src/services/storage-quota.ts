@@ -15,6 +15,10 @@ export function quotaCollections(): Record<string, string> {
     BusinessProfile: "businessprofiles", TimesheetApproval: "timesheetapprovals",
     TimesheetPolicy: "timesheetpolicies", WorkspaceMember: "workspacemembers",
     ApiToken: "apitokens", WebhookSubscription: "webhooksubscriptions",
+    PrivateRecord: "privaterecords", PrivateWorkspaceCommit: "privateworkspacecommits",
+    PrivateSnapshotChunk: "privatesnapshotchunks", PrivateSnapshotReader: "privatesnapshotreaders",
+    PrivateDirectory: "privatedirectories", PrivateMigrationReceipt: "privatemigrationreceipts",
+    PrivateWorkspace: "privateworkspaces",
   };
 }
 
@@ -82,7 +86,7 @@ async function baseline(workspaceId: string, state: State): Promise<number> {
   if (cached !== undefined) return cached;
   await fence(`workspace:${workspaceId}`, state);
   const stored = await StorageUsage.findById(workspaceId).lean();
-  if (stored?.version === 1) { state.usage.set(workspaceId, stored.bytes); return stored.bytes; }
+  if (stored?.version === 2) { state.usage.set(workspaceId, stored.bytes); return stored.bytes; }
   let bytes = 0;
   // One scan on adoption, never one scan per timer tick. All later writes use deltas.
   for (const [modelName, collection] of Object.entries(quotaCollections())) {
@@ -91,7 +95,7 @@ async function baseline(workspaceId: string, state: State): Promise<number> {
     ], { session: transactionSession() }).toArray();
     bytes += Number(sum?.bytes ?? 0);
   }
-  await StorageUsage.updateOne({ _id: workspaceId }, { $set: { bytes, version: 1 } }, { upsert: true });
+  await StorageUsage.updateOne({ _id: workspaceId }, { $set: { bytes, version: 2 } }, { upsert: true });
   state.usage.set(workspaceId, bytes);
   return bytes;
 }
@@ -127,10 +131,10 @@ function quotaState(): State {
   });
 }
 
-async function prepare(workspaces: string[], members: string[] = []): Promise<void> {
+async function prepare(workspaces: string[], members: string[] = [], privateData = false): Promise<void> {
   const state = quotaState();
   const ids = [...new Set(workspaces)].sort();
-  await guardPlaintextWorkspaceWrites(ids);
+  if (!privateData) await guardPlaintextWorkspaceWrites(ids);
   const owners = await database().collection("workspacemembers").find(
     { workspaceId: { $in: ids }, role: "owner" },
     { session: transactionSession(), projection: { userId: 1 } },
@@ -192,6 +196,10 @@ export async function withStorageOwnershipAdoption<T>(work: () => Promise<T>): P
  * for migrations/account erasure; new application writers must use models. */
 export function installStorageQuota(mongooseModel: ModelIdentity): void {
   const model = mongooseModel as unknown as StorageModel;
+  // These models store ciphertext/commitments and must remain writable during
+  // preparation/private mode. Authentication and workspace fences stay in the
+  // private services; ordinary models keep their plaintext-write guard.
+  const privateData = ["PrivateRecord", "PrivateWorkspaceCommit", "PrivateSnapshotChunk", "PrivateSnapshotReader", "PrivateDirectory", "PrivateMigrationReceipt", "PrivateWorkspace"].includes(model.modelName);
   const marker = Symbol.for("trackyourtime.storageQuota");
   if (model[marker]) return;
   model[marker] = true;
@@ -219,7 +227,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
         ids.push(id);
       }
       await prepare([...before.map((row) => row.workspaceId), ...(typeof proposed.workspaceId === "string" ? [proposed.workspaceId] : [])],
-        model.modelName === "WorkspaceMember" ? [...before.map((row) => row.userId!), ...(typeof proposed.userId === "string" ? [proposed.userId] : [])] : []);
+        model.modelName === "WorkspaceMember" ? [...before.map((row) => row.userId!), ...(typeof proposed.userId === "string" ? [proposed.userId] : [])] : [], privateData);
       const result = await Reflect.apply(exec, query, args);
       await accountChange(before, await snapshot(model, { _id: { $in: ids } }));
       return result;
@@ -230,7 +238,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
     const doc = this;
     return guarded(async () => {
       const before = await snapshot(model, { _id: doc._id });
-      await prepare([...before.map((row) => row.workspaceId), doc.workspaceId], model.modelName === "WorkspaceMember" ? [doc.userId] : []);
+      await prepare([...before.map((row) => row.workspaceId), doc.workspaceId], model.modelName === "WorkspaceMember" ? [doc.userId] : [], privateData);
       const result = await Reflect.apply(save, doc, [{ ...record(args[0]), session: transactionSession() }, ...args.slice(1)]);
       await accountChange(before, await snapshot(model, { _id: doc._id }));
       return result;
@@ -247,7 +255,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
     return guarded(async () => {
       const documents: unknown[] = Array.isArray(docs) ? docs : [docs];
       const rows = documents.map((doc) => ({ ...record(doc), _id: (doc as StorageDocument)._id ?? new mongoose.Types.ObjectId() } as StorageDocument));
-      await prepare(rows.map((row) => row.workspaceId), model.modelName === "WorkspaceMember" ? rows.map((row) => row.userId) : []);
+      await prepare(rows.map((row) => row.workspaceId), model.modelName === "WorkspaceMember" ? rows.map((row) => row.userId) : [], privateData);
       const result = await Reflect.apply(insertMany, model, [rows, { ...record(options), ordered: true, throwOnValidationError: true }]);
       await accountChange([], await snapshot(model, { _id: { $in: rows.map((row) => row._id) } }));
       return result;

@@ -461,7 +461,7 @@ that contains supplemental originals, even if a marker was not created.
 No v2 source/receipt/begin controller is mounted publicly. Existing begin flow
 still prepares only v1 and remains guarded. A receipt does not change mode,
 set operational backup verification or delete originals. Per-creator content
-receipts, bounded encrypted quota accounting, complete operational backup and
+receipts, encrypted-storage preflight, complete operational backup and
 isolated restoration, app adapters and atomic source retirement remain required.
 
 ## Personal subset approval (internal)
@@ -490,6 +490,31 @@ with private originals; no records means no content approval to wait for. Neithe
 a personal nor owner receipt replaces complete operational restoration or permits
 source deletion. All plaintext checksums and temporary receipts must retire.
 
+## Encrypted storage accounting
+
+The shared workspace/account quota ledger now includes materialized encrypted
+records, immutable journal and snapshot copies, reader indexes, public directory
+history, temporary content receipts and workspace mode rows. Recipient grants
+count at their full stored BSON size. Every row retains the ordinary 4 KiB
+record/index floor. Ledger version 2 rebaselines existing data before the next
+accounted mutation; old version 1 totals cannot hide pre-existing private bytes.
+
+These private models use the same transactional workspace/account storage fences
+and before-commit growth checks. They skip only the plaintext-mode guard;
+private service authorization and workspace fences remain required. Ordinary
+models still refuse writes during preparation/private mode. Snapshot duplication,
+large grant sets and concurrent writes across owned workspaces cannot escape
+the account allowance. Refused batches roll back all ciphertext/ledger writes;
+shrinking and deletion remain possible over budget. Preparation expiry and
+account erasure retain their existing scoped cleanup behavior.
+
+This is logical application storage, not physical disk usage or accounting for
+account-key envelopes, auth records, organization uploads, database indexes,
+logs/oplogs and external backups. Raw native collection writes require explicit
+maintenance accounting. Full grant-expansion preflight before the future v2 begin
+controller, signed checkpoint/retention design and migration headroom remain
+unfinished; this accounting change does not enable public migration.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes snapshot v2, consumes
@@ -510,7 +535,7 @@ source deletion. All plaintext checksums and temporary receipts must retire.
 - Audit legacy integration secrets/configuration and every unlisted plaintext
   collection. The fourteen-collection business backup does not cover auth or
   webhook credential storage.
-- Journal/storage quota accounting and retention. Tombstones preserve the old
+- Grant-expansion/migration-headroom preflight and journal retention. Tombstones preserve the old
   ciphertext context; this is not cryptographic erasure of historical journal
   records or ciphertext already copied by another authorized client.
 

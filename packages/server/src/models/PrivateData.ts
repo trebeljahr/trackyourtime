@@ -1,3 +1,4 @@
+import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema } from "mongoose";
 import type { EncryptedRecord, PrivateIdentity, PrivateDeviceApproval, PrivateDeviceInvite } from "@starter/shared";
 export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number; keySerial: number }>({
@@ -89,3 +90,7 @@ const privateMigrationReceiptSchema = new Schema<{
 }, { timestamps: true });
 privateMigrationReceiptSchema.index({ workspaceId: 1, migrationId: 1, userId: 1, kind: 1 }, { unique: true });
 export const PrivateMigrationReceipt = mongoose.model("PrivateMigrationReceipt", privateMigrationReceiptSchema);
+
+// Charge materialized ciphertext, immutable duplicates, reader projections,
+// directory history and temporary preparation state through the shared ledger.
+for (const model of [PrivateRecord, PrivateWorkspaceCommit, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateDirectory, PrivateMigrationReceipt, PrivateWorkspace]) installStorageQuota(model);
