@@ -5,10 +5,11 @@ export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ user
   userId: { type: String, required: true, unique: true }, identity: { type: Schema.Types.Mixed, required: true }, revision: { type: Number, default: 1 },
   deviceSerial: { type: Number, default: 0 }, keySerial: { type: Number, default: 0 },
 }, { timestamps: true }));
-export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; supplementRevision?: string | null; backupVerified: boolean }>({
+export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; supplementRevision?: string | null; preparationProtocol?: "client-v2" | null; backupVerified: boolean }>({
   workspaceId: { type: String, required: true, unique: true }, state: { type: String, enum: ["migrating", "encrypted"], required: true },
   ownerId: { type: String, required: true }, revision: { type: Number, default: 0 }, leaseUntil: { type: Date, required: true },
   head: { type: String, default: null }, directoryDigest: { type: String, default: null },
+  preparationProtocol: { type: String, enum: ["client-v2", null], default: null },
   migrationId: { type: String, required: true }, sourceRevision: { type: String, required: true }, supplementRevision: { type: String, default: null }, backupVerified: { type: Boolean, default: false },
 }, { timestamps: true }));
 const privateRecordSchema = new Schema<EncryptedRecord & { workspaceId: string; deleted: boolean }>({
@@ -37,6 +38,19 @@ const privateSourceChallengeModelSchema = new Schema<{
 privateSourceChallengeModelSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 privateSourceChallengeModelSchema.index({ userId: 1, expiresAt: 1 });
 export const PrivateSourceChallengeRequest = mongoose.model("PrivateSourceChallengeRequest", privateSourceChallengeModelSchema);
+
+/** Bounded consumed preparation intents. Cancellation keeps these until their
+ * signed expiry so a delayed request cannot recreate a discarded lease. */
+const privatePreparationRequestModel = new Schema<{
+  _id: string; userId: string; workspaceId: string; migrationId: string; requestDigest: string; expiresAt: Date;
+}>({
+  _id: { type: String, required: true }, userId: { type: String, required: true }, workspaceId: { type: String, required: true },
+  migrationId: { type: String, required: true }, requestDigest: { type: String, required: true }, expiresAt: { type: Date, required: true },
+}, { timestamps: true });
+privatePreparationRequestModel.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+privatePreparationRequestModel.index({ userId: 1, expiresAt: 1 });
+privatePreparationRequestModel.index({ workspaceId: 1, migrationId: 1 });
+export const PrivatePreparationRequest = mongoose.model("PrivatePreparationRequest", privatePreparationRequestModel);
 
 /** Immutable ciphertext journal and replay receipt. One revision per workspace
  * edit; no TTL, so a client that was offline cannot miss a deletion. */

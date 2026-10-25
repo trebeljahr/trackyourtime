@@ -717,9 +717,38 @@ This is a delivery/bootstrap adapter, not a public activation UI or a durable
 mode-pin policy. Trusted initial-root provisioning, full app adapters, safe
 new-device policy and operational migration/rollback remain required.
 
+## Signed client-preparation lease (internal)
+
+A separate preparation intent signs the owner's readable combined-source
+checksums, verified directory, current login-session digest, fresh migration ID
+and two-minute lifetime. Reading a backup cannot create this intent. The
+internal begin engine authenticates the owner/signature/scope, checks current
+public keys/roles and the stored directory's signature/digest, captures complete
+originals internally and compares the owner's signed subset. It refuses running
+timers, aggregate backup limits, orphaned private artifacts and insufficient
+temporary storage before creating any lease. The result contains only the ID,
+directory digest and one-hour lease deadline, never peers' source checksums.
+
+Workspace/account transaction fences make concurrent retries idempotent. The
+request ID is consumed atomically with the lease; replay never extends its
+lifetime. Cancellation keeps a bounded nonce record until the signed request
+expires, so a delayed start cannot recreate canceled preparation. At most three
+live intents per account are retained; TTL is backed by explicit expiry checks.
+This bounded authentication metadata is separate from content quota accounting.
+Account/workspace erasure removes it, and the residual audit requires retirement
+of these source-bound request digests at cutover.
+
+New leases are marked `client-v2` and pin the directory. They refuse the legacy
+server-encryption stager. The source/chunk/proposal verifier reuses the same
+current-directory checks. No public begin endpoint or client staging controller
+is mounted. Source originals, workspace revision/head and backup verification
+remain unchanged. Preflight checks availability; it does not reserve headroom.
+Device/old-client readiness, signed client staging with existing actor rights,
+complete operational restoration, cutover and app adapters remain required.
+
 ## Remaining rollout dependencies
 
-- A source-verified migration controller that publishes snapshot v2, consumes
+- A source-verified migration controller that publishes the separated initial root, consumes
   per-member verification for opaque records and pins root/directory at cutover,
   plus a lossless encrypted backup, isolated restore proof and rollback workflow.
 - Verified member-key onboarding and rotation, including transactional fencing

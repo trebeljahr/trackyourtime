@@ -148,3 +148,15 @@ export const privateProjectionPersonalProofSchema = privatePersonalMigrationProo
 }).strict();
 export const signedPrivateProjectionPersonalProofSchema = z.object({ proof: privateProjectionPersonalProofSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateProjectionPersonalProof = z.infer<typeof signedPrivateProjectionPersonalProofSchema>;
+
+export const PRIVATE_PREPARATION_REQUEST_TTL_MS = 2 * 60_000;
+/** Internal client-preparation intent; no public begin route accepts it yet. */
+export const privatePreparationRequestSchema = z.object({
+  v: z.literal(1), protocol: z.literal("trackyourtime-private-preparation-v2"),
+  server: z.string().url().max(2048), workspaceId: id, userId: id, migrationId: z.uuid(),
+  directoryDigest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), sessionBinding: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  sourceRevision: z.string().regex(/^[a-f0-9]{64}$/), supplementRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  issuedAt: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), expiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+}).strict();
+export const signedPrivatePreparationRequestSchema = z.object({ request: privatePreparationRequestSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivatePreparationRequest = z.infer<typeof signedPrivatePreparationRequestSchema>;

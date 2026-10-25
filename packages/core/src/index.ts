@@ -58,3 +58,5 @@ export * from "./privacy/projection-snapshot.js";
 export * from "./privacy/projection-migration-proof.js";
 
 export * from "./privacy/projection-delivery.js";
+
+export * from "./privacy/preparation-request.js";

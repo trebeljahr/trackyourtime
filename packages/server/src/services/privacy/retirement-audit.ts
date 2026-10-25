@@ -12,6 +12,7 @@ export function privateWorkspaceRoutingIdentity(workspaceId: string) {
 type RawRow = Document & { _id: string | ObjectId };
 export type PrivateRetirementLeak = { collection: string; reason: "original-records" | "integration-content" | "personal-labels" | "source-checksums" | "unknown-fields" | "unclassified-records"; records: number };
 const privateFields: Record<string, string[]> = {
+  privatepreparationrequests: ["userId", "workspaceId", "migrationId", "requestDigest", "expiresAt"],
   privatesourcechallengerequests: ["userId", "workspaceId", "challenge", "expiresAt"],
   privatedirectories: ["workspaceId", "revision", "digest", "signerPublicKey", "signed"],
   privatesnapshotchunks: ["workspaceId", "migrationId", "index", "records"],
@@ -20,7 +21,7 @@ const privateFields: Record<string, string[]> = {
   privatesnapshotreaders: ["workspaceId", "migrationId", "userId", "fullRecordsDigest", "signed", "locations"],
   privaterecords: ["workspaceId", "id", "kind", "authorId", "revision", "keyCommitment", "box", "grants", "deleted"],
   privateworkspacecommits: ["workspaceId", "userId", "operationId", "revision", "manifest", "signature", "readerSignatures", "records", "chain", "head"],
-  privateworkspaces: ["workspaceId", "state", "ownerId", "revision", "head", "directoryDigest", "leaseUntil", "migrationId", "sourceRevision", "supplementRevision", "backupVerified"],
+  privateworkspaces: ["workspaceId", "state", "ownerId", "revision", "head", "directoryDigest", "leaseUntil", "migrationId", "sourceRevision", "supplementRevision", "preparationProtocol", "backupVerified"],
 };
 const privateCollections = ["privateaccounts", "privatedevicerequests", ...Object.keys(privateFields)];
 const operationalCollections = ["storageusages", "storagefences", "workspacewritefences", "importbudgets", "importleases", "scheduledjobs"];
@@ -60,6 +61,7 @@ export async function auditPrivateWorkspaceRetirement(db: Db, workspaceId: strin
   await count("workspacemembers", "personal-labels", { workspaceId, $or: [{ name: { $exists: true, $nin: [null, ""] } }, { hourlyRate: { $exists: true, $ne: null } }] });
   await unknownFields("workspacemembers", { workspaceId }, ["_id", "workspaceId", "userId", "role", "name", "hourlyRate", "canViewOthersTime", "canViewOthersMoney", "createdAt", "updatedAt", "__v"]);
   await count("privatemigrationreceipts", "source-checksums", { workspaceId });
+  await count("privatepreparationrequests", "source-checksums", { workspaceId });
   await count("privateworkspaces", "source-checksums", { workspaceId, $or: [{ sourceRevision: { $ne: "retired" } }, { supplementRevision: { $exists: true, $nin: [null, "retired"] } }] });
   for (const [collection, fields] of Object.entries(privateFields)) await unknownFields(collection, { workspaceId }, ["_id", "createdAt", "updatedAt", "__v", ...fields]);
   const ids: (string | ObjectId)[] = [workspaceId];

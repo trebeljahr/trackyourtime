@@ -74,6 +74,7 @@ export async function stagePrivateMigrationBatch(workspaceId: string, userId: st
     const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, ownerId: userId }).lean();
     if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
     requireActivePrivatePreparation(mode);
+    if (mode.preparationProtocol === "client-v2") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This preparation requires signed client staging. Server-side staging is unavailable." });
     if (!await WorkspaceMember.exists({ workspaceId, userId, role: "owner" })) throw new TRPCError({ code: "FORBIDDEN" });
     const source = await workspaceRecovery(workspaceId, userId, true);
     if (source.sourceRevision !== mode.sourceRevision) throw new TRPCError({ code: "CONFLICT", message: "Original data changed. Cancel and prepare a new migration." });
