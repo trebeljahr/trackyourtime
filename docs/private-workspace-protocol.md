@@ -629,7 +629,7 @@ shared originals in a personal file. Both enforce current unlock/provenance,
 account/server/workspace binding and separate copies of caller-owned purpose keys.
 
 These statements are distinct from older v2 owner/v1 personal receipt protocols;
-no existing server endpoint accepts them yet. Their temporary plaintext-derived
+no public server endpoint accepts them yet; internal v3 receipt verification is described below. Their temporary plaintext-derived
 source checksums must retire at cutover. Personal approval does not claim to
 validate all of a member's shared originals. Client-side staging must preserve
 existing actor/business rights and obtain any additional required source/content
@@ -674,6 +674,24 @@ Shared account deletion removes only that account's reader index and personal
 ciphertext; the common root and other readers' projections remain verifiable.
 Quota ledger version 3 includes the root and reader indexes. No public v3 route,
 replica bootstrap or live activation is enabled by these internal helpers.
+
+## Separated-projection receipts (internal)
+
+The new owner v3/personal v2 receipt handlers accept only their distinct schemas.
+They require current scope/membership and active preparation, then recapture the
+complete source, current account keys/directory, every frozen chunk/index and the
+owner-signed common root under the same workspace transaction fence. This full
+capture stays internal; a member receives no other creator's originals or IDs.
+The owner proof binds the owner's shared/personal reader projection; a personal
+proof binds only that creator's private projection. Each is checked against its
+own typed source checksums, record count and exact reader ciphertext digest.
+Even byte-identical receipt replay repeats every validation.
+
+The common receipt collection preserves the explicit proof version; old receipt
+handlers reject the new schemas. A receipt never sets `backupVerified`, changes
+mode or deletes source data. It attests the client's reopened saved-file/content
+check; complete independent operational backup/isolated restoration, additional
+shared-source attestations and the cutover controller remain separate obligations.
 
 ## Remaining rollout dependencies
 

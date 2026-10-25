@@ -31,6 +31,24 @@ function chunksFor(records: readonly EncryptedRecord[]): EncryptedRecord[][] {
  * reader's shared/personal digest is recomputed from the complete staged set.
  * This never changes mode, verifies operational backups or removes originals. */
 export async function preparePrivateProjectionSnapshot(scope: ProjectionPreparationScope, input: SignedPrivateInitialProjectionRoot) {
+  const { root } = await prepareProjectionSnapshot(scope, input, false);
+  return { root };
+}
+/** Server-internal complete capture for receipt/cutover verification only.
+ * Never return this object from a user API. Requires already-frozen storage. */
+export async function capturePreparedPrivateProjection(scope: ProjectionPreparationScope) {
+  scope = { ...scope };
+  if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED" });
+  return withBusinessTransaction(async () => {
+    await fenceWorkspace(scope.workspaceId);
+    const stored = await PrivateProjectionRoot.findOne({ workspaceId: scope.workspaceId, migrationId: scope.migrationId }).lean();
+    if (!stored) throw incomplete();
+    const checked = await prepareProjectionSnapshot(scope, stored.signed, true);
+    if (checked.root !== stored.root) throw incomplete();
+    return { ...checked.captured, signed: stored.signed, root: checked.root };
+  });
+}
+async function prepareProjectionSnapshot(scope: ProjectionPreparationScope, input: SignedPrivateInitialProjectionRoot, existingOnly: boolean) {
   scope = { ...scope };
   if (size(input) > 256 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE" });
   const signed = signedPrivateInitialProjectionRootSchema.parse(input), { manifest } = signed;
@@ -67,13 +85,14 @@ export async function preparePrivateProjectionSnapshot(scope: ProjectionPreparat
         const stored = storedReaders.find((row) => row.userId === reader.userId);
         return !stored || canonicalJson(stored.sharedLocations) !== canonicalJson(reader.sharedLocations) || canonicalJson(stored.personalLocations) !== canonicalJson(reader.personalLocations);
       })) throw incomplete();
-      return { root };
+      return { root, captured };
     }
+    if (existingOnly) throw incomplete();
     if (await PrivateSnapshotChunk.exists({ workspaceId, migrationId }) || await PrivateProjectionReader.exists({ workspaceId, migrationId })) throw incomplete();
     for (let index = 0; index < chunks.length; index++) await PrivateSnapshotChunk.create({ workspaceId, migrationId, index, records: chunks[index] });
     await PrivateProjectionReader.insertMany(readers);
     await PrivateProjectionRoot.create({ workspaceId, migrationId, root, fullRecordsDigest: captured.fullRecordsDigest, signed });
-    return { root };
+    return { root, captured };
   });
 }
 async function readerScope(scope: { server: string; workspaceId: string; userId: string }) {
