@@ -12,7 +12,7 @@ export async function privateRecoveryFixture(padding = 0) {
   const personal = [await encryptPrivateRecord(scope.workspaceId, { kind: "favorites", id: "favorite", authorId: "owner", value: { description: "Original private favorite" } }, [person], 1)];
   const root = await signPrivateInitialProjectionRoot({ directory, secrets, userId: "owner", migrationId: crypto.randomUUID(), sharedRecords: shared, ownerPersonalRecords: personal, personalDigests: new Map([["owner", await privateRecordDigest(personal)]]), current });
   const snapshot = await verifyPrivateInitialProjection({ signed: root, directory, secrets, scope, sharedRecords: privateInitialSnapshotProjection(shared, "owner"), personalRecords: privateInitialSnapshotProjection(personal, "owner"), current });
-  const signedPolicy = await signPrivateWorkspacePolicy({ snapshot, directory, secrets, current });
+  const signedPolicy = await signPrivateWorkspacePolicy({ reportRangeTimeZone: "UTC", snapshot, directory, secrets, current });
   const inventoryOptions = { ...scope, storage: memoryStorage(), exclusive: <T>(work: () => Promise<T>) => work(), capture: () => () => { if (!current()) throw new Error("Locked recovery"); }, resolveStorageKey: () => ({ key: master, current }), resolveIdentity: () => ({ master, signingPrivateKey: signing.privateKey, signingPublicKey: signing.publicKey, current }) };
   const inventory = await createPrivateAccountInventorySync(inventoryOptions), enrollment = await signPrivateAccountInventory({ ...scope, workspaces: [{ workspaceId: scope.workspaceId, mode: "encrypted", signedPolicy }], previous: null, signingPrivateKey: signing.privateKey, current });
   await inventory.enroll(enrollment);

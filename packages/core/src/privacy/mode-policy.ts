@@ -1,18 +1,19 @@
 import { z } from "zod";
-import { publicEncryptionKeySchema } from "@starter/shared";
+import { publicEncryptionKeySchema, isValidTimeZone, reportRangeInTimeZone } from "@starter/shared";
 import { canonicalJson, decodeSecret, fingerprint, signPrivateChange, type PublicKey } from "./crypto.js";
 import { privateReplicaIdentityFromDirectory, type VerifiedPrivateDirectory } from "./directory.js";
 import { assertPrivateProjectionSnapshot, type VerifiedPrivateProjectionSnapshot } from "./projection-snapshot.js";
 import { createPrivateStorage, type PrivateStorageKey, type PrivateStorageScope } from "./storage.js";
 import type { KeyValueStorage } from "../storage.js";
 import type { QueueExclusive } from "../durable-entry.js";
+const reportZoneSchema = z.string().min(1).max(64).refine(isValidTimeZone, "Invalid report-range timezone");
 const digest = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const policySchema = z.object({
   v: z.literal(1), protocol: z.literal("trackyourtime-private-workspace-policy-v1"), mode: z.literal("encrypted"),
   server: z.string().min(1).max(2048), userId: z.string().min(1).max(100), workspaceId: z.string().min(1).max(100),
   accountFingerprint: digest, activationRoot: digest, directoryDigest: digest,
   ownerId: z.string().min(1).max(100), ownerSigningPublicKey: publicEncryptionKeySchema,
-  directoryRevision: z.number().int().positive(), createdAt: z.iso.datetime(),
+  directoryRevision: z.number().int().positive(), reportRangeTimeZone: reportZoneSchema.optional(), createdAt: z.iso.datetime(),
 }).strict();
 const signedSchema = z.object({ policy: policySchema, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) }).strict();
 export const signedPrivateWorkspacePolicySchema = signedSchema;
@@ -33,6 +34,9 @@ export class PrivateWorkspacePolicyMissingError extends Error {
 export async function signPrivateWorkspacePolicy(options: {
   snapshot: VerifiedPrivateProjectionSnapshot; directory: VerifiedPrivateDirectory;
   secrets: { privateKey: PublicKey; signingPrivateKey: PublicKey }; current: () => boolean;
+  /** Explicit checked conversion/device/recovery metadata, never a fresh API
+   * fallback or this device’s current timezone. */
+  reportRangeTimeZone: string;
 }): Promise<SignedPrivateWorkspacePolicy> {
   const { snapshot, directory, secrets, current } = options, scope = { ...snapshot.scope };
   const check = () => { if (!current()) throw new Error("Private workspace policy changed during signing"); assertPrivateProjectionSnapshot(snapshot, scope, directory.digest); };
@@ -40,7 +44,7 @@ export async function signPrivateWorkspacePolicy(options: {
   const owner = directory.signed.directory.members.find((member) => member.userId === directory.signed.directory.ownerId)!;
   const policy = policySchema.parse({ v: 1, protocol: "trackyourtime-private-workspace-policy-v1", mode: "encrypted", ...scope,
     accountFingerprint: await fingerprint(secrets.signingPrivateKey), activationRoot: snapshot.root, directoryDigest: directory.digest,
-    ownerId: owner.userId, ownerSigningPublicKey: owner.signingPublicKey, directoryRevision: directory.signed.directory.revision, createdAt: new Date().toISOString(),
+    ownerId: owner.userId, ownerSigningPublicKey: owner.signingPublicKey, directoryRevision: directory.signed.directory.revision, reportRangeTimeZone: reportZoneSchema.parse(options.reportRangeTimeZone), createdAt: new Date().toISOString(),
   }); check();
   const signature = await signPrivateChange(secrets.signingPrivateKey, policy); check();
   return signedSchema.parse({ policy, signature });
@@ -81,7 +85,7 @@ export async function createPrivateWorkspacePolicyStore(options: {
         const check = options.capture(); check();
         const next = await verifyPrivateWorkspacePolicy(signed, scope, signingPublicKey, expected, () => { try { check(); return true; } catch { return false; } }); check();
         const prior = await storage.getItem("mode-policy"); check();
-        if (prior !== null) { const value = await checked(prior, check); check(); return value; }
+        if (prior !== null) { const value = await checked(prior, check); check(); if (value.signed.policy.reportRangeTimeZone !== next.signed.policy.reportRangeTimeZone) throw new Error("Report calendar differs from the saved workspace policy; existing policy was kept"); return value; }
         await storage.setItem("mode-policy", JSON.stringify(next.signed)); check();
         const saved = await storage.getItem("mode-policy"); check();
         if (saved === null) throw new PrivateWorkspacePolicyMissingError();
@@ -98,4 +102,16 @@ export function requirePrivateWorkspacePolicy(policy: VerifiedPrivateWorkspacePo
   if (pin.server !== scope.server || pin.userId !== scope.userId || pin.workspaceId !== scope.workspaceId) throw new Error("Private workspace policy belongs to another scope");
   if (reportedMode !== "encrypted") throw new Error("The server omitted or downgraded this workspace's private mode. Plaintext access is refused.");
   return { activationRoot: pin.activationRoot, directoryDigest: pin.directoryDigest };
+}
+
+/** Older local policies stay readable/exportable. Date-only report bounds
+ * require their missing calendar to be recovered explicitly; full instants do
+ * not depend on a server clock and can still be interpreted safely. */
+export function privateReportRangeForPolicy(policy: VerifiedPrivateWorkspacePolicy, scope: PrivateStorageScope, input: { from: string; to: string }) {
+  requirePrivateWorkspacePolicy(policy, scope, "encrypted");
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  const needsZone = dateOnly.test(input.from) || dateOnly.test(input.to);
+  const zone = policy.signed.policy.reportRangeTimeZone;
+  if (needsZone && !zone) throw new Error("Restore the conversion-time report calendar before reading date-only reports");
+  const range = reportRangeInTimeZone(input, zone ?? "UTC"); requirePrivateWorkspacePolicy(policy, scope, "encrypted"); return range;
 }

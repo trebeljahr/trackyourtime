@@ -78,7 +78,7 @@ it("binds separated projection downloads and durable installation to the live ac
     const snapshot = await loadPrivateWorkspaceProjection("owner", "workspace", f.verified, root, transport);
     const policies = await privateWorkspacePolicyStore("owner", "workspace", host.storage, host.exclusive, { activationRoot: root, directoryDigest: f.verified.digest });
     await expect(policies.read()).rejects.toThrow("Trusted workspace policy is missing");
-    const signedPolicy = await signPrivateWorkspaceDevicePolicy("owner", snapshot, f.verified);
+    const signedPolicy = await signPrivateWorkspaceDevicePolicy("owner", snapshot, f.verified, "UTC");
     const pin = await policies.accept(signedPolicy);
     expect(requirePrivateWorkspacePolicy(pin, snapshot.scope, "encrypted").activationRoot).toBe(root);
     expect(() => requirePrivateWorkspacePolicy(pin, snapshot.scope, "standard")).toThrow("Plaintext access is refused");

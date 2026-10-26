@@ -17,7 +17,7 @@ async function fixture() {
   const current = () => state.open;
   const signedRoot = await signPrivateInitialProjectionRoot({ directory, secrets, userId: scope.userId, migrationId: crypto.randomUUID(), sharedRecords: [], ownerPersonalRecords: [], personalDigests: new Map([[scope.userId, await privateRecordDigest([])]]), current });
   const snapshot = await verifyPrivateInitialProjection({ signed: signedRoot, sharedRecords: [], personalRecords: [], scope, directory, secrets, current });
-  const signed = await signPrivateWorkspacePolicy({ snapshot, directory, secrets, current });
+  const signed = await signPrivateWorkspacePolicy({ reportRangeTimeZone: "UTC", snapshot, directory, secrets, current });
   const backing = memoryStorage(), writes = new Map<string, string>();
   const storage = { ...backing, setItem: async (name: string, value: string) => { writes.set(name, value); await backing.setItem(name, value); } };
   const options = { storage, scope, signingPublicKey: signing.publicKey, expected: { activationRoot: snapshot.root, directoryDigest: directory.digest }, exclusive: <T>(task: () => Promise<T>) => task(), resolveStorageKey: () => state.open ? { key, current } : null, capture: () => () => { if (!state.open) throw new PrivateStorageLockedError(); } };
@@ -67,8 +67,25 @@ it("keeps the first valid activation pin and refuses stale, locked, corrupt or m
 });
 it("requires a current fully verified snapshot and matching account keys before signing a policy", async () => {
   const f = await fixture();
-  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: JSON.parse(JSON.stringify(f.snapshot)), directory: f.directory, secrets: f.secrets, current: () => true }), /current verified/);
-  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: f.snapshot, directory: f.directory, secrets: { ...f.secrets, signingPrivateKey: (await createSigningPair()).privateKey }, current: () => true }), /do not match/);
+  await assert.rejects(signPrivateWorkspacePolicy({ reportRangeTimeZone: "UTC", snapshot: JSON.parse(JSON.stringify(f.snapshot)), directory: f.directory, secrets: f.secrets, current: () => true }), /current verified/);
+  await assert.rejects(signPrivateWorkspacePolicy({ reportRangeTimeZone: "UTC", snapshot: f.snapshot, directory: f.directory, secrets: { ...f.secrets, signingPrivateKey: (await createSigningPair()).privateKey }, current: () => true }), /do not match/);
   f.state.open = false;
-  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: f.snapshot, directory: f.directory, secrets: f.secrets, current: () => true }), /current verified/);
+  await assert.rejects(signPrivateWorkspacePolicy({ reportRangeTimeZone: "UTC", snapshot: f.snapshot, directory: f.directory, secrets: f.secrets, current: () => true }), /current verified/);
+});
+it("pins the explicit conversion-time report calendar and refuses replacement or unverified/missing calendar metadata", async () => {
+  const f = await fixture(), store = await createPrivateWorkspacePolicyStore(f.options), pin = await store.accept(f.signed);
+  assert.equal(pin.signed.policy.reportRangeTimeZone, "UTC");
+  const { privateReportRangeForPolicy } = await import("../privacy/mode-policy.js");
+  assert.equal(privateReportRangeForPolicy(pin, scope, { from: "2026-10-26", to: "2026-10-26" }).from.toISOString(), "2026-10-26T00:00:00.000Z");
+  const next = structuredClone(f.signed); next.policy.reportRangeTimeZone = "Australia/Sydney"; next.signature = await signPrivateChange(f.signing.privateKey, next.policy);
+  await assert.rejects(store.accept(next), /Report calendar differs/); assert.equal((await store.read()).signed.policy.reportRangeTimeZone, "UTC");
+  const forged = structuredClone(f.signed); forged.policy.reportRangeTimeZone = "Australia/Sydney"; await assert.rejects(store.accept(forged), /signature/);
+  await assert.rejects(signPrivateWorkspacePolicy({ snapshot: f.snapshot, directory: f.directory, secrets: f.secrets, current: () => true, reportRangeTimeZone: "not/a-zone" }));
+});
+it("keeps legacy policy/recovery readable without inventing a report timezone", async () => {
+  const f = await fixture(), legacy = structuredClone(f.signed); delete legacy.policy.reportRangeTimeZone; legacy.signature = await signPrivateChange(f.signing.privateKey, legacy.policy);
+  const store = await createPrivateWorkspacePolicyStore(f.options), pin = await store.accept(legacy), { privateReportRangeForPolicy } = await import("../privacy/mode-policy.js");
+  assert.throws(() => privateReportRangeForPolicy(pin, scope, { from: "2026-10-26", to: "2026-10-26" }), /conversion-time/);
+  assert.equal(privateReportRangeForPolicy(pin, scope, { from: "2026-10-26T00:00:00.000Z", to: "2026-10-27T00:00:00.000Z" }).toMs - Date.parse("2026-10-26T00:00:00.000Z"), 86400000);
+  f.state.open = false; assert.throws(() => privateReportRangeForPolicy(pin, scope, { from: "2026-10-26T00:00:00.000Z", to: "2026-10-27T00:00:00.000Z" }), /current verified/);
 });

@@ -40,10 +40,10 @@ export async function privateWorkspacePolicyStore(userId: string, workspaceId: s
     resolveStorageKey: () => privateStorageAccess(userId, server), capture: () => { check(); return check; },
   }); check(); return store;
 }
-export function signPrivateWorkspaceDevicePolicy(userId: string, snapshot: VerifiedPrivateProjectionSnapshot, directory: VerifiedPrivateDirectory) {
+export function signPrivateWorkspaceDevicePolicy(userId: string, snapshot: VerifiedPrivateProjectionSnapshot, directory: VerifiedPrivateDirectory, reportRangeTimeZone: string) {
   const root = privateSession(userId), check = privateOperationScope(userId), server = privateDataOrigin();
   if (!root || snapshot.scope.userId !== userId || snapshot.scope.server !== server) throw new Error("Use this account's current private snapshot");
-  return signPrivateWorkspacePolicy({ snapshot, directory, secrets: root, current: () => {
+  return signPrivateWorkspacePolicy({ reportRangeTimeZone, snapshot, directory, secrets: root, current: () => {
     try { check(); return privateSession(userId) === root && privateDataOrigin() === server; } catch { return false; }
   } });
 }

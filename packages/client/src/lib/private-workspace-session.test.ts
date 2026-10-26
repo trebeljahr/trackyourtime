@@ -31,7 +31,7 @@ async function fixture(standard = false) {
   const personal = [await encryptPrivateRecord(scope.workspaceId, { kind: "favorites", id: "favorite", authorId: "owner", value: { description: "Confidential personal pin" } }, [person], 1)];
   const signed = await signPrivateInitialProjectionRoot({ directory, secrets: root.secrets, userId: "owner", migrationId: crypto.randomUUID(), sharedRecords: shared, ownerPersonalRecords: personal, personalDigests: new Map([["owner", await privateRecordDigest(personal)]]), current: () => true });
   const snapshot = await verifyPrivateInitialProjection({ signed, scope, directory, secrets: root.secrets, sharedRecords: privateInitialSnapshotProjection(shared, "owner"), personalRecords: privateInitialSnapshotProjection(personal, "owner"), current: () => true });
-  const signedPolicy = await signPrivateWorkspaceDevicePolicy("owner", snapshot, directory), host = await privateAccountInventoryStorageHost("owner");
+  const signedPolicy = await signPrivateWorkspaceDevicePolicy("owner", snapshot, directory, "UTC"), host = await privateAccountInventoryStorageHost("owner");
   try {
     const inventory = await privateAccountWorkspaceInventorySync("owner", host.storage, host.exclusive);
     await inventory.enroll(await signPrivateAccountWorkspaceInventory("owner", standard ? [{ workspaceId: "workspace", mode: "standard" }] : [{ workspaceId: "workspace", mode: "encrypted", signedPolicy }], null));

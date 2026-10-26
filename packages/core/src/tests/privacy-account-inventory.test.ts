@@ -17,7 +17,7 @@ async function fixture() {
   const secrets = { privateKey: encryption.privateKey, signingPrivateKey: signing.privateKey };
   const root = await signPrivateInitialProjectionRoot({ directory, secrets, userId: scope.userId, migrationId: crypto.randomUUID(), sharedRecords: [], ownerPersonalRecords: [], personalDigests: new Map([[scope.userId, await privateRecordDigest([])]]), current });
   const snapshot = await verifyPrivateInitialProjection({ signed: root, sharedRecords: [], personalRecords: [], scope: { ...scope, workspaceId: "private" }, directory, secrets, current });
-  const signedPolicy = await signPrivateWorkspacePolicy({ snapshot, directory, secrets, current });
+  const signedPolicy = await signPrivateWorkspacePolicy({ reportRangeTimeZone: "UTC", snapshot, directory, secrets, current });
   const workspaces: PrivateAccountWorkspace[] = [{ workspaceId: "standard", mode: "standard" }, { workspaceId: "private", mode: "encrypted", signedPolicy }];
   const writes = new Map<string, string>(), backing = memoryStorage();
   const storage = { ...backing, setItem: async (name: string, value: string) => { writes.set(name, value); await backing.setItem(name, value); } };
