@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it, mock } from "node:test";
-import { createKeyPair, createSigningPair, createPrivateAccountInventoryStore, encryptPrivateInventoryVersion, encodeSecret, memoryStorage, openPrivateInventoryVersion, randomSecret, seal, signPrivateAccountInventory, signPrivateChange, type PrivateAccountWorkspace, type VerifiedPrivateAccountInventory } from "@starter/core";
+import { createKeyPair, createSigningPair, createPrivateAccountInventoryStore, createPrivateAccountInventorySync, PrivateInventoryConflictError, encryptPrivateInventoryVersion, encodeSecret, memoryStorage, openPrivateInventoryVersion, randomSecret, seal, signPrivateAccountInventory, signPrivateChange, type PrivateAccountWorkspace, type VerifiedPrivateAccountInventory } from "@starter/core";
 import { PrivateAccount } from "../models/PrivateData.js";
 import { PrivateAccountErasureFence } from "../models/PrivateAccountErasureFence.js";
 import { PrivateInventoryVersion } from "../models/PrivateInventoryVersion.js";
@@ -128,5 +128,38 @@ describe("blind account inventory persistence", { skip: skipWithoutDatabase }, (
     assert.equal(await mongooseRowStore.deleteMany("privateInventoryVersions", { userId: "owner" }), 1);
     await assert.rejects(commitPrivateInventoryVersion(scope, first.signed), /Account erasure has started/);
     assert.equal(await PrivateInventoryVersion.countDocuments(), 0);
+  });
+  it("recovers a durable device outbox after a lost database reply and quarantines a concurrent peer", async () => {
+    const f = await fixture(), storage = memoryStorage();
+    let locked = false;
+    const options = { ...scope, storage, exclusive: <T>(work: () => Promise<T>) => work(), capture: () => () => { if (locked) throw new Error("Locked device"); },
+      resolveStorageKey: () => locked ? null : { key: f.master, current: () => !locked },
+      resolveIdentity: () => locked ? null : { master: f.master, signingPrivateKey: f.signing.privateKey, signingPublicKey: f.signing.publicKey, current: () => !locked },
+    };
+    const transport = { commit: (signed: Parameters<typeof commitPrivateInventoryVersion>[1]) => commitPrivateInventoryVersion(scope, signed), versions: ({ after, through }: { after: number; through?: number }) => privateInventoryVersions(scope, after, through) };
+    const device = await createPrivateAccountInventorySync(options);
+    await device.enroll(await signPrivateAccountInventory({ ...scope, workspaces: [{ workspaceId: "private-workspace-id", mode: "standard" }], previous: null, signingPrivateKey: f.signing.privateKey, current: () => !locked }));
+    const original = await device.exportPending();
+    await assert.rejects(device.flushOne({ ...transport, commit: async (signed) => { await transport.commit(signed); throw new Error("Lost reply after database commit"); } }), /Lost reply/);
+    assert.deepEqual(await device.exportPending(), original);
+    assert.equal(await PrivateInventoryVersion.countDocuments(), 1);
+    locked = true; await assert.rejects(device.read(), /Locked device/); locked = false;
+    const reopened = await createPrivateAccountInventorySync(options); await reopened.flushOne(transport);
+    assert.equal((await reopened.status()).pending, 0); assert.equal(await PrivateInventoryVersion.countDocuments(), 1);
+    const local = await reopened.read(), first = (await privateInventoryVersions(scope, 0)).versions[0]!;
+    const peer = await createPrivateAccountInventorySync({ ...options, storage: memoryStorage() });
+    await peer.restore(first, { inventory: local.inventory.checkpoint, transport: local.checkpoint });
+    await reopened.update([{ workspaceId: "local-pending", mode: "standard" }]);
+    const pending = (await reopened.exportPending()).pending;
+    await peer.update([{ workspaceId: "remote-pending", mode: "standard" }]); await peer.flushOne(transport);
+    await assert.rejects(reopened.flushOne(transport), { code: "CONFLICT" });
+    assert.deepEqual((await reopened.exportPending()).pending, pending);
+    await assert.rejects(reopened.pull(transport), PrivateInventoryConflictError);
+    const restored = await createPrivateAccountInventorySync(options);
+    assert.equal((await restored.status()).conflict, true);
+    assert.deepEqual((await restored.exportPending()).pending, pending);
+    assert.deepEqual((await restored.exportPending()).conflict, (await privateInventoryVersions(scope, 1)).versions[0]);
+    assert.equal(await PrivateInventoryVersion.countDocuments(), 2);
+    assert.doesNotMatch(JSON.stringify(await PrivateInventoryVersion.find().lean()), /private-workspace-id|local-pending|remote-pending/);
   });
 });

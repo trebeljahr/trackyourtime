@@ -1,6 +1,6 @@
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import { createPrivateAccountInventoryStore, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, PRIVATE_ACCOUNT_INVENTORY_SCOPE, privateReplicaIdentityFromDirectory, signPrivateAccountInventory, signPrivateWorkspacePolicy, type KeyValueStorage, type PrivateAccountWorkspace, type PrivateDirectoryTrust, type PrivateProjectionTransport, type PrivateWorkspacePolicyCheckpoint, type QueueExclusive, type VerifiedPrivateAccountInventory, type VerifiedPrivateDirectory, type VerifiedPrivateProjectionSnapshot } from "@starter/core";
-import { privateDataOrigin, privateOperationScope, privateSession, subscribePrivateSession } from "./private-session";
+import { privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion, subscribePrivateSession } from "./private-session";
 function privateStorageAccess(userId: string, server: string) {
   const root = privateSession(userId);
   if (!root || privateDataOrigin() !== server) return null;
@@ -22,10 +22,10 @@ export async function privateAccountWorkspaceInventoryStore(userId: string, stor
 /** An explicit local enrollment/update, never an automatic response to absent
  * server/local state. A new device normally restores a trusted checkpoint. */
 export function signPrivateAccountWorkspaceInventory(userId: string, workspaces: readonly PrivateAccountWorkspace[], previous: VerifiedPrivateAccountInventory | null) {
-  const root = privateSession(userId), check = privateOperationScope(userId), server = privateDataOrigin();
+  const root = privateSession(userId), check = privateOperationScope(userId), server = privateDataOrigin(), version = privateSessionVersion();
   if (!root) throw new Error("Unlock private data before signing account workspace inventory");
   return signPrivateAccountInventory({ server, userId, workspaces, previous, signingPrivateKey: root.signingPrivateKey, current: () => {
-    try { check(); return privateSession(userId) === root && privateDataOrigin() === server; } catch { return false; }
+    try { check(); return privateSessionVersion() === version && !!privateSession(userId) && privateDataOrigin() === server; } catch { return false; }
   } });
 }
 /** A trusted activation/device/recovery checkpoint is required. This adapter
@@ -85,17 +85,17 @@ export function loadPrivateWorkspaceProjection(userId: string, workspaceId: stri
 export function privateWorkspaceStorageHost(userId: string, workspaceId: string) { return privateStorageHost(userId, workspaceId); }
 export function privateAccountInventoryStorageHost(userId: string) { return privateStorageHost(userId, PRIVATE_ACCOUNT_INVENTORY_SCOPE); }
 async function privateStorageHost(userId: string, workspaceId: string) {
-  const root = privateSession(userId);
-  if (!root) throw new Error("Unlock private data before opening workspace storage");
+  if (!privateSession(userId)) throw new Error("Unlock private data before opening workspace storage");
+  const version = privateSessionVersion();
   const server = privateDataOrigin(), check = privateOperationScope(userId);
   const host = await openPrivateIndexedStorage({ server, userId });
   let unsubscribe = () => {};
   const close = () => { unsubscribe(); host.close(); };
   try {
-    check(); if (privateSession(userId) !== root) throw new Error("Private data changed during this operation");
+    check(); if (privateSessionVersion() !== version) throw new Error("Private data changed during this operation");
     const exclusive = host.exclusive(workspaceId);
     unsubscribe = subscribePrivateSession(() => {
-      try { check(); if (privateSession(userId) !== root) close(); } catch { close(); }
+      try { check(); if (privateSessionVersion() !== version) close(); } catch { close(); }
     });
     return { storage: host.storage, exclusive, close };
   } catch (error) { close(); throw error; }

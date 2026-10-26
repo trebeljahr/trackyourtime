@@ -17,6 +17,7 @@ const inventorySchema = z.object({
   revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), previousDigest: digest.nullable(), workspaces: z.array(workspace).max(1000),
 }).strict();
 const signedSchema = z.object({ inventory: inventorySchema, signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) }).strict();
+export const signedPrivateAccountInventorySchema = signedSchema;
 export type PrivateAccountWorkspace = z.infer<typeof workspace>;
 export type SignedPrivateAccountInventory = z.infer<typeof signedSchema>;
 export type PrivateAccountInventoryCheckpoint = { revision: number; digest: string };
@@ -124,4 +125,25 @@ export function accountWorkspacePolicy(value: VerifiedPrivateAccountInventory, s
  * restore path, never directly into a standard/private adapter decision. */
 export async function checkSignedPrivateAccountInventory(input: unknown, scope: Scope, signingPublicKey: PublicKey, current: () => boolean): Promise<SignedPrivateAccountInventory> {
   return (await verify(input, scope, signingPublicKey, current)).signed;
+}
+/** Pure anchored checks used by durable sync. A signature alone never creates
+ * enrollment trust; checkpoints must come from authenticated local state or an
+ * independently trusted device/recovery source. */
+export async function verifyPrivateAccountInventoryCheckpoint(input: unknown, scope: Scope, signingPublicKey: PublicKey, expected: PrivateAccountInventoryCheckpoint, current: () => boolean): Promise<VerifiedPrivateAccountInventory> {
+  const anchor = z.object({ revision: z.number().int().positive(), digest }).strict().parse(expected);
+  const value = await verify(input, scope, signingPublicKey, current);
+  if (value.checkpoint.revision !== anchor.revision || value.checkpoint.digest !== anchor.digest) throw new Error("Account workspace inventory differs from the trusted recovery checkpoint");
+  return value;
+}
+export async function verifyPrivateAccountInventoryUpdate(input: unknown, previous: VerifiedPrivateAccountInventory, scope: Scope, signingPublicKey: PublicKey, current: () => boolean): Promise<VerifiedPrivateAccountInventory> {
+  assertPrivateAccountInventory(previous, scope);
+  const value = await verify(input, scope, signingPublicKey, current);
+  assertPrivateAccountInventory(previous, scope); transition(previous, value.signed.inventory); return value;
+}
+export async function verifyPrivateAccountInventoryEnrollment(input: SignedPrivateAccountInventory, scope: Scope, signingPublicKey: PublicKey, current: () => boolean): Promise<VerifiedPrivateAccountInventory> {
+  const local = locallySigned.get(input);
+  if (!local?.()) throw new PrivateAccountInventoryMissingError();
+  const value = await verify(input, scope, signingPublicKey, current);
+  if (!local() || value.checkpoint.revision !== 1) throw new PrivateAccountInventoryMissingError();
+  return value;
 }

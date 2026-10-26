@@ -1007,9 +1007,43 @@ the retained erasure fence blocks delayed re-creation. There is no silent histor
 truncation or quota fallback.
 
 This is account metadata transport, not device readiness, initial enrollment UI,
-trusted recovery transfer, a durable client outbox or private content routing.
+trusted recovery transfer or private content routing.
 Old/offline-client retirement, actual private CRUD/timers/reports, full backup
 and rollback, storage retirement and the conversion controller remain required.
+
+## Durable account inventory sync
+
+The core sync engine atomically publishes one encrypted, segmented state holding
+the local profile, confirmed ciphertext checkpoint and exact pending envelopes.
+It saves and reopens the complete state before any send. Up to eight pending
+versions are retained without truncation. Failed staging leaves the prior active
+generation readable. Hosts must hold the account-wide lock for each operation.
+Intent and unlock scope are captured before waiting for that lock.
+
+A matching commit response alone cannot remove pending work. The client fetches
+and authenticates the consecutive ciphertext feed through that exact revision,
+decrypts and verifies the inner profile transition, then atomically publishes the
+confirmed checkpoint with the remaining queue. Lost responses reuse the original
+operation ID, nonce, ciphertext and signature after restart. Four-version pages
+pin a high-water boundary. A competing signed revision or invalid inner transition
+is saved as a conflict alongside remaining pending ciphertext. Reads, writes and
+flushes then refuse until explicit review; encrypted export remains available.
+There is no automatic conflict discard or resolution.
+
+First enrollment requires a current locally signed revision-one profile. A new
+device restores only against independently trusted exact profile and ciphertext
+checkpoints. Missing or stale server data cannot enroll a device or select standard
+storage. Existing local-only profile files refuse automatic import or replacement;
+there is no two-file profile/outbox update path.
+
+The client adapter uses strict IndexedDB and the account-wide Web Lock. Locking
+closes its host without deleting pending work. Persistent verified-value checks
+retain a session epoch rather than private account keys. Its dedicated transport
+uses fixed-origin, non-batched POSTs, ordinary authenticated cookies or native
+bearer credentials, no-store caching and redirect refusal. It checks scope and
+confirmed API 31 support again after native readiness at actual dispatch; an
+unknown/older server cannot trigger optimistic or plaintext fallback. This
+infrastructure is not mounted in active content routing or a conversion UI.
 
 ## Remaining rollout dependencies
 
