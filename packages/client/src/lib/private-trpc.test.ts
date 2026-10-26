@@ -94,3 +94,12 @@ it("reads private entry lists, details and suggestions locally while refusing th
   expect(await api.query("entries.descriptions", { search: "[draft]" })).toMatchObject([{ description: "Private task [draft]" }]);
   await expect(api.query("entries.current", {})).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
+
+it("reads only the current person's private favorites through the real client without standard transport", async () => {
+ const f = await privateRecoveryFixture(), stamp = new Date().toISOString();
+ f.archive.replica.pending[1]!.records.push({ kind: "favorites", id: "new-pin", authorId: "owner", value: { _id: "new-pin", workspaceId: "workspace", userId: "owner", description: "Private pinned work", projectId: null, taskId: null, billable: false, order: 0, createdAt: stamp, updatedAt: stamp } });
+ await seedPrivateWorkspaceClient(f); const fetcher = vi.fn(() => { throw new Error("Private pins must stay local"); }); vi.stubGlobal("fetch", fetcher);
+ expect(await client().query("favorites.list", {})).toMatchObject([{ id: "new-pin", description: "Private pinned work", projectName: null }]);
+ await expect(client().mutation("favorites.create", { description: "Do not send" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+ session.lockPrivateData(); await expect(client().query("favorites.list", {})).rejects.toThrow("Unlock"); expect(fetcher).not.toHaveBeenCalled();
+});

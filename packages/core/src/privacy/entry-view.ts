@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { canSeeEntry, canSeeMoneyFor, entryAmount, entryDescriptionsSchema, entryListSchema, entrySourceSchema, idInputSchema, projectDetailedEntry, recentEntriesSchema, type DetailedEntry, type TimeEntry } from "@starter/shared";
-import { collapseDescriptions, collapseRecents, type CatalogLookup } from "../quick-start-view.js";
-import { privateViewSource, type PrivateViewOptions } from "./view-source.js";
+import { collapseDescriptions, collapseRecents } from "../quick-start-view.js";
+import { privateViewSource, privateQuickStartCatalog, type PrivateViewOptions } from "./view-source.js";
 const id = z.string().min(1).max(100), nullableId = id.nullish().transform((value) => value ?? null);
 const instant = z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString());
 const quickSchema = z.object({ _id: id, workspaceId: id, authorId: id, description: z.string().max(500).default(""), clientId: id.nullable().optional(), projectId: nullableId, taskId: nullableId, billable: z.boolean(), start: instant, end: instant.nullable(), tagIds: z.array(id).default([]) });
@@ -24,10 +24,7 @@ export function privateEntryQuery(options: PrivateViewOptions & { path: PrivateE
     if (doc.authorId !== record.authorId || !canSeeEntry(visibility, doc.authorId)) throw new Error("Private entries include ungranted time");
     return { record, doc: { id: _id, ...doc } };
   });
-  const quickCatalog = (): CatalogLookup => {
-    const label = z.object({ name: z.string().max(200) }), project = label.extend({ clientId: nullableId, color: z.string().regex(/^#[a-fA-F0-9]{6}$/), archived: z.boolean() });
-    return { projects: new Map(ofKind("projects").map((row) => [row.id, project.parse(value(row))])), tasks: new Map(ofKind("tasks").map((row) => [row.id, label.parse(value(row))])), clients: new Map(ofKind("clients").map((row) => [row.id, label.parse(value(row)).name])) };
-  };
+  const quickCatalog = () => privateQuickStartCatalog(source);
   const detailed = (row: typeof quick[number]): TimeEntry => {
     const { _id, ...doc } = entrySchema.parse(value(row.record));
     const hourlyRate = canSeeMoneyFor(visibility, doc.authorId) ? rateSchema.parse(paired(row.record, "entryMoney").hourlyRate) : null;

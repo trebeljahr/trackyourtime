@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery } from "@starter/core";
+import { accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery } from "@starter/core";
 import { privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateAccountId, privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion, whenPrivateAccountReady } from "./private-session";
@@ -70,7 +70,7 @@ export async function assertStandardWorkspaceContent(userId: string, workspaceId
 export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, path: string, input: unknown, type: string) {
   route.check();
   if (route.mode !== "encrypted" || !route.scope.workspaceId) throw new PrivateContentUnavailableError();
-  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path))) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
+  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
   let session: Awaited<ReturnType<typeof openPrivateWorkspaceSession>> | null = null;
   try {
     session = await openPrivateWorkspaceSession(route.scope.userId, route.scope.workspaceId);
@@ -79,6 +79,7 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     route.check(); const view = await session.read(); route.check();
     const opened = session;
     const options = { input, scope: opened.scope, directory: opened.directory, records: view.records, current: () => { try { route.check(); return opened.current(); } catch { return false; } } };
+    if (path === "favorites.list") return privateFavoriteQuery(options);
     if (isPrivateEntryQuery(path)) return privateEntryQuery({ ...options, path });
     if (isPrivateCatalogQuery(path)) return privateCatalogQuery({ ...options, path });
     throw new PrivateContentUnavailableError();

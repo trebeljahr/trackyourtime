@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CatalogLookup } from "../quick-start-view.js";
 import type { Visibility } from "@starter/shared";
 import { assertVerifiedPrivateDirectory, type VerifiedPrivateDirectory } from "./directory.js";
 import { privateValue, type PlainPrivateRecord } from "./records.js";
@@ -28,5 +29,13 @@ export function privateViewSource({ scope, directory, records: input, current }:
     if (!peer || peer.authorId !== row.authorId) throw new Error("Private view is missing a matching financial record");
     return value(peer);
   };
-  return { check, visibility, value, ofKind, paired };
+  return { check, actor, visibility, value, ofKind, paired };
+}
+
+/** Labels require only shared catalog facts, never financial counterparts. */
+export function privateQuickStartCatalog(source: ReturnType<typeof privateViewSource>): CatalogLookup {
+  const { ofKind, value } = source, id = z.string().min(1).max(100);
+  const label = z.object({ name: z.string().max(200) });
+  const project = label.extend({ clientId: id.nullish().transform((value) => value ?? null), color: z.string().regex(/^#[a-fA-F0-9]{6}$/), archived: z.boolean() });
+  return { projects: new Map(ofKind("projects").map((row) => [row.id, project.parse(value(row))])), tasks: new Map(ofKind("tasks").map((row) => [row.id, label.parse(value(row))])), clients: new Map(ofKind("clients").map((row) => [row.id, label.parse(value(row)).name])) };
 }
