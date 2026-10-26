@@ -866,7 +866,7 @@ export const buildSummary = async (
     timeline: [...timeline.values()],
     moneyVisible: true,
   };
-  return moneyVisible ? result : withholdSummaryMoney(result);
+  return moneyVisible ? result : withholdSummaryMoney({ ...result, currency: settings.currency });
 };
 
 const encodeCursor = (start: Date, id: string): string =>
@@ -993,7 +993,7 @@ export const buildDetailed = async (
       totalSec,
       totalAmount: scalar.amount,
       totalAmounts,
-      currency: scalar.currency,
+      currency: reportMoneyVisible(scope.visibility) ? scalar.currency : settings.currency,
       moneyVisible: true,
     },
     scope.visibility,

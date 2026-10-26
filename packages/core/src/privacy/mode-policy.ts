@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicEncryptionKeySchema, isValidTimeZone, reportRangeInTimeZone } from "@starter/shared";
+import { publicEncryptionKeySchema, isValidTimeZone, reportRangeInTimeZone, reportRangeBoundInTimeZone } from "@starter/shared";
 import { canonicalJson, decodeSecret, fingerprint, signPrivateChange, type PublicKey } from "./crypto.js";
 import { privateReplicaIdentityFromDirectory, type VerifiedPrivateDirectory } from "./directory.js";
 import { assertPrivateProjectionSnapshot, type VerifiedPrivateProjectionSnapshot } from "./projection-snapshot.js";
@@ -114,4 +114,14 @@ export function privateReportRangeForPolicy(policy: VerifiedPrivateWorkspacePoli
   const zone = policy.signed.policy.reportRangeTimeZone;
   if (needsZone && !zone) throw new Error("Restore the conversion-time report calendar before reading date-only reports");
   const range = reportRangeInTimeZone(input, zone ?? "UTC"); requirePrivateWorkspacePolicy(policy, scope, "encrypted"); return range;
+}
+
+/** Weekly grids interpret their starting bound without imposing a second
+ * date-only day. A skipped date can still start the following seven-day grid. */
+export function privateReportBoundForPolicy(policy: VerifiedPrivateWorkspacePolicy, scope: PrivateStorageScope, raw: string): number {
+  requirePrivateWorkspacePolicy(policy, scope, "encrypted");
+  const zone = policy.signed.policy.reportRangeTimeZone;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw) && !zone) throw new Error("Restore the conversion-time report calendar before reading date-only reports");
+  const result = reportRangeBoundInTimeZone(raw, false, zone ?? "UTC");
+  requirePrivateWorkspacePolicy(policy, scope, "encrypted"); return result;
 }

@@ -105,6 +105,17 @@ function currencies(): void {
     assert.match(pageTexts(await renderDetailedPdf(detail, meta)).join(" "), /Amounts in EUR/);
   });
 
+  it("withheld currency labels do not reveal whether hidden earnings are zero", async () => {
+    store.settings.rows[0]!.currency = "GBP";
+    const restricted = reportsRouter.createCaller(contextFor(ADMIN));
+    const before = await restricted.summary({ ...range, groupBy: "project" });
+    const totals = await restricted.totals(range);
+    for (const entry of store.entries.rows) entry.hourlyRate = 0;
+    assert.deepEqual(await restricted.summary({ ...range, groupBy: "project" }), before);
+    assert.deepEqual(await restricted.totals(range), totals);
+    assert.equal(before.currency, "GBP"); assert.equal(before.groups[0]!.currency, "");
+  });
+
   it("withheld report currency buckets cannot leak own or colleague money", async () => {
     currencies();
     const restricted = reportsRouter.createCaller(contextFor(ADMIN));

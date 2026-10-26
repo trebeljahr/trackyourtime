@@ -12,24 +12,31 @@ const paths = ["entries.list", "entries.get", "entries.recent", "entries.descrip
 export type PrivateEntryQueryPath = typeof paths[number];
 export const isPrivateEntryQuery = (path: string): path is PrivateEntryQueryPath => (paths as readonly string[]).includes(path);
 const byRecency = (a: { start: string; id: string }, b: { start: string; id: string }) => Date.parse(b.start) - Date.parse(a.start) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
-/** Scoped reads only. The account-wide current timer and writes need a
- * separate cross-workspace coordinator, so they cannot silently use this view. */
-export function privateEntryQuery(options: PrivateViewOptions & { path: PrivateEntryQueryPath; input: unknown; now?: number }) {
-  const { scope, path } = options, source = privateViewSource(options), { check, visibility, value, ofKind, paired } = source;
-  const rawInput = z.record(z.string(), z.unknown()).parse(options.input ?? {});
-  if (rawInput.workspaceId !== undefined && rawInput.workspaceId !== scope.workspaceId) throw new Error("Private entry filter belongs to another workspace");
-  const { workspaceId: _scope, ...input } = rawInput; void _scope;
+/** Decode metadata once per scoped read. Full snapshots and financial
+ * counterparts are opened only for matching rows that need them. */
+export function privateEntryReader(source: ReturnType<typeof privateViewSource>) {
+  const { ofKind, value, paired, visibility } = source;
   const quick = ofKind("entries").map((record) => {
     const { _id, ...doc } = quickSchema.parse(value(record));
     if (doc.authorId !== record.authorId || !canSeeEntry(visibility, doc.authorId)) throw new Error("Private entries include ungranted time");
     return { record, doc: { id: _id, ...doc } };
   });
-  const quickCatalog = () => privateQuickStartCatalog(source);
-  const detailed = (row: typeof quick[number]): TimeEntry => {
+  const detailed = (row: typeof quick[number], includeMoney = true): TimeEntry => {
     const { _id, ...doc } = entrySchema.parse(value(row.record));
-    const hourlyRate = canSeeMoneyFor(visibility, doc.authorId) ? rateSchema.parse(paired(row.record, "entryMoney").hourlyRate) : null;
+    const hourlyRate = includeMoney && canSeeMoneyFor(visibility, doc.authorId) ? rateSchema.parse(paired(row.record, "entryMoney").hourlyRate) : null;
     return { id: _id, ...doc, hourlyRate };
   };
+  return { quick, detailed };
+}
+/** Scoped reads only. The account-wide current timer and writes need a
+ * separate cross-workspace coordinator, so they cannot silently use this view. */
+export function privateEntryQuery(options: PrivateViewOptions & { path: PrivateEntryQueryPath; input: unknown; now?: number }) {
+  const { scope, path } = options, source = privateViewSource(options), { check, visibility } = source;
+  const rawInput = z.record(z.string(), z.unknown()).parse(options.input ?? {});
+  if (rawInput.workspaceId !== undefined && rawInput.workspaceId !== scope.workspaceId) throw new Error("Private entry filter belongs to another workspace");
+  const { workspaceId: _scope, ...input } = rawInput; void _scope;
+  const { quick, detailed } = privateEntryReader(source);
+  const quickCatalog = () => privateQuickStartCatalog(source);
   let result;
   if (path === "entries.recent" || path === "entries.descriptions") {
     const args = path === "entries.recent" ? recentEntriesSchema.strict().parse(input) : entryDescriptionsSchema.strict().parse(input);

@@ -27,17 +27,18 @@ function legacyDayStart(key: string, zone: string): number {
   if (forward[0]) return forward[0].at;
   throw new Error("Report calendar bound could not be resolved");
 }
+export function reportRangeBoundInTimeZone(raw: string, upper: boolean, rangeTimeZone: string): number {
+  if (typeof rangeTimeZone !== "string" || !rangeTimeZone || rangeTimeZone.length > 64 || !isValidTimeZone(rangeTimeZone)) throw new Error("A verified report-range timezone is required");
+  if (typeof raw !== "string" || raw.length > 100) throw new Error("Invalid report range bound");
+  if (day.safeParse(raw).success) return legacyDayStart(upper ? addDaysToKey(raw, 1) : raw, rangeTimeZone);
+  const value = instant.parse(raw); return Date.parse(value);
+}
 /** Date-only upper bounds include that day; full timestamps are exclusive.
  * The explicit range zone represents the old server clock, independently of
  * the caller timezone used for report day/week/month buckets. */
 export function reportRangeInTimeZone(input: { from: string; to: string }, rangeTimeZone: string) {
   if (typeof rangeTimeZone !== "string" || !rangeTimeZone || rangeTimeZone.length > 64 || !isValidTimeZone(rangeTimeZone)) throw new Error("A verified report-range timezone is required");
-  const bound = (raw: string, upper: boolean) => {
-    if (typeof raw !== "string" || raw.length > 100) throw new Error("Invalid report range bound");
-    if (day.safeParse(raw).success) return legacyDayStart(upper ? addDaysToKey(raw, 1) : raw, rangeTimeZone);
-    const value = instant.parse(raw); return Date.parse(value);
-  };
-  const fromMs = bound(input.from, false), toMs = bound(input.to, true);
+  const fromMs = reportRangeBoundInTimeZone(input.from, false, rangeTimeZone), toMs = reportRangeBoundInTimeZone(input.to, true, rangeTimeZone);
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) throw new Error("Report end must be after its start");
   return { from: new Date(fromMs), to: new Date(toMs), fromMs, toMs };
 }

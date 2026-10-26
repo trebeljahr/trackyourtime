@@ -83,3 +83,5 @@ export * from "./privacy/business-profile-view.js";
 export * from "./privacy/report-span.js";
 
 export * from "./report-math.js";
+
+export * from "./privacy/report-view.js";

@@ -128,3 +128,23 @@ it("calculates private all-time bounds locally without finance fields or standar
  const fetcher = vi.fn(() => { throw new Error("Private report bounds must stay local"); }); vi.stubGlobal("fetch", fetcher);
  expect(await client().query("reports.trackedSpan", { timeZone: "Europe/Berlin", memberIds: ["owner"] })).toMatchObject({ from: "2026-08-22" }); expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("runs private report pages, totals, summaries and weekly grids through the real client without HTTP or plaintext exports", async () => {
+ const f = await privateRecoveryFixture(), stamp = "2026-10-01T09:00:00.000Z", entryId = "64b7f9c2e13a4d5f6a7b8d99";
+ f.archive.replica.pending[1]!.records.push({ kind: "entries", id: entryId, authorId: "owner", value: { _id: entryId, workspaceId: "workspace", authorId: "owner", description: "Private report [draft]", projectId: null, taskId: null, billable: true, start: stamp, end: "2026-10-01T10:00:00.000Z", durationSec: 3600, currency: "EUR", source: "desktop", createdAt: stamp, updatedAt: stamp } }, { kind: "entryMoney", id: entryId, authorId: "owner", value: { _id: entryId, hourlyRate: 90 } });
+ await seedPrivateWorkspaceClient(f);
+ const fetcher = vi.fn(() => { throw new Error("Private report filters must stay local"); }); vi.stubGlobal("fetch", fetcher);
+ const api = client(), filters = { from: "2026-10-01", to: "2026-10-07", timeZone: "UTC", search: "[draft]" };
+ expect(await api.query("reports.rows", filters)).toMatchObject({ entries: [{ id: entryId, amount: 90, durationSec: 3600 }] });
+ expect(await api.query("reports.totals", filters)).toMatchObject({ totalSec: 3600, totalAmount: 90 });
+ expect(await api.query("reports.detailed", filters)).toMatchObject({ entries: [{ id: entryId }], totalAmount: 90 });
+ expect(await api.query("reports.summary", { ...filters, groupBy: "project" })).toMatchObject({ totalSec: 3600, groups: [{ label: "No project" }] });
+ expect(await api.query("reports.weekly", { ...filters, weekStart: "2026-10-01" })).toMatchObject({ totalSec: 3600, dayTotals: [3600, 0, 0, 0, 0, 0, 0] });
+ const { fetchReportExport, exportReportFile } = await import("./report-export"), legacy = vi.fn();
+ const exportInput = { ...filters, report: "detailed" as const };
+ await expect(fetchReportExport("csv", exportInput)).rejects.toThrow("Server export is refused");
+ await expect(exportReportFile("pdf", exportInput, legacy)).rejects.toThrow("Server export is refused");
+ expect(fetcher).not.toHaveBeenCalled(); expect(legacy).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+ session.lockPrivateData(); await expect(api.query("reports.summary", { ...filters, groupBy: "day" })).rejects.toThrow("Unlock private data");
+ expect(fetcher).not.toHaveBeenCalled();
+});

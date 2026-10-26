@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { reportRangeInTimeZone } from "@starter/shared";
+import { reportRangeInTimeZone, reportRangeBoundInTimeZone } from "@starter/shared";
 it("matches the existing server numeric Date constructor across timezone, DST and skipped/repeated-midnight boundaries", () => {
  const previous = process.env.TZ;
  try {
@@ -18,4 +18,14 @@ it("keeps explicit timestamp bounds independent of device/calendar clocks and re
  const input = { from: "2026-03-28T23:00:00.000Z", to: "2026-03-29T22:00:00.000Z" };
  for (const zone of ["UTC", "Australia/Sydney", "Europe/Berlin"]) assert.equal(reportRangeInTimeZone(input, zone).toMs - reportRangeInTimeZone(input, zone).fromMs, 23 * 3600000);
  assert.throws(() => reportRangeInTimeZone(input, "not/a-zone")); assert.throws(() => reportRangeInTimeZone({ from: "invalid", to: input.to }, "UTC")); assert.throws(() => reportRangeInTimeZone({ from: input.to, to: input.from }, "UTC"));
+});
+
+it("resolves weekly start bounds even for skipped dates and midnight DST gaps", () => {
+ const previous = process.env.TZ;
+ try {
+  for (const [zone, date] of [["Pacific/Apia", "2011-12-30"], ["America/Havana", "2015-03-08"], ["America/Sao_Paulo", "2018-11-04"]]) {
+   process.env.TZ = zone; const [year, month, day] = date!.split("-").map(Number);
+   assert.equal(reportRangeBoundInTimeZone(date!, false, zone!), new Date(year!, month! - 1, day!).getTime());
+  }
+ } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
 });

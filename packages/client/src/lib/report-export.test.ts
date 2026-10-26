@@ -15,6 +15,10 @@ const state = {
   workspace: "ws-active" as string | null,
 };
 const noteClientTooOld = vi.fn();
+vi.mock("./private-content-route", () => ({
+  currentWorkspaceContentRoute: async () => ({ mode: "standard", scope: { server: state.shell === "web" ? "https://api.example" : "https://chosen.example" }, check: () => {} }),
+  PrivateContentUnavailableError: class extends Error {},
+}));
 
 vi.mock("@/lib/shell", async () =>
   (await import("@/lib/shell-mock")).mockShellModule(() => state.shell),

@@ -21,6 +21,7 @@ import { rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin";
 import { APP_VERSION } from "@/lib/app-version";
 import { getNativeToken } from "@/lib/native-session";
 import { noteClientTooOld, serverSupportsNow } from "@/lib/server-level";
+import { currentWorkspaceContentRoute, PrivateContentUnavailableError } from "./private-content-route";
 import { clientId, isTokenShell } from "@/lib/shell";
 
 export const REPORT_EXPORT_PATH = "/api/reports/export";
@@ -78,6 +79,17 @@ const readRefusal = async (
   };
 };
 
+/** REST exports bypass tRPC, so they need the same checked routing boundary.
+ * No filters or fallback request may leave a private/locked workspace. */
+async function standardReportExportScope(input: ReportExportRequest) {
+  if (isTokenShell()) await whenApiOriginReady();
+  await whenActiveWorkspaceReady();
+  const scoped = withWorkspaceId(input, getActiveWorkspaceId()) as Record<string, unknown>;
+  const route = await currentWorkspaceContentRoute(typeof scoped.workspaceId === "string" ? scoped.workspaceId : null);
+  if (route.mode !== "standard") throw new PrivateContentUnavailableError("Private report files must be generated on this device. Server export is refused.");
+  route.check(); return { route, scoped };
+}
+
 /** One streamed export, as a Blob. Throws on any refusal or transport failure. */
 export async function fetchReportExport(
   format: ReportExportFormat,
@@ -85,8 +97,7 @@ export async function fetchReportExport(
 ): Promise<ExportedFile> {
   // On the shells the server and the workspace are read from storage first,
   // exactly as the tRPC link waits for them; on web both are already known.
-  if (isTokenShell()) await whenApiOriginReady();
-  await whenActiveWorkspaceReady();
+  const { route, scoped } = await standardReportExportScope(input);
 
   const token = getNativeToken();
   const headers = new Headers({
@@ -96,18 +107,20 @@ export async function fetchReportExport(
   });
   if (token) headers.set("authorization", `Bearer ${token}`);
 
+  const target = rebaseApiUrl(`${process.env.NEXT_PUBLIC_API_URL || ""}${REPORT_EXPORT_PATH}`);
+  if (new URL(target, route.scope.server).origin !== route.scope.server) throw new PrivateContentUnavailableError("Report server changed before export");
+  route.check();
   const response = await fetch(
-    rebaseApiUrl(`${process.env.NEXT_PUBLIC_API_URL || ""}${REPORT_EXPORT_PATH}`),
+    target,
     {
       method: "POST",
       headers,
       credentials: token ? "omit" : "include",
-      body: JSON.stringify(
-        withWorkspaceId({ ...input, format }, getActiveWorkspaceId()),
-      ),
+      body: JSON.stringify({ ...scoped, format }),
     },
   );
 
+  route.check();
   if (!response.ok) {
     const refusal = await readRefusal(response);
     // An older server answers its generic 404 for a route it does not have —
@@ -126,6 +139,7 @@ export async function fetchReportExport(
   // never saved as if it were complete.
   const blob = await response.blob();
   const named = FILENAME.exec(response.headers.get("content-disposition") ?? "");
+  route.check();
   return { filename: named?.[1] ?? fallbackFilename(input, format), blob };
 }
 
@@ -138,12 +152,13 @@ export async function exportReportFile(
   input: ReportExportRequest,
   legacy: () => Promise<ExportedFile>,
 ): Promise<ExportedFile> {
-  if (!serverSupportsNow("reports.exportStream")) return legacy();
+  const { route } = await standardReportExportScope(input);
+  if (!serverSupportsNow("reports.exportStream")) { route.check(); return legacy(); }
   try {
     return await fetchReportExport(format, input);
   } catch (error) {
     // The level was unknown and the server turned out to be older.
-    if (error instanceof ReportExportUnavailableError) return legacy();
+    if (error instanceof ReportExportUnavailableError) { route.check(); return legacy(); }
     throw error;
   }
 }

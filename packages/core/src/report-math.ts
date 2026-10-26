@@ -5,7 +5,7 @@ export type ReportRange = { fromMs: number; toMs: number };
 export type ReportCalendar = { timeZone: string; weekStartsOn: WeekStart };
 export type ReportMeasureSource = { start: Date; end: Date | null; durationSec: number; billable: boolean; hourlyRate: number | null; currency: string };
 type CatalogDoc = { _id?: unknown; workspaceId: string; name: string };
-export type ReportGroupingSource = { authorId: string; project?: (CatalogDoc & { color: string }) | null; client?: (CatalogDoc & { color: string }) | null; task?: CatalogDoc | null };
+export type ReportGroupingSource = { authorId: string; project?: (CatalogDoc & { color: string }) | null; client?: (CatalogDoc & { color: string | null }) | null; task?: CatalogDoc | null };
 const inWorkspace = <T extends { workspaceId: string }>(doc: T | null | undefined, workspaceId: string): T | null => doc && doc.workspaceId === workspaceId ? doc : null;
 const DAYS_PER_WEEK = 7;
 const MONTH_NAMES = [
@@ -371,7 +371,7 @@ export const withholdSummaryMoney = (
   ...result,
   totalAmount: null,
   totalAmounts: null,
-  groups: result.groups.map((group) => ({ ...group, amount: null, amounts: null })),
+  groups: result.groups.map((group) => ({ ...group, amount: null, amounts: null, currency: "" })),
   moneyVisible: false,
 });
 
