@@ -69,6 +69,9 @@ export const settings: Translation<typeof source> = {
     failed: "Der lokale Verlauf konnte nicht verschlüsselt oder entsperrt werden. Prüfe deine Schlüssel. Vorhandene Daten wurden beibehalten.",
   },
   privateData: {
+    savedKeysFailed: "Die gespeicherten Verschlüsselungsschlüssel konnten nicht gelesen werden. Vorhandene Schlüssel bleiben erhalten. Bei Bedarf eine lokale Sicherung öffnen.",
+    savedKeysChanged: "Der Server meldet andere Verschlüsselungsschlüssel. Dieses Gerät behält seine gespeicherten Schlüssel; neue Passkeys können derzeit nicht hinzugefügt werden.",
+    savedKeysOffline: "Die gespeicherten Verschlüsselungsschlüssel dieses Geräts werden verwendet, solange der Server nicht erreichbar ist.",
     keysUnavailable: "Deine vorhandenen Verschlüsselungsschlüssel sind hier nicht verfügbar. Verbinde dich mit deinem Server oder öffne eine gespeicherte lokale Sicherung.",
     verificationTitle: "Dein Schlüssel-Prüfcode",
     verificationHint: "Vergleiche diesen Code über einen vertrauenswürdigen Anruf oder eine Nachricht mit dem Workspace-Eigentümer, bevor ihr verschlüsselte Daten teilt. Diesen Code kannst du weitergeben. Halte deinen Wiederherstellungsschlüssel geheim.",

@@ -1,4 +1,6 @@
 "use client";
+import { cachedPrivateIdentity, rememberPrivateIdentity, samePrivateIdentityKeys } from "@/lib/private-identity-cache";
+import type { PrivateIdentity } from "@starter/shared";
 import { PrivateKeyCode } from "./private-key-code";
 import { PrivateActivity } from "./private-activity";
 import { PrivateDeviceUnlock } from "./private-device-unlock";
@@ -36,7 +38,26 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
   const [problem, setProblem] = React.useState<string | null>(null);
   const [, redraw] = React.useReducer((v: number) => v + 1, 0);
   React.useEffect(() => subscribePrivateSession(redraw), []);
-  const current = privateSession(id), identity = account.data?.identity;
+  const server = privateDataOrigin();
+  const [local, setLocal] = React.useState<{ scope: string; identity: PrivateIdentity | null; failed: boolean } | null>(null);
+  const cacheScope = JSON.stringify([server, id]);
+  React.useEffect(() => {
+    let active = true;
+    void cachedPrivateIdentity(id).then((identity) => { if (active) setLocal({ scope: cacheScope, identity, failed: false }); }).catch(() => { if (active) setLocal({ scope: cacheScope, identity: null, failed: true }); });
+    return () => { active = false; };
+  }, [cacheScope, id]);
+  const cacheReady = local?.scope === cacheScope, cached = cacheReady ? local.identity : null;
+  const advertised = account.data?.identity;
+  const replaced = !!cached && !!advertised && !samePrivateIdentityKeys(cached, advertised);
+  // The durable local wrapper remains usable during an outage or a server key
+  // substitution. Never replace it from a query result. Unlock grants no new
+  // inventory/directory freshness or server membership.
+  const current = privateSession(id), identity = cached ?? (cacheReady && !local.failed ? advertised : null);
+  const cacheFailed = cacheReady && local.failed;
+  const remember = async (next: PrivateIdentity, recoveryKey?: string) => {
+    const saved = await rememberPrivateIdentity(id, next, recoveryKey);
+    setLocal({ scope: cacheScope, identity: saved, failed: false });
+  };
   const run = async (task: () => Promise<void>) => {
     setPending(true); setProblem(null);
     try { await task(); } catch { setProblem(t("privateData.failed")); } finally { setPending(false); }
@@ -46,8 +67,8 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
     <CardContent className="space-y-4">
       <p className="max-w-prose text-sm text-muted-foreground">{t("privateData.recoveryExplanation")}</p>
       {native && <p className="max-w-prose text-sm text-muted-foreground">{t(deviceUnlockSupported ? "privateData.nativeBrowserUnlock" : "privateData.nativePasskeys")}</p>}
-      {unlockOnly && !identity && !account.isLoading && <p role="status" className="text-sm">{t("privateData.keysUnavailable")}</p>}
-      {!unlockOnly && !current && !identity && !draft && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await newPrivateIdentity(id)))}>{t("privateData.prepare")}</Button>}
+      {unlockOnly && !identity && !account.isLoading && cacheReady && <p role="status" className="text-sm">{t("privateData.keysUnavailable")}</p>}
+      {!unlockOnly && !current && !identity && !draft && cacheReady && !cacheFailed && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await newPrivateIdentity(id)))}>{t("privateData.prepare")}</Button>}
       {!unlockOnly && draft && <div className="max-w-xl space-y-3">
         <p className="text-sm">{t("privateData.saveRecovery")}</p>
         <code className="block break-all rounded-md bg-muted p-3 text-sm select-all">{draft.recoveryKey}</code>
@@ -55,23 +76,23 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
         <Label htmlFor="private-confirm">{t("privateData.confirmRecovery")}</Label>
         <Input id="private-confirm" value={confirmation} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} />
         <Button disabled={pending || confirmation.trim() !== draft.recoveryKey.slice(-8)} onClick={() => void run(async () => {
-          draft.assertCurrent(); await enroll.mutateAsync({ identity: draft.identity, userId: id, server: privateDataOrigin() }); draft.assertCurrent(); installPrivateSession(id, draft.secrets); setDraft(null); setConfirmation(""); await account.refetch();
+          draft.assertCurrent(); await enroll.mutateAsync({ identity: draft.identity, userId: id, server: privateDataOrigin() }); draft.assertCurrent(); installPrivateSession(id, draft.secrets); await remember(draft.identity, draft.recoveryKey); setDraft(null); setConfirmation(""); await account.refetch();
         })}>{t("privateData.finishSetup")}</Button>
       </div>}
-      {identity && !current && <div className="max-w-xl space-y-3">
+      {identity && !current && <div className="grid max-w-xl justify-items-start gap-3">
         {native && deviceUnlockSupported && <PrivateDeviceUnlock userId={id} />}
-        {!native && <Button variant="outline" disabled={pending || identity.passkeys.length === 0} onClick={() => void run(() => unlockWithSavedPasskey(id, identity))}>{t("privateData.unlockPasskey")}</Button>}
+        {!native && <Button variant="outline" disabled={pending || identity.passkeys.length === 0} onClick={() => void run(async () => { await unlockWithSavedPasskey(id, identity); await remember(identity); })}>{t("privateData.unlockPasskey")}</Button>}
         <Label htmlFor="private-recovery">{t("privateData.recoveryKey")}</Label>
         <Input id="private-recovery" type="password" autoComplete="off" value={recovery} onChange={(event) => setRecovery(event.target.value)} />
-        <Button variant="outline" disabled={pending || recovery.trim().length !== 43} onClick={() => void run(async () => { await unlockPrivateRecovery(id, identity, recovery); setRecovery(""); })}>{t("privateData.unlockRecovery")}</Button>
+        <Button variant="outline" disabled={pending || recovery.trim().length !== 43} onClick={() => void run(async () => { await unlockPrivateRecovery(id, identity, recovery); setRecovery(""); await remember(identity, recovery); })}>{t("privateData.unlockRecovery")}</Button>
       </div>}
       {identity && current && <div className="space-y-3">
         <p role="status" className="text-sm">{t("privateData.unlocked")}</p>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={native || pending} onClick={() => void run(async () => {
+        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={native || pending || !advertised || replaced || account.isError} onClick={() => void run(async () => {
           const assertCurrent = privateOperationScope(id);
           const listed = await authClient.passkey.listUserPasskeys();
           if (listed.error) throw new Error("Could not load passkeys");
-          const available = (listed.data ?? []).filter((p) => !identity.passkeys.some((saved) => saved.credentialId === p.credentialID));
+          const available = (listed.data ?? []).filter((p) => !advertised!.passkeys.some((saved) => saved.credentialId === p.credentialID));
           let credentialId: string, secret: Uint8Array<ArrayBuffer> | null;
           if (available.length) {
             try { ({ credentialId, secret } = await evaluatePrivatePasskey(available.map((p) => p.credentialID))); }
@@ -87,17 +108,18 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
             }
           }
           try {
-            const next = { ...identity, passkeys: [...identity.passkeys, { credentialId, envelope: await wrapIdentityWithPrf(id, secret, identity) }] };
+            const next = { ...advertised!, recovery: identity.recovery, passkeys: [...advertised!.passkeys, { credentialId, envelope: await wrapIdentityWithPrf(id, secret, identity) }] };
             const revision = account.data!.revision;
             const signature = await signPrivateChange(current.signingPrivateKey, { userId: id, revision, identity: next });
             assertCurrent(); if (privateSession(id) !== current) throw new Error("Private data is locked");
-            await updateIdentity.mutateAsync({ identity: next, revision, signature }); await account.refetch();
+            await updateIdentity.mutateAsync({ identity: next, revision, signature }); await remember(next); await account.refetch();
           } finally { secret.fill(0); }
         })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockPrivateData}>{t("privateData.lock")}</Button></div>
       </div>}
       {!unlockOnly && <PrivateActivity userId={id} />}
       {!unlockOnly && identity && <PrivateKeyCode userId={id} />}
-      {(problem || account.isError) && <p role="alert" className="text-sm text-destructive">{problem ?? t("privateData.failed")}</p>}
+      {(cacheFailed || replaced || (!!cached && account.isError)) && <p role="status" className="text-sm">{t(cacheFailed ? "privateData.savedKeysFailed" : replaced ? "privateData.savedKeysChanged" : "privateData.savedKeysOffline")}</p>}
+      {(problem || (account.isError && !cached)) && <p role="alert" className="text-sm text-destructive">{problem ?? t("privateData.failed")}</p>}
     </CardContent>
   </Card>;
 }

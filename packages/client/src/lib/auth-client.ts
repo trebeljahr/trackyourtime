@@ -1,3 +1,4 @@
+import { eraseCachedPrivateIdentity } from "./private-identity-cache";
 import { eraseRecoveryBackupFolders } from "./recovery-backup-folder";
 import { erasePrivateIndexedStorage } from "./private-indexed-storage";
 import { lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
@@ -457,6 +458,7 @@ export const deleteAccount = async (args: {
   // must not report the deletion as failed.
   await Promise.allSettled([
     discardDeletedAccountQueue(args.userId),
+    eraseCachedPrivateIdentity({ server: deletedServer, userId: args.userId }).catch(() => { console.warn("[account deletion] Saved encryption key cleanup failed"); }),
     eraseRecoveryBackupFolders({ server: deletedServer, userId: args.userId }).catch((error) => { console.warn("[account deletion] Backup folder cleanup failed", error); }),
     erasePrivateIndexedStorage({ server: deletedServer, userId: args.userId }).catch((error) => { console.warn("[account deletion] Local encrypted database cleanup failed", error); }),
     writeRunningMirror(null),

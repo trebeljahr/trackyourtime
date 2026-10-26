@@ -72,6 +72,9 @@ export const settings = {
     failed: "Could not encrypt or unlock local history. Check your keys and try again. Existing history was kept.",
   },
   privateData: {
+    savedKeysFailed: "This device’s saved encryption keys could not be read. Existing keys were kept. Open a local backup if needed.",
+    savedKeysChanged: "The server reports different encryption keys. This device keeps its saved keys; adding passkeys is paused.",
+    savedKeysOffline: "Using this device’s saved encryption keys while the server is unavailable.",
     keysUnavailable: "Your existing encryption keys are unavailable here. Connect to your server, or open a saved local backup.",
     verificationTitle: "Your key verification code",
     verificationHint: "Compare this code with a workspace owner through a trusted call or message before sharing encrypted data. This code is safe to share. Keep your recovery key private.",

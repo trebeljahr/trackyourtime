@@ -17,6 +17,12 @@ export type PrivateCiphertext = z.infer<typeof cipherSchema>;
 const identityEnvelopeSchema = cipherSchema.extend({ data: cipherSchema.shape.data.max(16_384) });
 export const privateIdentitySchema = z.object({ publicKey: publicEncryptionKeySchema, signingPublicKey: publicEncryptionKeySchema, recovery: identityEnvelopeSchema, passkeys: z.array(z.object({ credentialId: z.string().min(1).max(1500), envelope: identityEnvelopeSchema }).strict()).max(20) }).strict();
 export type PrivateIdentity = z.infer<typeof privateIdentitySchema>;
+/** Device-held signed ciphertext wrappers. Contains no private JWK fields,
+ * account master, recovery secret or passkey PRF output. */
+export const privateCachedIdentitySchema = z.object({
+  statement: z.object({ protocol: z.literal("trackyourtime-device-identity-v1"), server: z.string().min(1).max(2048), userId: z.string().min(1).max(100), identity: privateIdentitySchema }).strict(),
+  signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
+}).strict();
 export const PRIVATE_DEVICE_TTL_MS = 5 * 60 * 1000;
 export const privateDeviceInviteSchema = z.object({
   v: z.literal(1), requestId: z.uuid(), server: z.string().url().max(2048), userId: z.string().min(1).max(100),
