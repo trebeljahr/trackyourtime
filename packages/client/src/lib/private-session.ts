@@ -9,6 +9,7 @@ let generation = 0;
 let resolvedAccount: string | null | undefined;
 const listeners = new Set<() => void>();
 const accountListeners = new Set<() => void>();
+export const subscribePrivateAccount = (listener: () => void) => { accountListeners.add(listener); return () => { accountListeners.delete(listener); }; };
 export const privateAccountId = (): string | null | undefined => resolvedAccount;
 export function whenPrivateAccountReady(signal?: AbortSignal): Promise<string | null> {
   if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("Account lookup canceled"));
