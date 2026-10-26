@@ -67,3 +67,9 @@ it("refuses foreign scopes, forged authors, invalid fields, unknown filters and 
  const row = f.records.find((row) => row.kind === "entries")!; row.value.authorId = "forged"; assert.throws(() => f.list(), /ungranted/); row.value.authorId = row.authorId;
  row.value.currency = "invalid"; assert.throws(() => f.list()); f.records.splice(0, f.records.length, ...structuredClone(original)); f.lock(); assert.throws(() => f.list(), /changed/); assert.deepEqual(f.records, original);
 });
+
+it("retains legacy running entries whose stored end field is absent", async () => {
+ const f = await fixture(); const raw = f.records.find((row) => row.kind === "entries" && row.id === "a")!; delete raw.value.end;
+ assert.equal(f.read("entries.get", { id: "a" }).end, null); assert.equal(f.list().entries.find((row: any) => row.id === "a").end, null);
+ assert.equal(f.read("entries.recent").some((row: any) => row.lastEntryId === "a"), false);
+});

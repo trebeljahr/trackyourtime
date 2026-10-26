@@ -10,7 +10,7 @@ const common = z.object({ _id: id, workspaceId: id, createdBy: z.string().max(10
 const clientSchema = common.extend({ invoiceLocale: z.enum(SUPPORTED_LOCALES).nullish().transform((value) => value ?? null) });
 const projectSchema = common.extend({ clientId: nullableId, billableDefault: z.boolean(), estimatedHours: money, idleBehavior: z.enum(IDLE_BEHAVIORS).nullish().transform((value) => value ?? null) });
 const projectMoneySchema = z.object({ hourlyRate: money, budgetAmount: money, budgetCurrency: z.string().regex(/^[A-Z]{3}$/).nullish().transform((value) => value ?? null) });
-const entrySchema = z.object({ _id: id, workspaceId: id, authorId: id, projectId: nullableId, taskId: nullableId, clientId: id.nullable().optional(), tagIds: z.array(id).default([]), durationSec: z.number().int().nonnegative(), start: timestamp, end: timestamp.nullable(), billable: z.boolean(), currency: z.string().regex(/^[A-Z]{3}$/) });
+const entrySchema = z.object({ _id: id, workspaceId: id, authorId: id, projectId: nullableId, taskId: nullableId, clientId: id.nullable().optional(), tagIds: z.array(id).default([]), durationSec: z.number().int().nonnegative(), start: timestamp, end: timestamp.nullish().transform((value) => value ?? null), billable: z.boolean(), currency: z.string().regex(/^[A-Z]{3}$/) });
 const supported = ["clients.list", "clients.options", "projects.list", "projects.options", "tasks.list", "tasks.options", "tasks.projectLinks", "tags.list"] as const;
 export type PrivateCatalogQueryPath = typeof supported[number];
 export const isPrivateCatalogQuery = (path: string): path is PrivateCatalogQueryPath => (supported as readonly string[]).includes(path);

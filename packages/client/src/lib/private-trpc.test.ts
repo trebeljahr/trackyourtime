@@ -122,3 +122,9 @@ it("reads the private business profile locally and keeps logo/profile writes out
  expect(await client().query("settings.businessProfile", {})).toMatchObject({ legalName: "Private studio", paymentDetails: "Private bank details", logo: null, updatedAt: null });
  await expect(client().mutation("settings.updateBusinessProfile", { legalName: "Do not send" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
+
+it("calculates private all-time bounds locally without finance fields or standard report filters leaving the device", async () => {
+ const f = await privateRecoveryFixture(); f.archive.replica.pending[1]!.records.push({ kind: "entries", id: "span-entry", authorId: "owner", value: { _id: "span-entry", workspaceId: "workspace", authorId: "owner", start: "2026-08-21T23:30:00.000Z" } }); await seedPrivateWorkspaceClient(f);
+ const fetcher = vi.fn(() => { throw new Error("Private report bounds must stay local"); }); vi.stubGlobal("fetch", fetcher);
+ expect(await client().query("reports.trackedSpan", { timeZone: "Europe/Berlin", memberIds: ["owner"] })).toMatchObject({ from: "2026-08-22" }); expect(fetcher).not.toHaveBeenCalled();
+});
