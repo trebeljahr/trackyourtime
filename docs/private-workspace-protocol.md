@@ -350,8 +350,12 @@ ciphertext copy exists. Authentication organization rows need generic routing
 name/slug placeholders and no original logo or metadata; their originals need
 an additional encrypted recovery path before this replacement is safe. The
 helper produces deterministic opaque routing placeholders without changing any
-row. Unknown top-level fields in retained routing/private storage and unknown
-workspace-scoped collections fail the check instead of being assumed harmless.
+row. It preserves an explicitly validated `personal` or `team` kind, leaving
+legacy rows without a kind unchanged. Other kind values refuse. Retained labels,
+source markers and routing fields compare complete values, so arrays containing
+an allowed sentinel cannot hide additional plaintext. Unknown top-level fields
+in retained routing/private storage and unknown workspace-scoped collections
+fail the check instead of being assumed harmless.
 
 The existing fourteen-collection recovery format does not yet cover organization
 identity, webhook configuration, token labels, account preferences, profiles or

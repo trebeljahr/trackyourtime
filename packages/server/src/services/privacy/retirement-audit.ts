@@ -5,9 +5,10 @@ import { RECOVERY_KINDS } from "@starter/shared";
 
 /** Clear routing placeholders carry no original workspace name, slug or logo.
  * Their originals must already exist in a verified encrypted recovery copy. */
-export function privateWorkspaceRoutingIdentity(workspaceId: string) {
+export function privateWorkspaceRoutingIdentity(workspaceId: string, kind?: unknown) {
   if (!workspaceId || workspaceId.length > 100) throw new Error("Invalid workspace scope");
-  return { name: "Private workspace", slug: `private-${createHash("sha256").update(workspaceId).digest("hex").slice(0, 24)}` };
+  if (kind !== undefined && kind !== "personal" && kind !== "team") throw new Error("Unknown workspace kind requires an explicit migration decision");
+  return { name: "Private workspace", slug: `private-${createHash("sha256").update(workspaceId).digest("hex").slice(0, 24)}`, ...(kind === undefined ? {} : { kind }) };
 }
 type RawRow = Document & { _id: string | ObjectId };
 export type PrivateRetirementLeak = { collection: string; reason: "original-records" | "integration-content" | "personal-labels" | "source-checksums" | "unknown-fields" | "unclassified-records"; records: number };
@@ -27,6 +28,9 @@ const privateCollections = ["privateaccounts", "privatedevicerequests", ...Objec
 const operationalCollections = ["storageusages", "storagefences", "workspacewritefences", "importbudgets", "importleases", "scheduledjobs"];
 const accountCollections = ["user", "account", "session", "verification", "member", "invitation", "deviceCode", "twoFactor", "passkey", "profiles", "avatars", "userpreferences"];
 const special = ["workspacemembers", "apitokens", "webhooksubscriptions", "webhookdeliveries", "privatemigrationreceipts", "privateworkspaces", "organization"];
+/** Query $nin/$ne use array-element matching. Retirement must compare the
+ * entire retained value, or ["", "private content"] could pass as empty. */
+const outside = (field: string, allowed: unknown[]) => ({ $expr: { $not: { $in: [{ $ifNull: [`$${field}`, null] }, allowed] } } });
 
 /** Counts only; never returns original values, secrets or plaintext hashes.
  * This is a current-database check, not proof of storage-page/oplog/log/backup
@@ -56,22 +60,23 @@ export async function auditPrivateWorkspaceRetirement(db: Db, workspaceId: strin
   };
   for (const collection of RECOVERY_KINDS) if (collection !== "workspacemembers") await count(collection, "original-records", { workspaceId });
   for (const collection of ["webhooksubscriptions", "webhookdeliveries"]) await count(collection, "integration-content", { workspaceId });
-  await count("apitokens", "personal-labels", { workspaceId, name: { $exists: true, $nin: [null, ""] } });
+  await count("apitokens", "personal-labels", { workspaceId, ...outside("name", [null, ""]) });
   await unknownFields("apitokens", { workspaceId }, ["_id", "workspaceId", "userId", "name", "prefix", "tokenHash", "scopes", "grantedVisibility", "expiresAt", "lastUsedAt", "revokedAt", "createdAt", "updatedAt", "__v"]);
-  await count("workspacemembers", "personal-labels", { workspaceId, $or: [{ name: { $exists: true, $nin: [null, ""] } }, { hourlyRate: { $exists: true, $ne: null } }] });
+  await count("workspacemembers", "personal-labels", { workspaceId, $or: [outside("name", [null, ""]), outside("hourlyRate", [null])] });
   await unknownFields("workspacemembers", { workspaceId }, ["_id", "workspaceId", "userId", "role", "name", "hourlyRate", "canViewOthersTime", "canViewOthersMoney", "createdAt", "updatedAt", "__v"]);
   await count("privatemigrationreceipts", "source-checksums", { workspaceId });
   await count("privatepreparationrequests", "source-checksums", { workspaceId });
-  await count("privateworkspaces", "source-checksums", { workspaceId, $or: [{ sourceRevision: { $ne: "retired" } }, { supplementRevision: { $exists: true, $nin: [null, "retired"] } }, { originalStage: { $exists: true, $ne: null } }, { operatorBackup: { $exists: true, $ne: null } }] });
+  await count("privateworkspaces", "source-checksums", { workspaceId, $or: [outside("sourceRevision", ["retired"]), outside("supplementRevision", [null, "retired"]), outside("originalStage", [null]), outside("operatorBackup", [null])] });
   for (const [collection, fields] of Object.entries(privateFields)) await unknownFields(collection, { workspaceId }, ["_id", "createdAt", "updatedAt", "__v", ...fields]);
   const ids: (string | ObjectId)[] = [workspaceId];
   if (ObjectId.isValid(workspaceId)) ids.push(new ObjectId(workspaceId));
   const organization = { $or: [{ _id: { $in: ids } }, { id: workspaceId }] };
   await count("organization", "personal-labels", { $and: [organization, { $or: [
-    { name: { $ne: routing.name } }, { slug: { $ne: routing.slug } },
-    { logo: { $exists: true, $nin: [null, ""] } }, { metadata: { $exists: true, $nin: [null, "", "{}"] } },
+    outside("name", [routing.name]), outside("slug", [routing.slug]),
+    outside("logo", [null, ""]), outside("metadata", [null, "", "{}"]),
+    { kind: { $exists: true }, ...outside("kind", ["personal", "team"]) },
   ] }] });
-  await unknownFields("organization", organization, ["_id", "id", "name", "slug", "logo", "metadata", "createdAt", "updatedAt", "__v"]);
+  await unknownFields("organization", organization, ["_id", "id", "name", "slug", "logo", "metadata", "kind", "createdAt", "updatedAt", "__v"]);
   const classified = new Set<string>([...RECOVERY_KINDS, ...privateCollections, ...operationalCollections, ...accountCollections, ...special]);
   for (const collection of [...names].sort()) if (!classified.has(collection) && !collection.startsWith("system.")) await count(collection, "unclassified-records", { $or: [{ workspaceId }, { organizationId: workspaceId }] });
   return { leaks: leaks.sort((a, b) => a.collection < b.collection ? -1 : a.collection > b.collection ? 1 : a.reason < b.reason ? -1 : 1) };

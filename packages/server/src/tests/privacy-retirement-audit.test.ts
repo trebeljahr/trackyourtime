@@ -30,6 +30,41 @@ describe("private workspace residual plaintext audit", { skip: skipWithoutDataba
     await db().collection("futurefeature").insertOne({ workspaceId: "other", original: "Other workspace original" });
     assert.deepEqual(await auditPrivateWorkspaceRetirement(db(), workspaceId), { leaks: [] });
   });
+  it("preserves validated personal/team routing without inventing a kind for legacy workspaces", async () => {
+    assert.equal("kind" in privateWorkspaceRoutingIdentity(workspaceId), false);
+    for (const kind of ["personal", "team"]) {
+      const routing = privateWorkspaceRoutingIdentity(workspaceId, kind);
+      assert.equal(routing.kind, kind);
+      await db().collection("organization").replaceOne({ id: workspaceId }, { id: workspaceId, ...routing, logo: null }, { upsert: true });
+      assert.deepEqual(await auditPrivateWorkspaceRetirement(db(), workspaceId), { leaks: [] });
+    }
+  });
+  it("refuses arbitrary, null and non-string workspace kinds without exposing their values", async () => {
+    for (const kind of ["Private customer label", null, false, ["personal"], { name: "Secret team" }]) {
+      assert.throws(() => privateWorkspaceRoutingIdentity(workspaceId, kind), /Unknown workspace kind/);
+      await db().collection("organization").replaceOne({ id: workspaceId }, { id: workspaceId, ...privateWorkspaceRoutingIdentity(workspaceId), kind }, { upsert: true });
+      const report = await auditPrivateWorkspaceRetirement(db(), workspaceId);
+      assert.deepEqual(report.leaks, [{ collection: "organization", reason: "personal-labels", records: 1 }]);
+      assert.doesNotMatch(JSON.stringify(report), /customer|Secret|team|personal"/);
+    }
+    await db().collection("organization").updateOne({ id: workspaceId }, { $set: { kind: "team", privateNote: "Original note" } });
+    assert.deepEqual((await auditPrivateWorkspaceRetirement(db(), workspaceId)).leaks, [{ collection: "organization", reason: "unknown-fields", records: 1 }]);
+  });
+  it("compares complete retained values so arrays cannot hide labels or original source hashes", async () => {
+    const routing = privateWorkspaceRoutingIdentity(workspaceId);
+    await db().collection("organization").insertOne({ id: workspaceId, ...routing });
+    for (const [field, allowed] of [["name", routing.name], ["slug", routing.slug], ["logo", ""], ["metadata", "{}"]]) {
+      await db().collection("organization").replaceOne({ id: workspaceId }, { id: workspaceId, ...routing, [field!]: [allowed, "Sensitive retained content"] });
+      assert.deepEqual((await auditPrivateWorkspaceRetirement(db(), workspaceId)).leaks, [{ collection: "organization", reason: "personal-labels", records: 1 }]);
+    }
+    await db().collection("organization").replaceOne({ id: workspaceId }, { id: workspaceId, ...routing });
+    await db().collection("apitokens").insertOne({ workspaceId, name: ["", "Sensitive token label"] });
+    await db().collection("workspacemembers").insertOne({ workspaceId, name: [null, "Sensitive member label"], hourlyRate: [null, 999] });
+    await db().collection("privateworkspaces").insertOne({ workspaceId, state: "encrypted", sourceRevision: ["retired", "Sensitive source checksum"], supplementRevision: [null, "retired", "Supplemental source checksum"] });
+    const report = await auditPrivateWorkspaceRetirement(db(), workspaceId);
+    assert.deepEqual(report.leaks, [{ collection: "apitokens", reason: "personal-labels", records: 1 }, { collection: "privateworkspaces", reason: "source-checksums", records: 1 }, { collection: "workspacemembers", reason: "personal-labels", records: 1 }]);
+    assert.doesNotMatch(JSON.stringify(report), /Sensitive|Supplemental|999/);
+  });
   it("refuses new retained plaintext fields instead of silently treating them as routing metadata", async () => {
     await db().collection("workspacemembers").insertOne({ workspaceId, userId: "member", role: "member", name: "", note: "Private manager note" });
     await db().collection("apitokens").insertOne({ workspaceId, name: "", customLabel: "Customer project" });
