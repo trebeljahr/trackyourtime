@@ -5,7 +5,7 @@ import { sumCurrencyAmounts, rollUpEntries, budgetProgress } from "@starter/shar
 import { reportsRouter, summaryCsvRows, summaryCsvColumns } from "../trpc/routers/reports.js";
 import { renderSummaryPdf, renderDetailedPdf } from "../services/pdf.js";
 import { pageTexts } from "./support/pdf-text.js";
-import { OWNER, ADMIN, contextFor, freshStore, installStore, resetStore } from "./support/shared-workspace.js";
+import { OWNER, ADMIN, contextFor, freshStore, installStore, resetStore, WORKSPACE } from "./support/shared-workspace.js";
 
 const store = freshStore();
 const restore = installStore(store);
@@ -26,6 +26,13 @@ function currencies(): void {
 }
 
  describe("report currency snapshots", () => {
+  it("private mode refuses standard reports before reading workspace content", async () => {
+    store.privateWorkspaces.rows.push({ workspaceId: WORKSPACE, state: "encrypted" });
+    for (const read of [() => caller().rows(range), () => caller().totals(range), () => caller().summary({ ...range, groupBy: "project" })]) {
+      await assert.rejects(read, { code: "PRECONDITION_FAILED" });
+    }
+    assert.equal(store.entries.queries.length, 0);
+  });
   it("rows never run the full-range totals fold; totals never fetch joined rows", async () => {
     const find = mock.method(TimeEntry, "find", () => { throw Error("full-range fold"); });
     try {

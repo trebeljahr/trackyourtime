@@ -18,6 +18,7 @@ import { Client } from "../../models/Client.js";
 import { Favorite } from "../../models/Favorite.js";
 import { Invoice } from "../../models/Invoice.js";
 import { Project } from "../../models/Project.js";
+import { PrivateWorkspace } from "../../models/PrivateData.js";
 import { UserPreferencesModel, WorkspaceSettingsModel } from "../../models/Settings.js";
 import { Tag } from "../../models/Tag.js";
 import { Task } from "../../models/Task.js";
@@ -116,6 +117,7 @@ const entryRow = (authorId: Person): Row => {
 };
 
 export type Store = {
+  privateWorkspaces: MemoryCollection;
   members: MemoryCollection;
   entries: MemoryCollection;
   projects: MemoryCollection;
@@ -131,6 +133,7 @@ export type Store = {
 
 /** A fresh copy of the whole workspace. */
 export const freshStore = (): Store => ({
+  privateWorkspaces: memoryCollection(),
   members: memoryCollection([
     membership(OWNER, "Olga Owner", "owner", true, true),
     membership(ADMIN, "Arno Admin", "admin", true, false),
@@ -193,6 +196,7 @@ export const freshStore = (): Store => ({
  */
 export const installStore = (store: Store): (() => void) => {
   const restores = [
+    stubModel(PrivateWorkspace, store.privateWorkspaces),
     stubModel(TimesheetApproval, memoryCollection()),
     stubModel(TimesheetPolicy, memoryCollection()),
     stubModel(WorkspaceMember, store.members),
