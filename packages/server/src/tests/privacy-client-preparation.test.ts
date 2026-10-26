@@ -14,6 +14,8 @@ import { beginPrivateAccountErasure, fencePrivateAccount } from "../services/pri
 import { assertStandardWorkspace } from "../services/privacy/access.js";
 import { privateProjectionSnapshotRoot } from "../services/privacy/projection-snapshots.js";
 import { StorageUsage } from "../models/StorageUsage.js";
+import { privacyRouter } from "../trpc/routers/privacy.js";
+import type { Context } from "../trpc/context.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { env } from "../config/env.js";
@@ -119,6 +121,32 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     } finally { key.fill(0); await rm(folder, { recursive: true, force: true }); }
   }
   const needsMongod = { skip: !process.env.TEST_MONGOD_PATH && "TEST_MONGOD_PATH needs an operator-local mongod binary" };
+  it("delivers no-store ciphertext bootstrap POSTs only to actual workspace members and their reader projection", async () => {
+    const f = await contentVerification(), previousOrigin = env.BETTER_AUTH_URL;
+    Object.defineProperty(env, "BETTER_AUTH_URL", { value: scope.server, writable: true, configurable: true });
+    try {
+      const headers = new Map<string, unknown>();
+      const context = (userId: string) => ({ user: { id: userId }, session: { user: { id: userId } }, res: { headersSent: false, setHeader: (key: string, value: unknown) => headers.set(key, value) } }) as unknown as Context;
+      const member = privacyRouter.createCaller(context("member")), owner = privacyRouter.createCaller(context("owner"));
+      const history = await member.projectionDirectory({ workspaceId: scope.workspaceId, after: 0, through: directory.trust.revision });
+      assert.equal(history.directories[0]!.digest, directory.digest);
+      assert.doesNotMatch(JSON.stringify(history), /recovery|passkeys|privateKey|original secret/);
+      const root = await member.projectionRoot({ workspaceId: scope.workspaceId });
+      assert.equal(root.manifest.migrationId, f.workerScope.migrationId);
+      assert.deepEqual(await owner.projectionRoot({ workspaceId: scope.workspaceId }), root);
+      const page = await member.projectionPage({ workspaceId: scope.workspaceId, migrationId: f.workerScope.migrationId, lane: "personal", offset: 0 });
+      assert.ok(page.records.length > 0);
+      for (const row of page.records) assert.deepEqual(row.grants.map((grant) => grant.userId), ["member"]);
+      const own = await mongoose.connection.db!.collection("favorites").findOne({ userId: "owner" });
+      assert.equal(JSON.stringify(page).includes(String(own!._id)), false);
+      assert.doesNotMatch(JSON.stringify(page), /original secret|original pin|<Invoice>/);
+      assert.equal(headers.get("Cache-Control"), "no-store");
+      await assert.rejects(privacyRouter.createCaller(context("outsider")).projectionRoot({ workspaceId: scope.workspaceId }), { code: "NOT_FOUND" });
+      await assert.rejects(member.projectionRoot({ workspaceId: scope.workspaceId, userId: "owner" } as never), { code: "BAD_REQUEST" });
+      await assert.rejects(member.projectionPage({ workspaceId: scope.workspaceId, migrationId: crypto.randomUUID(), lane: "personal", offset: 0 }), { code: "NOT_FOUND" });
+      await assert.rejects(privacyRouter.createCaller({ user: null, session: null } as unknown as Context).projectionRoot({ workspaceId: scope.workspaceId }), { code: "UNAUTHORIZED" });
+    } finally { Object.defineProperty(env, "BETTER_AUTH_URL", { value: previousOrigin, writable: true, configurable: true }); }
+  });
   it("permanently reserves a verified root before device pins and keeps it readable past all leases", needsMongod, async () => {
     const f = await reservationFixture(), before = (await StorageUsage.findById(scope.workspaceId).lean())!.bytes;
     const expected = { reserved: true, root: f.root, directoryDigest: directory.digest, reservationId: f.consent.request.reservationId };

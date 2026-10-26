@@ -2,6 +2,7 @@ import { createStandardBackupChallenge, readStandardBackupOriginals } from "../.
 import { fencePrivateAccount } from "../../services/privacy/account-erasure-fence.js";
 import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
 import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
+import { privateProjectionSnapshotRoot, privateProjectionSnapshotPage } from "../../services/privacy/projection-snapshots.js";
 import { migrationFavoritesSource } from "../../services/privacy/recovery.js";
 import { recordPrivateFavoritesMigrationProof, recordPrivateOwnerMigrationProof } from "../../services/privacy/migration-receipts.js";
 import { discardPrivatePreparation } from "../../services/privacy/preparation.js";
@@ -188,6 +189,14 @@ export const privacyRouter = router({
     requirePrivateWorkspaceRollout();
     return privateWorkspaceChanges(ctx.workspaceId, ctx.user.id, input.after, input.through, input.limit);
   }),
+  projectionDirectory: privateWorkspaceProcedure.input(z.object({ workspaceId: z.string().min(1).max(100), after: z.number().int().nonnegative().max(4096), through: z.number().int().positive().max(4096) }).strict()).mutation(async ({ ctx, input }) => {
+    await fenceWorkspace(ctx.workspaceId);
+    return privateDirectoryPage(ctx.workspaceId, ctx.user.id, input.after, input.through);
+  }),
+  projectionRoot: privateWorkspaceProcedure.input(z.object({ workspaceId: z.string().min(1).max(100) }).strict()).mutation(({ ctx }) =>
+    privateProjectionSnapshotRoot({ server: privateServerOrigin(), workspaceId: ctx.workspaceId, userId: ctx.user.id })),
+  projectionPage: privateWorkspaceProcedure.input(z.object({ workspaceId: z.string().min(1).max(100), migrationId: z.uuid(), lane: z.enum(["shared", "personal"]), offset: z.number().int().nonnegative().max(400_000) }).strict()).mutation(({ ctx, input }) =>
+    privateProjectionSnapshotPage({ server: privateServerOrigin(), workspaceId: ctx.workspaceId, userId: ctx.user.id, migrationId: input.migrationId }, input.lane, input.offset)),
   directory: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative().default(0), through: z.number().int().nonnegative().optional() })).query(({ ctx, input }) => privateDirectoryPage(ctx.workspaceId, ctx.user.id, input.after, input.through)),
   prepareDirectory: privateWorkspaceProcedure.input(scopeSchema.extend({ signed: signedPrivateDirectorySchema })).mutation(({ ctx, input }) => {
     requirePrivateWorkspaceRollout();

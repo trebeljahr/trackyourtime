@@ -1,11 +1,16 @@
-import { signedPrivateDirectorySchema, privateWorkspaceDirectorySchema, type PrivateDirectoryMember, type PrivateWorkspaceDirectory, type SignedPrivateDirectory } from "@starter/shared";
+import { signedPrivateDirectorySchema, privateWorkspaceDirectorySchema, publicEncryptionKeySchema, type PrivateDirectoryMember, type PrivateWorkspaceDirectory, type SignedPrivateDirectory } from "@starter/shared";
 import { canonicalJson, decodeSecret, fingerprint, signPrivateChange, type PublicKey } from "./crypto.js";
 import { privateRecordDigest } from "./workspace-edits.js";
 import { createPrivateStorage, type PrivateStorageKey, type PrivateStorageScope } from "./storage.js";
 import type { KeyValueStorage } from "../storage.js";
 import type { QueueExclusive } from "../durable-entry.js";
+import { z } from "zod";
 export type PrivateDirectoryTrust = { ownerId: string; signingPublicKey: PublicKey; revision: number; digest: string | null };
 const verified = Symbol("verified-private-directory");
+const verifiedCheckpoints = new WeakSet<object>();
+export type PrivateDirectoryCheckpoint = { ownerId: string; signingPublicKey: PublicKey; revision: number; digest: string };
+export type VerifiedPrivateDirectoryCheckpoint = Readonly<{ directory: VerifiedPrivateDirectory; expected: PrivateDirectoryCheckpoint; path: readonly Readonly<{ revision: number; digest: string }>[]; current: () => boolean }>;
+export type PrivateDirectoryTransport = { page: (input: { after: number; through: number }) => Promise<unknown> };
 export type VerifiedPrivateDirectory = { readonly [verified]: true; readonly signed: SignedPrivateDirectory; readonly digest: string; readonly trust: PrivateDirectoryTrust };
 export function assertVerifiedPrivateDirectory(directory: VerifiedPrivateDirectory): void {
   if (directory?.[verified] !== true) throw new Error("Verify the private workspace directory first");
@@ -85,6 +90,23 @@ export async function createPrivateDirectoryStore(options: {
     return freeze({ [verified]: true as const, signed, digest: value.digest, trust: { ownerId: owner.userId, signingPublicKey: owner.signingPublicKey, revision: signed.directory.revision, digest: value.digest } });
   };
   return {
+    /** The whole history was anchored to a checkpoint from trusted device or
+     * account policy, never merely to its server-supplied first owner key. */
+    restoreCheckpoint: async (value: VerifiedPrivateDirectoryCheckpoint) => {
+      const captured = options.capture(); captured();
+      return options.exclusive(async () => {
+        const check = () => { captured(); if (!verifiedCheckpoints.has(value) || !value.current()) throw new Error("Use the current verified directory checkpoint"); };
+        check(); checkDirectory(value.directory.signed.directory, scope);
+        if (value.expected.ownerId !== initialOwner.ownerId || canonicalJson(coordinates(value.expected.signingPublicKey)) !== canonicalJson(coordinates(initialOwner.signingPublicKey))) throw new Error("Directory checkpoint owner differs from the trusted policy");
+        const prior = await load(); check();
+        if (prior?.digest === value.directory.digest) return prior;
+        if (prior && (prior.trust.revision >= value.directory.trust.revision || !value.path.some((row) => row.revision === prior.trust.revision && row.digest === prior.digest))) throw new Error("Directory recovery cannot replace or roll back an existing trusted branch");
+        await storage.setItem("directory", JSON.stringify({ v: 1, anchor, signed: value.directory.signed, digest: value.directory.digest })); check();
+        const saved = await load(); check();
+        if (!saved || saved.digest !== value.directory.digest) throw new Error("Could not confirm the restored directory checkpoint");
+        return saved;
+      });
+    },
     read: () => options.exclusive(async () => { const check = options.capture(); check(); const value = await load(); check(); return value; }),
     accept: (input: unknown) => {
       const snapshot = signedPrivateDirectorySchema.parse(input);
@@ -96,6 +118,40 @@ export async function createPrivateDirectoryStore(options: {
       });
     },
   };
+}
+
+/** Backward binding through previousDigest lets an independently trusted final
+ * checkpoint authenticate an older owner/transfer history. No directory is
+ * persisted or returned to routing before the entire chain matches that pin. */
+export async function loadPrivateDirectoryCheckpoint(options: {
+  scope: { server: string; workspaceId: string }; expected: PrivateDirectoryCheckpoint;
+  transport: PrivateDirectoryTransport; current: () => boolean;
+}): Promise<VerifiedPrivateDirectoryCheckpoint> {
+  const scope = { server: options.scope.server, workspaceId: options.scope.workspaceId }, current = options.current, transport = options.transport;
+  const expected = z.object({ ownerId: z.string().min(1).max(100), signingPublicKey: publicEncryptionKeySchema, revision: z.number().int().positive().max(4096), digest: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict().parse(options.expected);
+  const pageSchema = z.object({ through: z.number().int().positive().max(4096), next: z.number().int().nonnegative().nullable(), directories: z.array(z.object({ digest: z.string().regex(/^[A-Za-z0-9_-]{43}$/), signed: signedPrivateDirectorySchema }).strict()).max(10) }).strict();
+  const check = () => { if (!current()) throw new Error("Private directory changed during checkpoint delivery"); };
+  let after = 0, totalBytes = 0, directory: VerifiedPrivateDirectory | null = null;
+  const path: { revision: number; digest: string }[] = [];
+  do {
+    check(); const raw = await transport.page({ after, through: expected.revision }); check();
+    const bytes = new TextEncoder().encode(JSON.stringify(raw)).length; totalBytes += bytes;
+    if (bytes > 3 * 1024 * 1024 || totalBytes > 16 * 1024 * 1024) throw new Error("Private directory history exceeds its supported checkpoint size");
+    const page = pageSchema.parse(raw);
+    if (page.through !== expected.revision || !page.directories.length) throw new Error("Private directory checkpoint feed omitted revisions or changed its boundary");
+    for (const row of page.directories) {
+      if (row.signed.directory.revision !== after + 1 || row.signed.directory.revision > expected.revision) throw new Error("Private directory checkpoint feed skipped a revision");
+      const firstOwner = row.signed.directory.members.find((member) => member.userId === row.signed.directory.ownerId);
+      if (!firstOwner) throw new Error("Private directory checkpoint has no initial owner");
+      const prior = directory ? directory.trust : { ownerId: firstOwner.userId, signingPublicKey: firstOwner.signingPublicKey, revision: 0, digest: null };
+      const checked = await verifyPrivateWorkspaceDirectory(row.signed, scope, prior); check();
+      if (checked.digest !== row.digest) throw new Error("Private directory checkpoint digest changed");
+      directory = checked; after = checked.trust.revision; path.push({ revision: after, digest: checked.digest });
+    }
+    if (page.next !== (after < expected.revision ? after : null)) throw new Error("Private directory checkpoint feed omitted revisions");
+  } while (after < expected.revision);
+  if (!directory || directory.digest !== expected.digest || directory.trust.ownerId !== expected.ownerId || canonicalJson(coordinates(directory.trust.signingPublicKey)) !== canonicalJson(coordinates(expected.signingPublicKey))) throw new Error("Private directory differs from the independently trusted checkpoint");
+  check(); const result = freeze({ directory, expected, path, current }); verifiedCheckpoints.add(result); return result;
 }
 
 /** Only a verified directory may supply a replica's recipients/signers. The

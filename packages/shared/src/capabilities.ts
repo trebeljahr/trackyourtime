@@ -17,6 +17,7 @@
  * Keep a capability for each added level so callers can gate the matching format.
  */
 export const REQUIRES_API_LEVEL = {
+  "privacy.readerProjections": 32,
   "privacy.accountInventory": 31,
   "privacy.combinedRecovery": 30,
   "privacy.ownerMigrationProof": 26,

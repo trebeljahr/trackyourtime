@@ -13,7 +13,7 @@ import { privateWorkspaceChainRoot, signPrivateChainedWorkspaceEdit, verifyPriva
 import type { VerifiedPrivateDirectory } from "./directory.js";
 const plainSchema = privateRecordRefSchema.extend({ value: z.record(z.string(), z.json()) }).strict();
 const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable(), chain: privateWorkspaceChainSchema.nullable().default(null), directoryDigest: z.string().nullable().default(null) }).strict();
-const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict();
+const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), activationRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict().refine((state) => !state.activationRoot || (!!state.head && state.revision >= 1 && (state.revision !== 1 || state.head === state.activationRoot)), "Private replica activation checkpoint is inconsistent");
 type State = z.infer<typeof stateSchema>;
 const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
 export class PrivateReplicaConflictError extends Error {
@@ -58,7 +58,7 @@ export async function createPrivateWorkspaceReplica(options: {
   };
   const load = async (): Promise<State> => {
     const raw = await storage.getItem("replica");
-    return raw === null ? { v: 1, revision: 0, head: null, records: [], pending: [] } : stateSchema.parse(JSON.parse(raw));
+    return raw === null ? { v: 1, revision: 0, head: null, activationRoot: null, records: [], pending: [] } : stateSchema.parse(JSON.parse(raw));
   };
   const save = (state: State) => storage.setItem("replica", JSON.stringify(state));
   const pull = async (transport: PrivateReplicaTransport, through?: number) => {
@@ -97,13 +97,20 @@ export async function createPrivateWorkspaceReplica(options: {
   const installInitial = async (state: State, root: string, records: readonly z.infer<typeof encryptedRecordSchema>[]) => {
     const access = identity(); access.check();
     if (state.pending.length) throw new Error("Keep or export pending edits before installing an initial snapshot");
-    if (state.revision === 1 && state.head === root && canonicalJson(state.records) === canonicalJson(records)) return { revision: 1 as const };
+    if (state.revision === 1 && state.head === root && canonicalJson(state.records) === canonicalJson(records)) {
+      if (!state.activationRoot) { await save({ ...state, activationRoot: root }); access.check(); }
+      return { revision: 1 as const };
+    }
     if (state.revision !== 0 || state.records.length) throw new Error("An initial snapshot cannot replace an existing private checkpoint");
-    await save({ v: 1, revision: 1, head: root, records: [...records], pending: [] }); access.check();
+    await save({ v: 1, revision: 1, head: root, activationRoot: root, records: [...records], pending: [] }); access.check();
     return { revision: 1 as const };
   };
   return {
     namespace: encrypted.namespace,
+    checkpoint: () => options.exclusive(async () => {
+      const access = identity(), state = await load(); access.check();
+      return { activationRoot: state.activationRoot, revision: state.revision, head: state.head, pending: state.pending.length };
+    }),
     bootstrap: (snapshot: VerifiedPrivateInitialSnapshot) => options.exclusive(async () => {
       const access = identity(), state = await load(); access.check();
       assertPrivateInitialSnapshot(snapshot, scope, access.directoryDigest);

@@ -1110,6 +1110,41 @@ ownership handoff and production installation restore/rollback remain required.
 Temporary reservation proofs contain source commitments and must retire at
 final activation; the residual audit refuses them until that happens.
 
+## Trusted read-only client bootstrap and API 32
+
+Authenticated no-store POSTs `projectionDirectory`, `projectionRoot` and
+`projectionPage` expose only public directory history and the caller's signed
+root/reader ciphertext. They bind the actual workspace membership/account and
+configured server origin; callers cannot select another reader. Their additive
+`privacy.readerProjections` capability requires API 32. The standard-client
+minimum remains 1. Conversion and private content writes remain disabled.
+
+The client composition opens an already-enrolled encrypted account inventory
+and chooses the workspace's directory/root from its own signed policy. It
+authenticates every directory revision through that independent final digest,
+including pre-conversion owner transfers, before persisting a checkpoint.
+Bounded ten-revision pages pin their high-water boundary; gaps, substituted
+keys/signatures, forks, changed boundaries and excessive history refuse. Restore
+cannot replace or roll back an existing trusted branch. No unverified initial
+owner key from the response becomes enrollment trust.
+
+A dedicated fixed-origin RPC channel rechecks unlock scope and confirmed API
+support at actual dispatch after native readiness. It uses no legacy queue,
+batching, cache, redirects or plaintext fallback. The client verifies both
+projection lanes before atomically installing the replica's activation root.
+That root remains separately pinned as later journal heads advance. Older
+unchained/unanchored history is kept for explicit recovery rather than adopted.
+An exact revision-one snapshot can acquire the new local activation field only
+after fresh complete verification.
+
+Completed local copies reopen offline without a server mode decision. Lock,
+account/server switch or closing the handle invalidates reads and in-flight
+results. Persistent guards retain public scope/epochs rather than private root
+keys. The returned facade is read-only; active screen/query routing, domain
+adapters, regular private backups and content writes are separate integration
+steps. It does not enroll a missing inventory, publish a private policy from an
+API response or authorize activation.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes

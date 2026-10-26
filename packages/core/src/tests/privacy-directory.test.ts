@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { createKeyPair, createSigningPair, randomSecret, signPrivateChange } from "../privacy/crypto.js";
-import { createPrivateDirectoryStore, privateMemberKeyFingerprint, privateReplicaIdentityFromDirectory, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
+import { createPrivateDirectoryStore, loadPrivateDirectoryCheckpoint, privateMemberKeyFingerprint, privateReplicaIdentityFromDirectory, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type PrivateDirectoryTransport } from "../privacy/directory.js";
 import { memoryStorage } from "../storage.js";
 import { PrivateStorageLockedError } from "../privacy/storage.js";
 import type { PrivateDirectoryMember, PrivateWorkspaceDirectory } from "@starter/shared";
@@ -51,6 +51,57 @@ it("accepts an ownership transfer only when signed by the previously trusted own
   const third = { ...next, revision: 3, previousDigest: current.digest };
   await signPrivateWorkspaceDirectory(third, f.member.privateKey, current, new Map());
   await assert.rejects(signPrivateWorkspaceDirectory(third, f.owner.privateKey, current, new Map()), /signature/);
+});
+it("authenticates older ownership history against an independent final checkpoint before durable restoration", async () => {
+  const f = await fixture(), next = { ...structuredClone(f.directory), revision: 2, previousDigest: f.verified.digest, ownerId: "member" };
+  next.members[0]!.role = "owner"; next.members[1]!.role = "member";
+  const transferred = await signPrivateWorkspaceDirectory(next, f.owner.privateKey, f.verified, new Map()), final = await verifyPrivateWorkspaceDirectory(transferred, scope, f.verified.trust);
+  const expected = { ownerId: "member", signingPublicKey: f.member.publicKey, revision: 2, digest: final.digest };
+  const calls: unknown[] = [], transport: PrivateDirectoryTransport = { page: async (input) => { calls.push(input); return { through: 2, next: input.after === 0 ? 1 : null, directories: input.after === 0 ? [{ signed: f.signed, digest: f.verified.digest }] : [{ signed: transferred, digest: final.digest }] }; } };
+  const checkpoint = await loadPrivateDirectoryCheckpoint({ scope, expected, transport, current: () => true });
+  assert.deepEqual(calls, [{ after: 0, through: 2 }, { after: 1, through: 2 }]);
+  const backing = memoryStorage(), key = randomSecret(), store = await createPrivateDirectoryStore({ scope, storage: backing, initialOwner: expected, exclusive: (work) => work(), capture: () => () => {}, resolveStorageKey: () => ({ key, current: () => true }) });
+  assert.equal((await store.restoreCheckpoint(checkpoint)).digest, final.digest);
+  assert.equal((await store.read())!.trust.ownerId, "member");
+  await assert.rejects(store.restoreCheckpoint({ ...checkpoint }), /current verified directory checkpoint/);
+});
+it("refuses substituted final pins, gaps, modified keys, signatures and feed boundaries", async () => {
+  const f = await fixture(), expected = { ownerId: "owner", signingPublicKey: f.owner.publicKey, revision: 1, digest: f.verified.digest };
+  const page = { through: 1, next: null, directories: [{ signed: f.signed, digest: f.verified.digest }] };
+  const load = (value: unknown, pin = expected) => loadPrivateDirectoryCheckpoint({ scope, expected: pin, transport: { page: async () => value }, current: () => true });
+  await assert.rejects(load(page, { ...expected, digest: "A".repeat(43) }), /independently trusted/);
+  await assert.rejects(load(page, { ...expected, signingPublicKey: f.member.publicKey }), /independently trusted/);
+  await assert.rejects(load({ ...page, through: 2 }), /boundary/);
+  await assert.rejects(load({ ...page, next: 1 }), /omitted/);
+  await assert.rejects(load({ ...page, directories: [] }), /omitted/);
+  const forged = structuredClone(page); forged.directories[0]!.signed.signature = await signPrivateChange(f.member.privateKey, {});
+  await assert.rejects(load(forged), /signature/);
+  const gap = structuredClone(page); gap.directories[0]!.signed.directory.revision = 2;
+  await assert.rejects(load(gap), /skipped/);
+  const changed = structuredClone(page); changed.directories[0]!.signed.directory.members[1]!.signingPublicKey = f.member.publicKey;
+  await assert.rejects(load(changed), /signature/);
+});
+it("advances existing trusted history only along the anchored branch and cannot roll it back", async () => {
+  const f = await fixture(), key = randomSecret();
+  const store = await createPrivateDirectoryStore({ scope, storage: memoryStorage(), initialOwner: f.trust, exclusive: (work) => work(), capture: () => () => {}, resolveStorageKey: () => ({ key, current: () => true }) });
+  await store.accept(f.signed);
+  const second = await signPrivateWorkspaceDirectory({ ...f.directory, revision: 2, previousDigest: f.verified.digest }, f.owner.privateKey, f.verified, new Map());
+  const verifiedSecond = await verifyPrivateWorkspaceDirectory(second, scope, f.verified.trust);
+  const checkpoint = await loadPrivateDirectoryCheckpoint({ scope, expected: { ...f.trust, revision: 2, digest: verifiedSecond.digest }, current: () => true, transport: { page: async () => ({ through: 2, next: null, directories: [{ signed: f.signed, digest: f.verified.digest }, { signed: second, digest: verifiedSecond.digest }] }) } });
+  await store.restoreCheckpoint(checkpoint); assert.equal((await store.read())!.trust.revision, 2);
+  const earlier = await loadPrivateDirectoryCheckpoint({ scope, expected: { ...f.trust, revision: 1, digest: f.verified.digest }, current: () => true, transport: { page: async () => ({ through: 1, next: null, directories: [{ signed: f.signed, digest: f.verified.digest }] }) } });
+  await assert.rejects(store.restoreCheckpoint(earlier), /roll back/);
+  assert.equal((await store.read())!.digest, verifiedSecond.digest);
+});
+it("invalidates directory delivery and its restore capability after the unlock epoch changes", async () => {
+  const f = await fixture(), key = randomSecret(); let epoch = 0;
+  const current = () => epoch === 0, options = { scope, expected: { ...f.trust, revision: 1, digest: f.verified.digest }, current, transport: { page: async () => ({ through: 1, next: null, directories: [{ signed: f.signed, digest: f.verified.digest }] }) } };
+  const checkpoint = await loadPrivateDirectoryCheckpoint(options);
+  const store = await createPrivateDirectoryStore({ scope, storage: memoryStorage(), initialOwner: f.trust, exclusive: (work) => work(), capture: () => () => {}, resolveStorageKey: () => ({ key, current: () => true }) });
+  epoch++;
+  await assert.rejects(store.restoreCheckpoint(checkpoint), /current verified/);
+  assert.equal(await store.read(), null);
+  await assert.rejects(loadPrivateDirectoryCheckpoint(options), /changed during/);
 });
 it("rejects duplicate members, private keys, multiple owners and invalid elliptic-curve points", async () => {
   const f = await fixture();

@@ -1,5 +1,5 @@
 {
-  "apiLevel": 31,
+  "apiLevel": 32,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -5634,6 +5634,89 @@
         },
         "required": [
           "signed"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.projectionDirectory": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "maximum": 4096,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "through": {
+            "exclusiveMinimum": 0,
+            "maximum": 4096,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "after",
+          "through"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.projectionPage": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "lane": {
+            "enum": [
+              "shared",
+              "personal"
+            ],
+            "type": "string"
+          },
+          "migrationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "offset": {
+            "maximum": 400000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "migrationId",
+          "lane",
+          "offset"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.projectionRoot": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId"
         ],
         "type": "object"
       },

@@ -43,6 +43,7 @@ it("downloads independent bounded lanes and durably installs only the verified c
   assert.deepEqual(await f.replica.bootstrapProjection(snapshot), { revision: 1 });
   assert.deepEqual(await f.replica.bootstrapProjection(snapshot), { revision: 1 });
   const view = await (await f.reopen()).read(); assert.equal(view.head, snapshot.root); assert.equal(view.records.length, 106);
+  assert.deepEqual(await (await f.reopen()).checkpoint(), { activationRoot: snapshot.root, revision: 1, head: snapshot.root, pending: 0 });
   const raw = await f.storage.getItem(`${f.replica.namespace}${encodeURIComponent("segments:replica:manifest")}`);
   assert.doesNotMatch(raw!, /Secret|favorite|tags|owner/);
 });
@@ -96,6 +97,7 @@ it("extends a v3 root with exact durable chained edits across a lost reply and r
   await assert.rejects(f.replica.flushOne({ ...transport, chainedCommit: async (input) => { await transport.chainedCommit!(input); throw new Error("Lost reply"); } }), /Lost reply/);
   f.lock(); f.unlock(); const reopened = await f.reopen();
   assert.deepEqual(await reopened.flushOne(transport), { revision: 2, pending: 0 });
+  assert.equal((await reopened.checkpoint()).activationRoot, snapshot.root);
   assert.equal(canonicalJson(calls[0]), canonicalJson(calls[1]));
   await assert.rejects(reopened.bootstrapProjection(await loadPrivateInitialProjection(f.options())), /cannot replace/);
   await assert.rejects(reopened.pull({ commit: transport.commit, changes: transport.changes }), /requires verified chained history/);
