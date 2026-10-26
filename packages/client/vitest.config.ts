@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -36,6 +38,7 @@ if (!(process.env.NODE_OPTIONS ?? "").includes(DISABLE_NODE_WEB_STORAGE)) {
 export default defineConfig({
   resolve: {
     alias: {
+      "pdfkit-standalone": join(dirname(createRequire(import.meta.url).resolve("pdfkit")), "pdfkit.standalone.js"),
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },

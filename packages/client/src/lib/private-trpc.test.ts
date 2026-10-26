@@ -143,8 +143,24 @@ it("runs private report pages, totals, summaries and weekly grids through the re
  const { fetchReportExport, exportReportFile } = await import("./report-export"), legacy = vi.fn();
  const exportInput = { ...filters, report: "detailed" as const };
  await expect(fetchReportExport("csv", exportInput)).rejects.toThrow("Server export is refused");
- await expect(exportReportFile("pdf", exportInput, legacy)).rejects.toThrow("Server export is refused");
+ const csv = await exportReportFile("csv", exportInput, legacy), pdf = await exportReportFile("pdf", exportInput, legacy);
+ const readBlob = (blob: Blob, binary = false) => new Promise<string | ArrayBuffer>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string | ArrayBuffer); reader.onerror = () => reject(reader.error); if (binary) reader.readAsArrayBuffer(blob); else reader.readAsText(blob); });
+ expect(await readBlob(csv.blob)).toContain("Private report [draft]"); expect(csv.filename).toBe("trackyourtime-detailed-2026-10-01_2026-10-07.csv");
+ const bytes = new Uint8Array(await readBlob(pdf.blob, true) as ArrayBuffer); expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe("%PDF-"); expect(pdf.filename.endsWith(".pdf")).toBe(true);
  expect(fetcher).not.toHaveBeenCalled(); expect(legacy).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
  session.lockPrivateData(); await expect(api.query("reports.summary", { ...filters, groupBy: "day" })).rejects.toThrow("Unlock private data");
  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("discards an unfinished local PDF after locking without falling back or queuing plaintext", async () => {
+ await seedPrivateWorkspaceClient(await privateRecoveryFixture());
+ const fetcher = vi.fn(() => { throw new Error("No network"); }); vi.stubGlobal("fetch", fetcher);
+ const pdf = await import("@starter/invoice-pdf/report-pdf"), original = pdf.renderSummaryPdf;
+ let release!: () => void; const gate = new Promise<void>((resolve) => { release = resolve; });
+ const render = vi.spyOn(pdf, "renderSummaryPdf").mockImplementation(async (...args) => { await gate; return original(...args); });
+ const { exportReportFile } = await import("./report-export"), legacy = vi.fn();
+ const result = exportReportFile("pdf", { from: "2026-10-01", to: "2026-10-07", report: "summary", groupBy: "project", timeZone: "UTC" }, legacy);
+ await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(1)); session.lockPrivateData(); release();
+ await expect(result).rejects.toMatchObject({ privateContentRefusal: true });
+ expect(fetcher).not.toHaveBeenCalled(); expect(legacy).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });

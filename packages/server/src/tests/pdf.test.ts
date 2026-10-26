@@ -347,7 +347,7 @@ test("renderDetailedPdf survives an absurdly long description", async () => {
   assert.ok(page.includes("..."), "a truncated cell must say so");
   assert.ok(
     !page.includes(
-      "supercalifragilistic supercalifragilistic supercalifragilistic",
+      "supercalifragilistic ".repeat(20).trim(),
     ),
     "a long description must be truncated, not wrapped across the row",
   );

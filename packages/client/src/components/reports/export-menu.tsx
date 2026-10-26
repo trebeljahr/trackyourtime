@@ -153,9 +153,8 @@ export async function exportReport(
 
 /**
  * CSV + PDF export, shared by both report views. Both files are
- * rendered server-side (`POST /api/reports/export`, or `reports.exportCsv` /
- * `reports.exportPdf` on an older server) so they
- * always cover the whole filtered range, not just the page currently on
+ * generated on the device for private workspaces; standard workspaces use
+ * `POST /api/reports/export` or legacy tRPC. Files always cover the whole filtered range, not just the page currently on
  * screen — and so the PDF is a real document rather than whatever the
  * browser's print dialog made of the live DOM.
  */
@@ -183,8 +182,8 @@ export function ExportMenu(props: ExportMenuProps): React.JSX.Element {
     })();
   }, []);
 
-  // Streamed from `POST /api/reports/export` where the server has it; the
-  // tRPC procedures are the fallback for an older server (lib/report-export.ts).
+  // The shared file route chooses local private rendering or the standard
+  // streamed/legacy transport after checking the trusted workspace policy.
   const handleCsv = React.useCallback((): void => {
     run(() =>
       exportReport(

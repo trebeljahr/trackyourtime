@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, it, mock } from "node:test";
 import { Types } from "mongoose";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { bufferSink } from "../services/report-export/sink.js";
+import { pageTexts } from "./support/pdf-text.js";
+import * as portablePdf from "@starter/invoice-pdf/report-pdf";
 import {
   createKeyPair, createSigningPair, encodeSecret, fingerprint, randomSecret,
   signPrivateChange, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory,
   verifyPrivateWorkspaceDirectory, verifyPrivateWorkspacePolicy,
-  privateReportQuery, readersForPrivateRecord, type PlainPrivateRecord,
+  privateReportQuery, privateReportExportData, csvFilename, toCsv, summaryCsvColumns, summaryCsvRows, detailedCsvColumns, detailedCsvRows, weeklyCsvColumns, weeklyCsvRows, readersForPrivateRecord, type PlainPrivateRecord,
   type PrivateReportQueryPath,
 } from "@starter/core";
-import { buildDetailed, buildSummary, buildWeekly, type ReportScope } from "../trpc/routers/reports.js";
+import { buildDetailed, buildSummary, buildWeekly, planReportExport, type ReportScope } from "../trpc/routers/reports.js";
 import { ADMIN, MEMBER, OWNER, WORKSPACE, freshStore, installStore, resetStore } from "./support/shared-workspace.js";
 import type { Row } from "./support/in-memory-models.js";
 
@@ -52,7 +59,7 @@ async function fixture(userId = OWNER) {
   const visibility = { userId, canViewOthersTime: actor.role === "owner" || actor.canViewOthersTime, canViewOthersMoney: actor.role === "owner" || actor.canViewOthersMoney };
   const standardScope: ReportScope = { workspaceId: WORKSPACE, visibility };
   const read = (path: PrivateReportQueryPath, input: unknown) => privateReportQuery({ scope, directory, policy, records, current, path, input, now: NOW });
-  return { records, read, scope, standardScope, directory, policy, lock: () => { open = false; } };
+  return { records, read, scope, standardScope, directory, policy, current, lock: () => { open = false; } };
 }
 
 it("private summaries match standard groups, timelines, filters and money visibility", async () => {
@@ -162,4 +169,38 @@ it("uses the pinned source calendar when the device timezone changes", async () 
     process.env.TZ = "Australia/Sydney";
     assert.deepEqual(f.read("reports.detailed", filters), standard);
   } finally { clock.mock.restore(); if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
+});
+
+it("local CSV bytes and browser PDF text match actual standard export plans", async () => {
+  const standalonePath = join(dirname(createRequire(import.meta.url).resolve("pdfkit")), "pdfkit.standalone.js");
+  const standalone = await import(pathToFileURL(standalonePath).href);
+  const PDFDocument = standalone.default as portablePdf.ReportPdfRenderOptions["PDFDocument"];
+  store.entries.rows[0]!.description = '=SUM(1,2) "quoted", ä';
+  store.entries.rows[1]!.currency = "USD";
+  store.entries.rows[2]!.end = null;
+  const clock = mock.method(Date, "now", () => NOW);
+  try {
+    for (const userId of [OWNER, ADMIN, MEMBER]) {
+      const f = await fixture(userId);
+      for (const locale of ["en", "de"] as const) for (const report of ["summary", "detailed", "weekly"] as const) {
+        const input = { ...range, report, locale, groupBy: "project" as const, weekStart: "2026-09-07" };
+        const data = privateReportExportData({ ...f, input: { ...input, format: "csv" }, now: NOW });
+        const csv = data.report === "summary" ? toCsv(summaryCsvRows(data.result), summaryCsvColumns(data.result.moneyVisible)) : data.report === "weekly" ? toCsv(weeklyCsvRows(data.result), weeklyCsvColumns(data.result)) : toCsv(detailedCsvRows(data.result, range.timeZone, NOW), detailedCsvColumns(data.result.moneyVisible));
+        const plan = await planReportExport(f.standardScope, { ...input, format: "csv" }, userId, NOW), sink = bufferSink(); await plan.write(sink);
+        assert.equal(csv, sink.buffer().toString("utf8"), `${userId} ${report} CSV`);
+        assert.equal(csvFilename(report, data.filenameRange.from, data.filenameRange.to), plan.filename);
+        const pdfPlan = await planReportExport(f.standardScope, { ...input, format: "pdf" }, userId, NOW), pdfSink = bufferSink(); await pdfPlan.write(pdfSink);
+        const kind = report === "summary" ? { kind: report, groupBy: input.groupBy } : { kind: report };
+        const meta = { ...range, from: data.filenameRange.from, to: data.filenameRange.to, locale, currency: data.report === "weekly" ? data.currency : data.result.currency, title: portablePdf.reportPdfTitle(locale, kind), generatedAt: new Date(NOW).toISOString(), moneyVisible: data.result.moneyVisible, renderOptions: { PDFDocument, nowMs: NOW } };
+        const bytes = data.report === "summary" ? await portablePdf.renderSummaryPdf(data.result, meta, input.groupBy) : data.report === "weekly" ? await portablePdf.renderWeeklyPdf(data.result, meta) : await portablePdf.renderDetailedPdf(data.result, meta);
+        if (userId === OWNER && locale === "en" && report === "detailed") { const text = pageTexts(Buffer.from(bytes)).join(" "); assert.ok(text.includes("4,247,000.00 EUR")); assert.ok((text.match(/312:00:00/g) ?? []).length >= 2, "headline and table total both retain the full duration"); }
+        assert.deepEqual(pageTexts(Buffer.from(bytes)), pageTexts(pdfSink.buffer()), `${userId} ${locale} ${report} PDF`);
+        const qaDir = process.env.TYT_REPORT_QA_DIR;
+        if (qaDir && ((userId === OWNER && locale === "en") || (userId === ADMIN && locale === "de"))) {
+          mkdirSync(qaDir, { recursive: true });
+          writeFileSync(join(qaDir, `private-${userId === OWNER ? "owner" : "time-only"}-${locale}-${report}.pdf`), bytes);
+        }
+      }
+    }
+  } finally { clock.mock.restore(); }
 });

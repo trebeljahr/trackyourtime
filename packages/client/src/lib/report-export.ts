@@ -81,12 +81,11 @@ const readRefusal = async (
 
 /** REST exports bypass tRPC, so they need the same checked routing boundary.
  * No filters or fallback request may leave a private/locked workspace. */
-async function standardReportExportScope(input: ReportExportRequest) {
+async function reportExportScope(input: ReportExportRequest) {
   if (isTokenShell()) await whenApiOriginReady();
   await whenActiveWorkspaceReady();
   const scoped = withWorkspaceId(input, getActiveWorkspaceId()) as Record<string, unknown>;
   const route = await currentWorkspaceContentRoute(typeof scoped.workspaceId === "string" ? scoped.workspaceId : null);
-  if (route.mode !== "standard") throw new PrivateContentUnavailableError("Private report files must be generated on this device. Server export is refused.");
   route.check(); return { route, scoped };
 }
 
@@ -97,7 +96,8 @@ export async function fetchReportExport(
 ): Promise<ExportedFile> {
   // On the shells the server and the workspace are read from storage first,
   // exactly as the tRPC link waits for them; on web both are already known.
-  const { route, scoped } = await standardReportExportScope(input);
+  const { route, scoped } = await reportExportScope(input);
+  if (route.mode !== "standard") throw new PrivateContentUnavailableError("Private report files must be generated on this device. Server export is refused.");
 
   const token = getNativeToken();
   const headers = new Headers({
@@ -152,7 +152,11 @@ export async function exportReportFile(
   input: ReportExportRequest,
   legacy: () => Promise<ExportedFile>,
 ): Promise<ExportedFile> {
-  const { route } = await standardReportExportScope(input);
+  const { route } = await reportExportScope(input);
+  if (route.mode === "encrypted") {
+    const { exportPrivateReportFile } = await import("./private-report-export");
+    route.check(); return exportPrivateReportFile(route, format, input);
+  }
   if (!serverSupportsNow("reports.exportStream")) { route.check(); return legacy(); }
   try {
     return await fetchReportExport(format, input);

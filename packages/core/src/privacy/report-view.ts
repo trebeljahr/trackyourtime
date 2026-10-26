@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   addDaysToKey, currencyAmountsAccumulator, dayKeyInZone, dayKeysBetween, entryAmount,
-  detailedReportSchema, reportFiltersSchema, reportMoneyVisible, resolveTimeZone,
+  detailedReportSchema, reportExportSchema, reportFiltersSchema, reportMoneyVisible, resolveTimeZone,
   singleCurrencyMoney, summaryReportSchema, weeklyReportSchema, zonedDayStartMs,
   type DetailedEntry, type DetailedReportResult,
   type SummaryReportResult, type SummaryTimelinePoint, type WeeklyReportResult,
@@ -30,7 +30,7 @@ type Options = PrivateViewOptions & { policy: VerifiedPrivateWorkspacePolicy; pa
 
 /** Same report math as the standard engine, over one short-lived verified
  * local view. Filters, labels and decrypted results never leave this call. */
-export function privateReportQuery(options: Options): DetailedReportResult | SummaryReportResult | WeeklyReportResult | Pick<DetailedReportResult, "entries" | "nextCursor"> | Omit<DetailedReportResult, "entries" | "nextCursor"> {
+function readPrivateReport(options: Options, allRows = false): DetailedReportResult | SummaryReportResult | WeeklyReportResult | Pick<DetailedReportResult, "entries" | "nextCursor"> | Omit<DetailedReportResult, "entries" | "nextCursor"> {
   const { scope, path, policy } = options;
   if (!isPrivateReportQuery(path)) throw new Error("This private report query is not supported");
   const source = privateViewSource(options);
@@ -75,6 +75,7 @@ export function privateReportQuery(options: Options): DetailedReportResult | Sum
     && (args.billable === undefined || doc.billable === args.billable)
     && (!search || doc.description.toLowerCase().includes(search)))
     .sort((a, b) => Date.parse(b.doc.start) - Date.parse(a.doc.start) || (a.doc.id < b.doc.id ? 1 : a.doc.id > b.doc.id ? -1 : 0));
+  if (allRows && matching.length > 100000) throw new Error("Private report export exceeds 100000 entries; choose a shorter range");
   const snapshot = (row: typeof matching[number]) => {
     const entry = reader.detailed(row, moneyVisible);
     const projectId = hex(entry.projectId), clientId = hex(clientOf(row.doc)), taskId = hex(entry.taskId);
@@ -176,7 +177,7 @@ export function privateReportQuery(options: Options): DetailedReportResult | Sum
     if (separator < 0 || !Number.isFinite(start) || !hex(key)) throw new Error("Invalid private report cursor");
     after = matching.filter(({ doc }) => Date.parse(doc.start) < start || (Date.parse(doc.start) === start && doc.id < key.toLowerCase()));
   }
-  const limit = page.limit ?? 50, window = withRows ? after.slice(0, limit) : [], entries: DetailedEntry[] = [];
+  const limit = allRows ? matching.length : page.limit ?? 50, window = withRows ? after.slice(0, limit) : [], entries: DetailedEntry[] = [];
   for (const raw of window) {
     const entry = measured(raw); if (!entry) continue;
     const { project, client, task, start, end, ...doc } = entry.doc;
@@ -187,4 +188,25 @@ export function privateReportQuery(options: Options): DetailedReportResult | Sum
   if (path === "reports.rows") return finish({ entries: result.entries, ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}) });
   if (path === "reports.totals") { const { entries: _entries, nextCursor: _cursor, ...totals } = result; void _entries; void _cursor; return finish(totals); }
   return finish(result);
+}
+
+export function privateReportQuery(options: Options) { return readPrivateReport(options); }
+
+/** One export uses one immutable local dataset and one clock. The public
+ * page-size limit stays unchanged; exports never walk/reparse history per page. */
+export function privateReportExportData(options: Omit<Options, "path">) {
+  const input = reportExportSchema.extend({ workspaceId: id.optional() }).strict().parse(options.input);
+  const { report, format: _format, groupBy, weekStart, locale: _locale, ...filters } = input;
+  void _format; void _locale;
+  const range = privateReportRangeForPolicy(options.policy, options.scope, input), timeZone = resolveTimeZone(input.timeZone);
+  const currencyRows = options.records.filter((row) => row.kind === "settings");
+  // Weekly results carry no currency, but their PDF still takes the workspace
+  // display currency. Read it through the same checked source binding.
+  const source = privateViewSource({ ...options, records: currencyRows });
+  if (currencyRows.length > 1) throw new Error("Private workspace settings are ambiguous");
+  const currency = currencyRows.length ? z.string().regex(/^[A-Z]{3}$/).parse(source.value(source.ofKind("settings")[0]!).currency) : "EUR";
+  const filenameRange = { from: dayKeyInZone(range.fromMs, timeZone), to: dayKeyInZone(range.toMs - 1, timeZone) };
+  if (report === "summary") return { report, filenameRange, currency, result: readPrivateReport({ ...options, path: "reports.summary", input: { ...filters, groupBy: groupBy ?? "project" } }) as SummaryReportResult };
+  if (report === "weekly") return { report, filenameRange, currency, result: readPrivateReport({ ...options, path: "reports.weekly", input: { ...filters, weekStart: weekStart ?? filenameRange.from } }) as WeeklyReportResult };
+  return { report, filenameRange, currency, result: readPrivateReport({ ...options, path: "reports.detailed", input: filters }, true) as DetailedReportResult };
 }
