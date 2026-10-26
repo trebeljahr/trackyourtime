@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 32;
+export const API_LEVEL = 33;
 
 export type ApiLevelChange = {
   level: number;
@@ -189,6 +189,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   },
   { level: 31, release: "0.4.0", added: ["`privacy.inventoryWrite` and `privacy.inventoryVersions`: root-signed encrypted account workspace inventory history, with immutable retries and bounded pages. Workspace conversion remains disabled."] },
   { level: 32, release: "0.4.0", added: ["Authenticated POST reader projections and directory history for trusted private workspace bootstrap, including permanent reserved mode. Conversion and private content writes remain disabled."] },
+  { level: 33, release: "0.4.0", added: ["Read-only profile.displayPreferences for account rendering/idle preferences without plaintext workspace rates or currency. Private workspace conversion and writes remain disabled."] },
 ];
 
 /**

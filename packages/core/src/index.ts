@@ -75,3 +75,5 @@ export * from "./quick-start-view.js";
 export * from "./privacy/entry-view.js";
 
 export * from "./privacy/favorite-view.js";
+
+export * from "./privacy/settings-view.js";

@@ -39,3 +39,5 @@ export * from "./approval-errors.js";
 export * from "./timer-menu.js";
 export * from "./privacy.js";
 export * from "./private-workspace.js";
+
+export * from "./display-preferences.js";

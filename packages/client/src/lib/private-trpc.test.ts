@@ -3,7 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { getUntypedClient } from "@trpc/client";
-import { API_LEVEL } from "@starter/shared";
+import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
 import { OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, ready: async () => {} }));
@@ -102,4 +102,16 @@ it("reads only the current person's private favorites through the real client wi
  expect(await client().query("favorites.list", {})).toMatchObject([{ id: "new-pin", description: "Private pinned work", projectName: null }]);
  await expect(client().mutation("favorites.create", { description: "Do not send" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
  session.lockPrivateData(); await expect(client().query("favorites.list", {})).rejects.toThrow("Unlock"); expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("joins private settings with a separate account-metadata request and reuses its encrypted copy offline", async () => {
+ const f = await privateRecoveryFixture();
+ f.archive.replica.pending[1]!.records.push({ kind: "settings", id: "settings", authorId: null, value: { _id: "settings", workspaceId: "workspace", currency: "AUD", weekStartsOn: 0 } }, { kind: "settingsMoney", id: "settings", authorId: null, value: { _id: "settings", workspaceId: "workspace", defaultHourlyRate: 125 } }, { kind: "members", id: "member", authorId: "owner", value: { _id: "member", workspaceId: "workspace", userId: "owner" } }, { kind: "memberMoney", id: "member", authorId: "owner", value: { _id: "member", workspaceId: "workspace", hourlyRate: 0 } });
+ await seedPrivateWorkspaceClient(f);
+ const fetcher = vi.fn(async (url: RequestInfo | URL, input?: RequestInit) => {
+  expect(String(url)).toContain("/api/trpc/profile.displayPreferences"); expect(String(url)).not.toContain("settings.get"); expect(input?.cache).toBe("no-store"); expect(input?.redirect).toBe("error");
+  return new Response(JSON.stringify({ result: { data: normalizeDisplayPreferences("owner", { theme: "dark", timeFormat: "12h" }) } }), { headers: { "content-type": "application/json" } });
+ }); vi.stubGlobal("fetch", fetcher);
+ const api = client(); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", weekStartsOn: 0, defaultHourlyRate: 125, memberHourlyRate: 0, theme: "dark", timeFormat: "12h" }); expect(fetcher).toHaveBeenCalledOnce();
+ fetcher.mockRejectedValue(new TypeError("Failed to fetch")); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", defaultHourlyRate: 125, theme: "dark" }); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });

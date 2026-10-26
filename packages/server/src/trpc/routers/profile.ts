@@ -1,10 +1,18 @@
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
-import { setAvatarSchema, updateProfileSchema } from "@starter/shared";
+import { setAvatarSchema, updateProfileSchema, normalizeDisplayPreferences } from "@starter/shared";
+import { UserPreferencesModel } from "../../models/Settings.js";
 import { Profile } from "../../models/Profile.js";
 import { removeAvatar, storeAvatar } from "../../services/avatar/index.js";
 
 export const profileRouter = router({
+  /** Existing account preferences only. Never read WorkspaceSettings/member
+   * rates or create a row while a private workspace is rendering. */
+  displayPreferences: protectedProcedure.query(async ({ ctx }) => {
+    ctx.res?.setHeader("Cache-Control", "no-store");
+    const doc = await UserPreferencesModel.findOne({ userId: ctx.user.id }).select("timeFormat durationFormat theme locale idle maxDuration").lean();
+    return normalizeDisplayPreferences(ctx.user.id, doc);
+  }),
   get: protectedProcedure.query(async ({ ctx }) => {
     let profile = await Profile.findOne({ userId: ctx.user.id });
     if (!profile) {
