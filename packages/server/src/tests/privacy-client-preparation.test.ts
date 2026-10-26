@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { before, beforeEach, after, describe, it, mock } from "node:test";
 import mongoose from "mongoose";
@@ -22,6 +22,7 @@ import { privateProjectionPreparationReadiness, recordPrivateProjectionOwnerProo
 import { personalMigrationSource } from "../services/privacy/personal-migration.js";
 import { captureOperatorRecoveryArchive, saveOperatorRecoveryCopy, signOperatorRecoveryProof, verifySavedOperatorRecoveryCopy } from "../services/privacy/operator-recovery.js";
 import { recordOperatorRecoveryProof, verifyStoredOperatorRecoveryProof } from "../services/privacy/operator-proof.js";
+import { captureOperatorCheckpointArchive, encryptOperatorCheckpointArchive, openOperatorCheckpointArchive, saveOperatorCheckpointCopy, signOperatorCheckpointProof, verifyOperatorCheckpointArchive, verifyOperatorCheckpointProof, verifySavedOperatorCheckpointCopy } from "../services/privacy/operator-checkpoint.js";
 import { stagePrivateMigrationBatch, runVerifiedPrivateOriginalStage } from "../services/privacy/migration.js";
 import { mongooseRowStore } from "../services/account-deletion/stores.js";
 import { auditPrivateWorkspaceRetirement } from "../services/privacy/retirement-audit.js";
@@ -130,6 +131,68 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
     assert.notEqual(own.supplement.sourceRevision, archive.supplement.sourceRevision);
     await assert.rejects(captureOperatorRecoveryArchive({ ...f.workerScope, userId: "member" }, f.root), { code: "NOT_FOUND" });
     await assert.rejects(captureOperatorRecoveryArchive(f.workerScope, "A".repeat(43)), { code: "CONFLICT" });
+  });
+  it("backs up and restores the exact frozen ciphertext/control checkpoint with all originals", { skip: !process.env.TEST_MONGOD_PATH && "TEST_MONGOD_PATH needs an operator-local mongod binary" }, async () => {
+    const f = await contentVerification(), key = randomSecret(), operator = await createSigningPair();
+    const folder = await mkdtemp("/private/tmp/trackyourtime-checkpoint-test-");
+    try {
+      await assert.rejects(captureOperatorCheckpointArchive(f.workerScope, f.root), /verification is incomplete/);
+      await recordPrivateProjectionOwnerProof(scope, await f.proof("owner"));
+      await recordPrivateProjectionPersonalProof({ ...scope, userId: "member" }, await f.proof("member"));
+      const archive = await captureOperatorCheckpointArchive(f.workerScope, f.root), expected = {
+        server: scope.server, workspaceId: scope.workspaceId, ownerId: scope.userId, migrationId: f.workerScope.migrationId,
+        modeId: archive.originals.modeId, directoryDigest: archive.originals.directoryDigest, snapshotRoot: f.root,
+      };
+      assert.equal(archive.controls.privateworkspaces.length, 1); assert.equal(archive.controls.privateprojectionroots.length, 1);
+      assert.equal(archive.controls.privaterecords.length, await PrivateRecord.countDocuments());
+      assert.equal(archive.controls.privatemigrationreceipts.length, 2);
+      const path = join(folder, "checkpoint.tytoperator");
+      const saved = await saveOperatorCheckpointCopy(path, archive, key, process.env.TEST_MONGOD_PATH!);
+      assert.equal(saved.controlsDigest, archive.controlsDigest); assert.equal(saved.snapshotRoot, f.root);
+      assert.equal((await stat(path)).mode & 0o777, 0o600);
+      const raw = await readFile(path, "utf8");
+      assert.doesNotMatch(raw, /Original shared tag|Member original secret|<Invoice>|privaterecords|sourceRevision/);
+      assert.equal(raw.includes(Buffer.from(key).toString("base64url")), false);
+      assert.deepEqual(await openOperatorCheckpointArchive(JSON.parse(raw), key, expected), archive);
+      const proof = await signOperatorCheckpointProof(saved, operator.privateKey, operator.publicKey);
+      assert.equal(proof.proof.controlsDigest, archive.controlsDigest);
+      assert.deepEqual(await verifyOperatorCheckpointProof(f.workerScope, proof, operator.publicKey), { verified: true });
+      await assert.rejects(verifyOperatorCheckpointProof(f.workerScope, proof, (await createSigningPair()).publicKey), { code: "FORBIDDEN" });
+      const otherArtifact = structuredClone(proof); otherArtifact.proof.controlsDigest = "a".repeat(64); otherArtifact.signature = await signPrivateChange(operator.privateKey, otherArtifact.proof);
+      await assert.rejects(verifyOperatorCheckpointProof(f.workerScope, otherArtifact, operator.publicKey), { code: "CONFLICT" });
+      const forged = structuredClone(proof); forged.signature = await signPrivateChange(owner.signingPrivateKey, forged.proof);
+      await assert.rejects(verifyOperatorCheckpointProof(f.workerScope, forged, operator.publicKey), { code: "FORBIDDEN" });
+      await assert.rejects(verifyOperatorCheckpointProof({ ...f.workerScope, userId: "member" }, proof, operator.publicKey), { code: "NOT_FOUND" });
+      let at = Date.now(); const clock = mock.method(Date, "now", () => at);
+      try {
+        await assert.rejects(withBusinessTransaction(async () => {
+          await verifyOperatorCheckpointProof(f.workerScope, proof, operator.publicKey);
+          at = proof.proof.expiresAt;
+        }), /checkpoint proof expired/);
+      } finally { clock.mock.restore(); }
+      await assert.rejects(signOperatorCheckpointProof(JSON.parse(JSON.stringify(saved)), operator.privateKey, operator.publicKey), /verified saved operator checkpoint/);
+      await assert.rejects(signOperatorCheckpointProof(Object.freeze({ ...saved }), operator.privateKey, operator.publicKey), /verified saved operator checkpoint/);
+      const rechecked = await verifySavedOperatorCheckpointCopy(path, key, expected, process.env.TEST_MONGOD_PATH!);
+      assert.equal(rechecked.fileSha256, saved.fileSha256);
+      await assert.rejects(saveOperatorCheckpointCopy(path, archive, key, process.env.TEST_MONGOD_PATH!), { code: "EEXIST" });
+      await assert.rejects(openOperatorCheckpointArchive(JSON.parse(raw), randomSecret(), expected));
+      await assert.rejects(openOperatorCheckpointArchive(JSON.parse(raw), key, { ...expected, snapshotRoot: "A".repeat(43) }), /another preparation/);
+      const changedHeader = JSON.parse(raw); changedHeader.header.controlsDigest = "a".repeat(64);
+      await assert.rejects(openOperatorCheckpointArchive(changedHeader, key, expected));
+      const changed = structuredClone(archive); changed.controls.privaterecords.pop();
+      await assert.rejects(verifyOperatorCheckpointArchive(changed), /differ from their digest/);
+      const changedScope = structuredClone(archive); changedScope.controls.privateworkspaces[0]!.workspaceId = "another";
+      await assert.rejects(verifyOperatorCheckpointArchive(changedScope));
+      await assert.rejects(encryptOperatorCheckpointArchive(archive, key.slice(0, 16)), /256-bit/);
+      await assert.rejects(verifyOperatorCheckpointArchive({ ...archive, controls: { ...archive.controls, arbitrarycollection: [] } }));
+      assert.equal(await mongoose.connection.db!.collection("favorites").countDocuments(), 2);
+      assert.equal(await PrivateRecord.countDocuments(), archive.controls.privaterecords.length);
+      assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+      assert.equal((await PrivateWorkspace.findOne().lean())!.backupVerified, false);
+      await PrivateRecord.updateOne({}, { $set: { "box.data": "changed" } });
+      await assert.rejects(captureOperatorCheckpointArchive(f.workerScope, f.root));
+      await assert.rejects(verifyOperatorCheckpointProof(f.workerScope, proof, operator.publicKey));
+    } finally { key.fill(0); await rm(folder, { recursive: true, force: true }); }
   });
   it("records and revalidates only a current independently signed saved-file/restore proof for the exact preparation", { skip: !process.env.TEST_MONGOD_PATH && "TEST_MONGOD_PATH needs an operator-local mongod binary" }, async () => {
     const f = await contentVerification(), operator = await createSigningPair(), key = randomSecret();

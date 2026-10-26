@@ -1049,6 +1049,34 @@ confirmed API 31 support again after native readiness at actual dispatch; an
 unknown/older server cannot trigger optimistic or plaintext fallback. This
 infrastructure is not mounted in active content routing or a conversion UI.
 
+## Exact operator preparation checkpoint recovery
+
+The privileged operator checkpoint format captures all seventeen original
+collections together with the exact frozen mode, directory history, materialized
+ciphertext, snapshot chunks, root, reader indexes and content receipts in one
+workspace-fenced snapshot. It requires complete current content verification
+and refuses unexpected committed history. Its combined 23 MiB/200,000-record
+bound refuses excess rather than truncating. This format is separate from
+owner-readable user files and the earlier originals-only operator backup.
+
+A separate random operator key derives a checkpoint-specific HKDF purpose key.
+AES-GCM authenticates routing/root metadata and the full typed archive. The
+operator-local exclusive 0600 file writer syncs/reopens the saved bytes, restores
+every original and frozen collection in a separate authenticated process, then
+compares every BSON-typed row. Previous files remain untouched; failed encrypted
+evidence remains. Only a current process-branded readback/restore result can
+produce an independent operator signature. Its proof binds source digests,
+frozen-artifact digest, exact mode/directory/root and saved file SHA-256.
+
+The internal proof verifier uses an independently pinned operational public key,
+recaptures current complete originals/artifacts in its caller's transaction and
+checks proof/lease expiry again before commit. It does not store an approval flag,
+reserve, activate or retire a workspace. Installation/auth data, indexes, files,
+quota reconstruction, durable final reservation and post-cutover work/rollback
+still require their own recovery workflow. No public route exposes this archive
+or enables conversion; operator storage/copies remain part of the plaintext
+retirement inventory.
+
 ## Remaining rollout dependencies
 
 - A source-verified migration controller that publishes the separated initial root, consumes
