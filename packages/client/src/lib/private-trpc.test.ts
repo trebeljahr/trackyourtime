@@ -82,3 +82,15 @@ it("does not expose raw private decoder values through a client error or its cau
   expect(isPrivateContentRefusal(failure)).toBe(true); expect((failure as Error).message).toBe("Private workspace data could not be verified. Existing data was kept.");
   expect(JSON.stringify(failure)).not.toContain("Never include this private value");
 });
+
+it("reads private entry lists, details and suggestions locally while refusing the account-wide timer path", async () => {
+  const f = await privateRecoveryFixture(), now = new Date().toISOString();
+  f.archive.replica.pending[1]!.records.push({ kind: "entries", id: "private-entry", authorId: "owner", value: { _id: "private-entry", workspaceId: "workspace", authorId: "owner", description: "Private task [draft]", projectId: null, taskId: null, billable: true, start: now, end: now, durationSec: 1800, currency: "EUR", source: "desktop", createdAt: now, updatedAt: now } }, { kind: "entryMoney", id: "private-entry", authorId: "owner", value: { _id: "private-entry", workspaceId: "workspace", hourlyRate: 90 } });
+  await seedPrivateWorkspaceClient(f); const fetcher = vi.fn(() => { throw new Error("Private entry must stay local"); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), listed = await api.query("entries.list", { from: "2020-01-01", to: "2040-01-01", search: "[draft]" }) as { entries: { description: string; amount: number }[] };
+  expect(listed.entries).toHaveLength(1); expect(listed.entries[0]).toMatchObject({ description: "Private task [draft]", amount: 45 });
+  expect(await api.query("entries.get", { id: "private-entry" })).toMatchObject({ description: "Private task [draft]", hourlyRate: 90 });
+  expect(await api.query("entries.recent", {})).toMatchObject([{ description: "Private task [draft]" }]);
+  expect(await api.query("entries.descriptions", { search: "[draft]" })).toMatchObject([{ description: "Private task [draft]" }]);
+  await expect(api.query("entries.current", {})).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});

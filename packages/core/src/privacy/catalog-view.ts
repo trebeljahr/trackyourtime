@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { canSeeEntry, clientBillingSchema, clientListSchema, computeBudgetProgress, entryDurationSec, hasBudgetTarget, IDLE_BEHAVIORS, normalizeClientBilling, pickCatalogColor, projectBillableByDefault, projectListSchema, projectProjectForVisibility, resolveHourlyRate, rollupVisibility, SUPPORTED_LOCALES, tagListSchema, taskListSchema, TASK_COLOR_OFFSET, type Client, type Project, type Tag, type Task, type Visibility } from "@starter/shared";
-import { assertVerifiedPrivateDirectory, type VerifiedPrivateDirectory } from "./directory.js";
-import { privateValue, type PlainPrivateRecord } from "./records.js";
+import { canSeeEntry, clientBillingSchema, clientListSchema, computeBudgetProgress, entryDurationSec, hasBudgetTarget, IDLE_BEHAVIORS, normalizeClientBilling, pickCatalogColor, projectBillableByDefault, projectListSchema, projectProjectForVisibility, resolveHourlyRate, rollupVisibility, SUPPORTED_LOCALES, tagListSchema, taskListSchema, TASK_COLOR_OFFSET, type Client, type Project, type Tag, type Task } from "@starter/shared";
+import type { VerifiedPrivateDirectory } from "./directory.js";
+import type { PlainPrivateRecord } from "./records.js";
+import { privateViewSource } from "./view-source.js";
 const id = z.string().min(1).max(100), nullableId = id.nullish().transform((value) => value ?? null);
 const timestamp = z.iso.datetime().transform((value) => new Date(value).toISOString());
 const money = z.number().finite().nonnegative().nullable().optional().transform((value) => value ?? null);
@@ -14,7 +15,6 @@ const supported = ["clients.list", "clients.options", "projects.list", "projects
 export type PrivateCatalogQueryPath = typeof supported[number];
 export const isPrivateCatalogQuery = (path: string): path is PrivateCatalogQueryPath => (supported as readonly string[]).includes(path);
 type Scope = { server: string; workspaceId: string; userId: string };
-const address = (row: Pick<PlainPrivateRecord, "kind" | "id">) => JSON.stringify([row.kind, row.id]);
 const wire = ({ _id, ...row }: z.infer<typeof common>) => ({ id: _id, ...row });
 const sorted = <T extends { id: string; name: string }>(rows: T[]) => rows.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "accent" }) || a.id.localeCompare(b.id));
 /** Pure read projection over a verified/decrypted replica. It uses the same
@@ -26,27 +26,7 @@ export function privateCatalogQuery(options: {
   records: readonly PlainPrivateRecord[]; current: () => boolean; now?: number;
 }) {
   const { path, scope, directory, current } = options;
-  const check = () => { if (!current()) throw new Error("Private catalog changed during this read"); assertVerifiedPrivateDirectory(directory); };
-  check();
-  if (directory.signed.directory.server !== scope.server || directory.signed.directory.workspaceId !== scope.workspaceId) throw new Error("Private catalog belongs to another workspace");
-  const actor = directory.signed.directory.members.find((member) => member.userId === scope.userId);
-  if (!actor) throw new Error("Private catalog reader is absent from the trusted directory");
-  const visibility: Visibility = { userId: scope.userId, canViewOthersTime: actor.role === "owner" || actor.canViewOthersTime, canViewOthersMoney: actor.role === "owner" || actor.canViewOthersMoney };
-  const rows = structuredClone(options.records), byAddress = new Map<string, PlainPrivateRecord>();
-  for (const row of rows) { const key = address(row); if (byAddress.has(key)) throw new Error("Duplicate private catalog record"); byAddress.set(key, row); }
-  const values = new Map<string, Record<string, unknown>>();
-  const value = (row: PlainPrivateRecord) => {
-    const key = address(row), found = values.get(key); if (found) return found;
-    const decoded = z.record(z.string(), z.unknown()).parse(privateValue(row.value));
-    if (decoded._id !== row.id || (decoded.workspaceId !== undefined && decoded.workspaceId !== scope.workspaceId)) throw new Error("Private catalog record identity differs from its workspace");
-    values.set(key, decoded); return decoded;
-  };
-  const ofKind = (kind: PlainPrivateRecord["kind"]) => rows.filter((row) => row.kind === kind);
-  const paired = (row: PlainPrivateRecord, kind: PlainPrivateRecord["kind"]) => {
-    const peer = byAddress.get(address({ kind, id: row.id }));
-    if (!peer || peer.authorId !== row.authorId) throw new Error("Private catalog is missing a matching financial record");
-    return value(peer);
-  };
+  const { check, visibility, value, ofKind, paired } = privateViewSource({ scope, directory, records: options.records, current });
   const input = z.record(z.string(), z.unknown()).parse(options.input ?? {});
   if (input.workspaceId !== undefined && input.workspaceId !== scope.workspaceId) throw new Error("Private catalog filter belongs to another workspace");
   const { workspaceId: _workspace, ...filter } = input; void _workspace;

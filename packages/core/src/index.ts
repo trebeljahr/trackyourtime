@@ -70,3 +70,6 @@ export * from "./privacy/original-stage-request.js";
 export * from "./privacy/private-recovery.js";
 
 export * from "./privacy/catalog-view.js";
+
+export * from "./quick-start-view.js";
+export * from "./privacy/entry-view.js";
