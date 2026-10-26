@@ -21,6 +21,7 @@ import {
   WorkspaceMember,
   type WorkspaceMemberDocLike,
 } from "../models/WorkspaceMember.js";
+import { PrivateWorkspace } from "../models/PrivateData.js";
 import { settingsRouter } from "../trpc/routers/settings.js";
 import type { Context } from "../trpc/context.js";
 
@@ -39,12 +40,16 @@ const profileHandle = BusinessProfileModel as unknown as {
   findOne: (filter: Record<string, unknown>) => LeanQuery<Record<string, unknown> | null>;
   updateOne: (...args: unknown[]) => Promise<unknown>;
 };
+const privateModeHandle = PrivateWorkspace as unknown as { findOne: (filter: Record<string, unknown>) => LeanQuery<unknown> };
+let privateMode: unknown = null;
 const real = {
+  privateModeFindOne: privateModeHandle.findOne,
   memberFindOne: memberHandle.findOne,
   profileFindOne: profileHandle.findOne,
   profileUpdateOne: profileHandle.updateOne,
 };
 
+privateModeHandle.findOne = (filter) => { assert.equal(filter.workspaceId, WORKSPACE); return { lean: async () => privateMode }; };
 let current: WorkspaceMemberDocLike;
 let stored: Record<string, unknown> | null = null;
 let writes = 0;
@@ -62,6 +67,7 @@ profileHandle.updateOne = async (_filter, update) => {
 };
 
 after(() => {
+  privateModeHandle.findOne = real.privateModeFindOne;
   memberHandle.findOne = real.memberFindOne;
   profileHandle.findOne = real.profileFindOne;
   profileHandle.updateOne = real.profileUpdateOne;
@@ -205,4 +211,10 @@ describe("saving the business profile merges over the stored row", () => {
     );
     assert.equal(writes, 0);
   });
+});
+
+it("keeps standard business-profile reads refused for an encrypted workspace", async () => {
+  privateMode = { state: "encrypted" }; const before = writes;
+  try { await assert.rejects(as("owner", true).businessProfile(), (error: unknown) => error instanceof TRPCError && error.code === "PRECONDITION_FAILED"); assert.equal(writes, before); }
+  finally { privateMode = null; }
 });

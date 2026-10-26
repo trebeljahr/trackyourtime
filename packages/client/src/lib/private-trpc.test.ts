@@ -115,3 +115,10 @@ it("joins private settings with a separate account-metadata request and reuses i
  const api = client(); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", weekStartsOn: 0, defaultHourlyRate: 125, memberHourlyRate: 0, theme: "dark", timeFormat: "12h" }); expect(fetcher).toHaveBeenCalledOnce();
  fetcher.mockRejectedValue(new TypeError("Failed to fetch")); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", defaultHourlyRate: 125, theme: "dark" }); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
+
+it("reads the private business profile locally and keeps logo/profile writes out of the standard transport", async () => {
+ const f = await privateRecoveryFixture(); f.archive.replica.pending[1]!.records.push({ kind: "businessProfile", id: "profile", authorId: null, value: { _id: "profile", workspaceId: "workspace", legalName: "Private studio", paymentDetails: "Private bank details" } });
+ await seedPrivateWorkspaceClient(f); const fetcher = vi.fn(() => { throw new Error("Private business identity must stay local"); }); vi.stubGlobal("fetch", fetcher);
+ expect(await client().query("settings.businessProfile", {})).toMatchObject({ legalName: "Private studio", paymentDetails: "Private bank details", logo: null, updatedAt: null });
+ await expect(client().mutation("settings.updateBusinessProfile", { legalName: "Do not send" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});

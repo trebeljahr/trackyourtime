@@ -41,3 +41,5 @@ export * from "./privacy.js";
 export * from "./private-workspace.js";
 
 export * from "./display-preferences.js";
+
+export * from "./business-logo-inspection.js";

@@ -77,3 +77,5 @@ export * from "./privacy/entry-view.js";
 export * from "./privacy/favorite-view.js";
 
 export * from "./privacy/settings-view.js";
+
+export * from "./privacy/business-profile-view.js";
