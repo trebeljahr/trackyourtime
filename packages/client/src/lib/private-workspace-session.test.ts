@@ -3,7 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { API_LEVEL } from "@starter/shared";
-import { encryptPrivateRecord, privateInitialSnapshotProjection, privateMemberKeyFingerprint, privateRecordDigest, signPrivateInitialProjectionRoot, signPrivateWorkspaceDirectory, verifyPrivateInitialProjection, verifyPrivateWorkspaceDirectory } from "@starter/core";
+import { createPrivateWorkspaceReplica, decodeSecret, privateInventoryVersionRoot, privateReplicaIdentityFromDirectory, encryptPrivateRecord, privateInitialSnapshotProjection, privateMemberKeyFingerprint, privateRecordDigest, signPrivateInitialProjectionRoot, signPrivateWorkspaceDirectory, verifyPrivateInitialProjection, verifyPrivateWorkspaceDirectory } from "@starter/core";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null, level: 32 as number | null, token: null as string | null, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; }, whenApiOriginReady: () => state.ready() }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
@@ -14,7 +14,7 @@ vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
 const { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, signPrivateAccountWorkspaceInventory, signPrivateWorkspaceDevicePolicy } = await import("./private-replica");
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
-const { openPrivateWorkspaceSession } = await import("./private-workspace-session");
+const { openPrivateWorkspaceSession, capturePrivateWorkspaceRecovery } = await import("./private-workspace-session");
 beforeEach(() => {
   vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory());
   state.origin = "https://api.example.test"; state.level = 32; state.token = null; state.ready = async () => {};
@@ -52,7 +52,7 @@ async function fixture(standard = false) {
     }
     return new Response(JSON.stringify({ result: { data: result } }), { headers: { "content-type": "application/json" } });
   });
-  vi.stubGlobal("fetch", fetcher); return { root, scope, signed, snapshot, fetcher };
+  vi.stubGlobal("fetch", fetcher); return { root, scope, directory, signed, snapshot, signedPolicy, fetcher };
 }
 it.each([null, "synthetic-native-session"])("boots a pinned private workspace using only authenticated ciphertext transport (%s)", async (token) => {
   const f = await fixture(); state.token = token;
@@ -139,4 +139,41 @@ it("invalidates the opened client handle immediately on locking, including unloc
     session.lockPrivateData(); session.installPrivateSession("owner", f.root.secrets);
     expect(opened.current()).toBe(false); await expect(opened.read()).rejects.toThrow(/changed/);
   } finally { opened.close(); }
+});
+
+it("captures a cached private copy offline, preserving signed submitted packets and unsent edits", async () => {
+  const f = await fixture(), opened = await openPrivateWorkspaceSession("owner", "workspace"); opened.close();
+  const host = await privateWorkspaceStorageHost("owner", "workspace"), master = decodeSecret(f.root.secrets.master, 32);
+  try {
+    const replica = await createPrivateWorkspaceReplica({ scope: f.scope, storageKey: `replica:${f.snapshot.root}`, storage: host.storage, exclusive: host.exclusive, resolveStorageKey: () => ({ key: master, current: () => true }), resolveIdentity: () => privateReplicaIdentityFromDirectory(f.directory, "owner", f.root.secrets, () => true) });
+    await replica.enqueue({ records: [{ kind: "tags", id: "tag", authorId: null, value: { name: "Private offline rename" } }] });
+    const offline = async () => { throw new Error("Offline"); };
+    await expect(replica.flushOne({ commit: offline, changes: offline, chainedCommit: offline, chainedChanges: offline })).rejects.toThrow("Offline");
+    await replica.enqueue({ records: [], remove: [{ kind: "favorites", id: "favorite", authorId: "owner" }] });
+    const before = await replica.exportRecovery(); f.fetcher.mockClear(); f.fetcher.mockRejectedValue(new Error("Offline"));
+    const captured = await capturePrivateWorkspaceRecovery("owner", "workspace", f.root.identity);
+    expect(captured.replica).toEqual(before); expect(captured.replica.pending[0]!.submitted).not.toBeNull(); expect(captured.replica.pending[1]!.submitted).toBeNull();
+    expect(await replica.exportRecovery()).toEqual(before); expect(f.fetcher).not.toHaveBeenCalled();
+  } finally { master.fill(0); host.close(); }
+});
+it("backs up an inventory conflict while refusing to use that conflict for live routing", async () => {
+  const f = await fixture(), opened = await openPrivateWorkspaceSession("owner", "workspace"); opened.close();
+  const host = await privateAccountInventoryStorageHost("owner");
+  try {
+    const inventories = await privateAccountWorkspaceInventorySync("owner", host.storage, host.exclusive), before = await inventories.exportRecovery();
+    // Re-sign a valid competing version through a separate enrolled device.
+    const { createPrivateAccountInventorySync, memoryStorage, signPrivateAccountInventory } = await import("@starter/core");
+    const master = decodeSecret(f.root.secrets.master, 32);
+    try {
+      const peer = await createPrivateAccountInventorySync({ ...f.scope, storage: memoryStorage(), exclusive: (task) => task(), capture: () => () => {}, resolveStorageKey: () => ({ key: master, current: () => true }), resolveIdentity: () => ({ master, signingPrivateKey: f.root.secrets.signingPrivateKey, signingPublicKey: f.root.identity.signingPublicKey, current: () => true }) });
+      await peer.enroll(await signPrivateAccountInventory({ ...f.scope, workspaces: before.local.inventory.workspaces, previous: null, signingPrivateKey: f.root.secrets.signingPrivateKey, current: () => true }));
+      const incoming = (await peer.exportPending()).pending[0]!, root = await privateInventoryVersionRoot(incoming);
+      await expect(inventories.pull({ commit: async () => { throw new Error("Unexpected commit"); }, versions: async () => ({ through: 1, root, next: null, versions: [incoming] }) })).rejects.toThrow(/needs review/);
+      const conflicted = await inventories.exportRecovery(); expect(conflicted.conflict).not.toBeNull();
+      f.fetcher.mockClear(); f.fetcher.mockRejectedValue(new Error("Offline"));
+      await expect(openPrivateWorkspaceSession("owner", "workspace")).rejects.toThrow(/needs review/);
+      expect((await capturePrivateWorkspaceRecovery("owner", "workspace", f.root.identity)).inventory).toEqual(conflicted);
+      expect(await inventories.exportRecovery()).toEqual(conflicted); expect(f.fetcher).not.toHaveBeenCalled();
+    } finally { master.fill(0); }
+  } finally { host.close(); }
 });

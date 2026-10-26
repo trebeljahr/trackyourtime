@@ -34,7 +34,7 @@ async function fixture(count = 3) {
   let dropping = false;
   const options = { storage: { ...storage, setItem: async (key: string, value: string) => { if (!dropping) await storage.setItem(key, value); } }, scope, exclusive: <T>(fn: () => Promise<T>) => fn(), resolveStorageKey: () => ({ key: storageKey, current: current() }), resolveIdentity: () => privateReplicaIdentityFromDirectory(directory, "owner", secrets, current()) };
   const replica = await createPrivateWorkspaceReplica(options);
-  return { options: () => ({ transport, expectedRoot, scope, directory, secrets, current: current() }), replica, reopen: () => createPrivateWorkspaceReplica(options), storage, signed, calls, lock: () => { unlocked = false; generation++; }, unlock: () => { unlocked = true; generation++; }, drop: (value: boolean) => { dropping = value; } };
+  return { forRoot: (root: string) => createPrivateWorkspaceReplica({ ...options, storageKey: `replica:${root}` }), options: () => ({ transport, expectedRoot, scope, directory, secrets, current: current() }), replica, reopen: () => createPrivateWorkspaceReplica(options), storage, signed, calls, lock: () => { unlocked = false; generation++; }, unlock: () => { unlocked = true; generation++; }, drop: (value: boolean) => { dropping = value; } };
 }
 it("downloads independent bounded lanes and durably installs only the verified common root", async () => {
   const f = await fixture(105), snapshot = await loadPrivateInitialProjection(f.options());
@@ -102,4 +102,19 @@ it("extends a v3 root with exact durable chained edits across a lost reply and r
   await assert.rejects(reopened.bootstrapProjection(await loadPrivateInitialProjection(f.options())), /cannot replace/);
   await assert.rejects(reopened.pull({ commit: transport.commit, changes: transport.changes }), /requires verified chained history/);
   assert.equal((await reopened.read()).records.length, 5);
+});
+
+it("keeps separate preparation roots and legacy unsent work without cross-slot replacement", async () => {
+  const f = await fixture(), options = f.options(), first = await loadPrivateInitialProjection(options);
+  const otherManifest = { ...f.signed.manifest, migrationId: crypto.randomUUID() };
+  const otherSigned = { manifest: otherManifest, signature: await signPrivateChange(options.secrets.signingPrivateKey, otherManifest) };
+  const second = await loadPrivateInitialProjection({ ...options, expectedRoot: await privateRecordDigest(otherManifest), transport: { ...options.transport, root: async () => otherSigned } });
+  const a = await f.forRoot(first.root), b = await f.forRoot(second.root);
+  await f.replica.enqueue({ records: [{ kind: "tags", id: "old-offline", authorId: null, value: { name: "Legacy unsent work" } }] });
+  await a.bootstrapProjection(first); await b.bootstrapProjection(second);
+  await assert.rejects(a.bootstrapProjection(second), /root|replace/);
+  assert.equal((await (await f.forRoot(first.root)).checkpoint()).activationRoot, first.root);
+  assert.equal((await (await f.forRoot(second.root)).checkpoint()).activationRoot, second.root);
+  assert.equal((await (await f.reopen()).read()).pending, 1);
+  assert.equal((await (await f.reopen()).read()).records[0]!.value.name, "Legacy unsent work");
 });

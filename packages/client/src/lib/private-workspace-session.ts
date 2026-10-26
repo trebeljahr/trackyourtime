@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -19,20 +19,24 @@ export function privateWorkspaceProjectionTransport(userId: string, workspaceId:
  * enrolled/restored beforehand. Its signed policy selects the directory and
  * activation root; server metadata cannot select an adapter or replace pins.
  * Active app routing and content writes are mounted separately. */
-export async function openPrivateWorkspaceSession(userId: string, workspaceId: string) {
+async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, recoveryPolicy?: SignedPrivateWorkspacePolicy) {
   const binding = privateClientScope(userId), scope = Object.freeze({ server: binding.server, userId, workspaceId });
   let closed = false;
   const check = () => { binding.check(); if (closed) throw new Error("Private workspace session was closed"); };
   const current = () => !closed && binding.current();
-  const inventoryHost = await privateAccountInventoryStorageHost(userId);
+  const inventoryHost = recoveryPolicy ? null : await privateAccountInventoryStorageHost(userId);
   let host: Awaited<ReturnType<typeof privateWorkspaceStorageHost>> | null = null;
   try {
     check();
-    const inventories = await privateAccountWorkspaceInventorySync(userId, inventoryHost.storage, inventoryHost.exclusive);
-    const profile = await inventories.read(); check();
-    const row = accountWorkspacePolicy(profile.inventory, scope, workspaceId);
-    if (row.mode !== "encrypted") throw new Error("This workspace has no trusted encrypted storage policy");
-    const pin = row.signedPolicy.policy;
+    let signedPolicy = recoveryPolicy;
+    if (!signedPolicy) {
+      const inventories = await privateAccountWorkspaceInventorySync(userId, inventoryHost!.storage, inventoryHost!.exclusive);
+      const profile = await inventories.read(); check();
+      const row = accountWorkspacePolicy(profile.inventory, scope, workspaceId);
+      if (row.mode !== "encrypted") throw new Error("This workspace has no trusted encrypted storage policy");
+      signedPolicy = row.signedPolicy;
+    }
+    const pin = signedPolicy.policy;
     host = await privateWorkspaceStorageHost(userId, workspaceId); check();
     const resolveStorageKey = () => {
       check(); const key = decodeSecret(privateSession(userId)!.master, 32);
@@ -49,12 +53,20 @@ export async function openPrivateWorkspaceSession(userId: string, workspaceId: s
     if (directory.digest !== pin.directoryDigest) throw new Error("Workspace sharing differs from its trusted activation directory; keep this copy for review");
     const verifiedDirectory = directory, { kty, crv, x, y } = privateSession(userId)!.signingPrivateKey;
     const policies = await createPrivateWorkspacePolicyStore({ scope, storage: host.storage, exclusive: host.exclusive, resolveStorageKey, capture, signingPublicKey: { kty, crv, x, y }, expected: { activationRoot: pin.activationRoot, directoryDigest: pin.directoryDigest } });
-    const policy = await policies.accept(row.signedPolicy); check();
+    const policy = await policies.accept(signedPolicy); check();
     const assertPolicy = () => { check(); requirePrivateWorkspacePolicy(policy, scope, "encrypted"); };
-    const replica = await createPrivateWorkspaceReplica({ scope, storage: host.storage, exclusive: host.exclusive, resolveStorageKey, resolveIdentity: () => {
+    const replicaOptions = { scope, storage: host.storage, exclusive: host.exclusive, resolveStorageKey, resolveIdentity: () => {
       assertPolicy(); return privateReplicaIdentityFromDirectory(verifiedDirectory, userId, privateSession(userId)!, current);
-    } });
+    } };
+    const legacy = await createPrivateWorkspaceReplica(replicaOptions), legacyCheckpoint = await legacy.checkpoint(); assertPolicy();
+    let replica = await createPrivateWorkspaceReplica({ ...replicaOptions, storageKey: `replica:${pin.activationRoot}` });
     let checkpoint = await replica.checkpoint(); assertPolicy();
+    if (legacyCheckpoint.revision || legacyCheckpoint.pending || legacyCheckpoint.head) {
+      if (checkpoint.revision || checkpoint.pending || checkpoint.head) throw new Error("Two private history copies need review; both were kept");
+      // Never ignore unsent work left by an earlier adapter. It remains the
+      // authoritative slot until an explicit migration/recovery replaces it.
+      replica = legacy; checkpoint = legacyCheckpoint;
+    }
     if (checkpoint.revision === 0 || (checkpoint.revision === 1 && !checkpoint.activationRoot && checkpoint.head === pin.activationRoot)) {
       const snapshot = await loadPrivateInitialProjection({ scope, expectedRoot: pin.activationRoot, directory: verifiedDirectory, secrets: privateSession(userId)!, current, transport: transport.projection }); assertPolicy();
       await replica.bootstrapProjection(snapshot); assertPolicy(); checkpoint = await replica.checkpoint();
@@ -64,9 +76,35 @@ export async function openPrivateWorkspaceSession(userId: string, workspaceId: s
     const close = () => { closed = true; ownedHost.close(); };
     return {
       scope, policy, directory: verifiedDirectory, current, close,
+      exportRecovery: async () => { assertPolicy(); const value = await replica.exportRecovery(); assertPolicy(); return value; },
       read: async () => { assertPolicy(); const value = await replica.read(); assertPolicy(); return value; },
       checkpoint: async () => { assertPolicy(); const value = await replica.checkpoint(); assertPolicy(); return value; },
     };
   } catch (error) { closed = true; host?.close(); throw error; }
-  finally { inventoryHost.close(); }
+  finally { inventoryHost?.close(); }
+}
+
+/** Active reads retain inventory conflict refusal. Raw recovery capture is a
+ * separate path and cannot be used to select an active plaintext adapter. */
+export async function openPrivateWorkspaceSession(userId: string, workspaceId: string) {
+  const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
+  return { scope: copy.scope, policy: copy.policy, directory: copy.directory, current: copy.current, close: copy.close, read: copy.read, checkpoint: copy.checkpoint };
+}
+/** Capture includes exact pending packets and inventory conflicts without
+ * replaying them. Private pins are immutable, so a profile reread can be paired
+ * with the workspace snapshot only while its activation policy stays identical. */
+export async function capturePrivateWorkspaceRecovery(userId: string, workspaceId: string, identity: PrivateRecoveryIdentity) {
+  const binding = privateClientScope(userId), host = await privateAccountInventoryStorageHost(userId);
+  let copy: Awaited<ReturnType<typeof openPrivateWorkspaceCopy>> | null = null;
+  try {
+    binding.check();
+    const inventories = await privateAccountWorkspaceInventorySync(userId, host.storage, host.exclusive), before = await inventories.exportRecovery(); binding.check();
+    const row = before.local.inventory.workspaces.find((workspace) => workspace.workspaceId === workspaceId);
+    if (!row || row.mode !== "encrypted") throw new Error("Private recovery needs this workspace's trusted encrypted policy");
+    copy = await openPrivateWorkspaceCopy(userId, workspaceId, row.signedPolicy); binding.check();
+    const replica = await copy.exportRecovery(), inventory = await inventories.exportRecovery(); binding.check();
+    const after = inventory.local.inventory.workspaces.find((workspace) => workspace.workspaceId === workspaceId);
+    if (!after || after.mode !== "encrypted" || canonicalJson(after.signedPolicy.policy) !== canonicalJson(row.signedPolicy.policy)) throw new Error("Private workspace policy changed during recovery capture");
+    return await verifyPrivateWorkspaceRecoveryArchive({ format: "trackyourtime-private-workspace-recovery-v1", server: binding.server, userId, workspaceId, createdAt: new Date().toISOString(), identity: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey, recovery: identity.recovery }, inventory, directory: { signed: copy.directory.signed, digest: copy.directory.digest }, replica }, privateSession(userId)!, binding.current);
+  } finally { copy?.close(); host.close(); }
 }

@@ -7,6 +7,15 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const settings = {
+  privateBackups: {
+    title: "Private workspace backups",
+    description: "Save an encrypted copy of this device’s workspace history and unsent edits. Open it offline with your saved recovery key.",
+    limits: "Includes records this device can read, its account inventory, and exact queued edits. Other members’ private records and local activity history are excluded. This copy may be older than another device’s history.",
+    download: "Save encrypted private workspace backup",
+    manualHint: "Check that the download was saved. Keep your recovery key separate from the backup file.",
+    schedule: "Folder backups run while this workspace is open and private data is unlocked. Every new file is reopened and checked. Existing files stay when backups are off.",
+    failed: "Could not finish the private workspace backup. Existing files and unsent work were kept. Unlock private data and try again.",
+  },
   automaticBackups: {
     title: "Automatic local backups",
     description: "Save encrypted backups of this workspace to a folder you choose. Backups run while this workspace is open and private data is unlocked.",
@@ -35,6 +44,7 @@ export const settings = {
     working: "Preparing…",
     openFailed: "Could not open this backup. Check the file and its backup password or recovery key.",
     openedCombined: "Backup verified, including integration settings and secrets. Saving JSON creates an unencrypted copy. Server restoration is still in development.",
+    openedPrivate: "Private workspace backup verified. The export includes confirmed records and this device’s unsent edits. Saving JSON creates an unencrypted copy. Restoring device state is still in development.",
     opened: "Backup verified. You can save its decrypted recovery JSON. Restoring it to a server is still in development.",
   },
   backups: {

@@ -25,6 +25,47 @@ export class PrivateInventoryConflictError extends Error {
   constructor() { super("Account workspace inventory needs review. Existing data and pending encrypted versions were kept."); this.name = "PrivateInventoryConflictError"; }
 }
 const MAX_STATE_BYTES = 12 * 1024 * 1024;
+export const privateInventoryRecoveryStateSchema = stateSchema;
+export type PrivateInventoryRecoveryState = State;
+type InventoryRecoveryAccess = { scope: Scope; master: Uint8Array; signingPublicKey: PublicKey; current: () => boolean };
+/** Only after authenticating a local store or user-held recovery container.
+ * A server response is not an independent checkpoint/enrollment authority. */
+export async function verifyPrivateInventoryRecoveryState(input: unknown, options: InventoryRecoveryAccess) {
+  const master = new Uint8Array(options.master), scope = { server: options.scope.server, userId: options.scope.userId }, signingPublicKey = structuredClone(options.signingPublicKey), current = options.current;
+  try {
+    if (new TextEncoder().encode(JSON.stringify(input)).length > MAX_STATE_BYTES) throw new PrivateStorageIntegrityError();
+    return (await decodeRecoveryState(stateSchema.parse(input), { scope, master, signingPublicKey, current })).state;
+  } finally { master.fill(0); }
+}
+async function decodeRecoveryState(state: State, options: InventoryRecoveryAccess) {
+  const { scope, master, signingPublicKey, current } = options;
+  const check = () => { if (!current()) throw new PrivateStorageLockedError(); };
+  const open = (signed: SignedPrivateInventoryVersion, previous: PrivateInventoryTransportCheckpoint) => openPrivateInventoryVersion({ signed, previous, scope, master, signingPublicKey, current });
+  const anchoredLocal = async (signed: SignedPrivateAccountInventory) => verifyPrivateAccountInventoryCheckpoint(signed, scope, signingPublicKey, { revision: signed.inventory.revision, digest: await privateRecordDigest(signed.inventory) }, current);
+  let confirmed: VerifiedPrivateAccountInventory | null = null, previous = { ...state.confirmed.checkpoint };
+  if (previous.revision === 0) { if (previous.root !== null || state.confirmed.version !== null) throw new PrivateStorageIntegrityError(); }
+  else {
+    const version = state.confirmed.version;
+    if (!version || version.header.revision !== previous.revision) throw new PrivateStorageIntegrityError();
+    const opened = await open(version, { revision: version.header.revision - 1, root: version.header.previousRoot });
+    if (opened.checkpoint.root !== previous.root) throw new PrivateStorageIntegrityError();
+    // This anchor comes from authenticated local storage or user-held
+    // recovery data, never directly from an API response.
+    confirmed = await anchoredLocal(opened.inventory);
+  }
+  let profile = confirmed;
+  for (const version of state.pending) {
+    const opened = await open(version, previous);
+    profile = profile ? await verifyPrivateAccountInventoryUpdate(opened.inventory, profile, scope, signingPublicKey, current) : await anchoredLocal(opened.inventory);
+    if (!confirmed && previous.revision === 0 && profile.checkpoint.revision !== 1) throw new PrivateStorageIntegrityError();
+    previous = opened.checkpoint;
+  }
+  const local = await anchoredLocal(state.local);
+  if (!profile || local.checkpoint.digest !== profile.checkpoint.digest || local.checkpoint.revision !== state.confirmed.checkpoint.revision + state.pending.length) throw new PrivateStorageIntegrityError();
+  if (state.conflict) await open(state.conflict, state.confirmed.checkpoint);
+  check(); return { state, profile: local, confirmed, tail: previous };
+}
+
 /** Current checks returned with verified values must not retain private keys. */
 function checks(capture: () => void, current: () => boolean) {
   const check = () => { capture(); if (!current()) throw new PrivateStorageLockedError(); };
@@ -59,30 +100,7 @@ export async function createPrivateAccountInventorySync(options: Scope & {
     openPrivateInventoryVersion({ signed, previous, scope, master: access.master, signingPublicKey: access.signingPublicKey, current: access.alive });
   const anchoredLocal = async (signed: SignedPrivateAccountInventory, access: Access) => verifyPrivateAccountInventoryCheckpoint(signed, scope, access.signingPublicKey,
     { revision: signed.inventory.revision, digest: await privateRecordDigest(signed.inventory) }, access.alive);
-  async function decode(state: State, access: Access) {
-    let confirmed: VerifiedPrivateAccountInventory | null = null, previous = { ...state.confirmed.checkpoint };
-    if (previous.revision === 0) { if (previous.root !== null || state.confirmed.version !== null) throw new PrivateStorageIntegrityError(); }
-    else {
-      const version = state.confirmed.version;
-      if (!version || version.header.revision !== previous.revision) throw new PrivateStorageIntegrityError();
-      const opened = await open(version, { revision: version.header.revision - 1, root: version.header.previousRoot }, access);
-      if (opened.checkpoint.root !== previous.root) throw new PrivateStorageIntegrityError();
-      // This anchor comes from authenticated account-scoped local storage,
-      // never directly from an API response.
-      confirmed = await anchoredLocal(opened.inventory, access);
-    }
-    let profile = confirmed;
-    for (const version of state.pending) {
-      const opened = await open(version, previous, access);
-      profile = profile ? await verifyPrivateAccountInventoryUpdate(opened.inventory, profile, scope, access.signingPublicKey, access.alive) : await anchoredLocal(opened.inventory, access);
-      if (!confirmed && previous.revision === 0 && profile.checkpoint.revision !== 1) throw new PrivateStorageIntegrityError();
-      previous = opened.checkpoint;
-    }
-    const local = await anchoredLocal(state.local, access);
-    if (!profile || local.checkpoint.digest !== profile.checkpoint.digest || local.checkpoint.revision !== state.confirmed.checkpoint.revision + state.pending.length) throw new PrivateStorageIntegrityError();
-    if (state.conflict) await open(state.conflict, state.confirmed.checkpoint, access);
-    access.check(); return { state, profile: local, confirmed, tail: previous };
-  }
+  const decode = (state: State, access: Access) => decodeRecoveryState(state, { scope, master: access.master, signingPublicKey: access.signingPublicKey, current: access.alive });
   async function load(access: Access) {
     if (await encrypted.getItem("signed-account-inventory") !== null) throw new Error("A local account inventory already exists. Keep or recover it before enabling durable sync.");
     access.check();
@@ -178,6 +196,7 @@ export async function createPrivateAccountInventorySync(options: Scope & {
       const verified = await receive(transport, access, checked.checkpoint.revision);
       return { revision: verified.revision, root: verified.root, pending: verified.pending };
     }),
+    exportRecovery: () => use(async (access) => structuredClone((await required(access)).state)),
     exportPending: () => use(async (access) => { const value = await required(access); return { pending: structuredClone(value.state.pending), conflict: value.state.conflict ? structuredClone(value.state.conflict) : null }; }),
   };
 }

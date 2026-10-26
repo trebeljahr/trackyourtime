@@ -1,8 +1,9 @@
 import { recoveryBackupConfigSchema, type RecoveryBackupConfiguration, canonicalJson, decodeSecret, deriveRecoveryBackupKey, encodeSecret, unseal, writeRecoveryBackup, type WorkspaceRecoveryArchive, type CombinedWorkspaceRecoveryArchive } from "@starter/core";
 import type { PrivateIdentity } from "@starter/shared";
-import { privateDataOrigin, privateOperationScope, privateSession, privateWorkspaceStorage, type UnlockedIdentity } from "./private-session";
+import { privateSession, privateWorkspaceStorage, type UnlockedIdentity } from "./private-session";
 import { privateWorkspaceStorageHost } from "./private-replica";
 import { backupFolderWriter, recoveryBackupFolder, type BackupDirectory } from "./recovery-backup-folder";
+import { privateClientScope } from "./private-client-scope";
 const CONFIG = "automatic-recovery-backup";
 const configSchema = recoveryBackupConfigSchema;
 type Config = RecoveryBackupConfiguration;
@@ -12,16 +13,16 @@ const publicSettings = ({ intervalDays, folderName, lastBackupAt, lastFileName }
  * a fresh ID before the config pointer commits, preserving the previous setup
  * if persistence fails. Every operation uses the host's account/workspace lock. */
 export async function recoveryBackupController(userId: string, workspaceId: string) {
-  const root = privateSession(userId); if (!root) throw new Error("Unlock private data first");
-  const check = privateOperationScope(userId), server = privateDataOrigin(), scope = { server, userId, workspaceId };
-  const current = () => { try { check(); return privateSession(userId) === root; } catch { return false; } };
+  const binding = privateClientScope(userId), server = binding.server, scope = { server, userId, workspaceId };
+  let closed = false;
+  const current = () => !closed && binding.current();
   const assertCurrent = () => { if (!current()) throw new Error("Private data changed during backup"); };
   const host = await privateWorkspaceStorageHost(userId, workspaceId);
   try {
     const storage = await privateWorkspaceStorage(userId, workspaceId, host.storage); assertCurrent();
     const load = async (): Promise<Config | null> => { const raw = await storage.getItem(CONFIG); assertCurrent(); return raw === null ? null : configSchema.parse(JSON.parse(raw)); };
     return {
-      close: host.close,
+      close: () => { closed = true; host.close(); },
       read: () => host.exclusive(async () => { assertCurrent(); const config = await load(); return config ? publicSettings(config) : null; }),
       configure: (options: { recoveryKey: string; identity?: PrivateIdentity; folder: BackupDirectory; intervalDays: 1 | 7 }) => {
         // Snapshot strings/envelopes before waiting for another window's lock.
@@ -38,6 +39,7 @@ export async function recoveryBackupController(userId: string, workspaceId: stri
               raw = decodeSecret(recoveryKey.trim(), 32);
               if (raw.length !== 32) throw new Error("Invalid recovery key");
               const opened = await unseal<UnlockedIdentity>(raw, identity.recovery, `trackyourtime:identity:v1:${server}:${userId}`); assertCurrent();
+              const root = privateSession(userId)!;
               const coordinates = ({ kty, crv, x, y, d }: UnlockedIdentity["privateKey"]) => ({ kty, crv, x, y, d });
               if (opened.v !== 1 || opened.master !== root.master || canonicalJson(coordinates(opened.privateKey)) !== canonicalJson(coordinates(root.privateKey)) || canonicalJson(coordinates(opened.signingPrivateKey)) !== canonicalJson(coordinates(root.signingPrivateKey))) throw new Error("Recovery key does not match the unlocked account");
               key = await deriveRecoveryBackupKey(recoveryKey, scope); assertCurrent();

@@ -4,7 +4,7 @@ import { webcrypto } from "node:crypto";
 import { Blob as NodeBlob } from "node:buffer";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
-import { encryptBackup, encryptCombinedRecoveryKeyBackup, emptyRecoverySupplementCollections, recoverySupplementDigest, deriveRecoveryBackupKey, emptyRecoveryCollections, encodeSecret, encryptRecoveryKeyBackup, randomSecret, recoveryDigest } from "@starter/core";
+import { encryptPrivateWorkspaceBackup, encryptBackup, encryptCombinedRecoveryKeyBackup, emptyRecoverySupplementCollections, recoverySupplementDigest, deriveRecoveryBackupKey, emptyRecoveryCollections, encodeSecret, encryptRecoveryKeyBackup, randomSecret, recoveryDigest } from "@starter/core";
 const { download } = vi.hoisted(() => ({ download: vi.fn() }));
 vi.mock("@/lib/download", () => ({ downloadBlob: download }));
 const { OpenRecoveryBackup } = await import("./open-recovery-backup");
@@ -72,4 +72,21 @@ it("opens a combined file without network, warns about plaintext secrets and exp
   fireEvent.click(screen.getByText("Save decrypted recovery JSON"));
   expect(download.mock.calls[0]![0]).toBe("trackyourtime-combined-recovery.json");
   expect(JSON.parse(await (download.mock.calls[0]![1] as NodeBlob).text())).toEqual(archive);
+});
+
+it("opens private history and exact unsent work offline without exporting root keys or changing live data", async () => {
+  const { privateRecoveryFixture } = await import("@/test-private-recovery"), f = await privateRecoveryFixture();
+  const text = JSON.stringify(await encryptPrivateWorkspaceBackup(f.archive, f.key, f.secrets, f.current));
+  const fetcher = vi.fn(() => { throw new Error("No network allowed"); }); vi.stubGlobal("fetch", fetcher);
+  render(<OpenRecoveryBackup standalone />);
+  fireEvent.change(screen.getByLabelText("Encrypted recovery file"), { target: { files: [{ size: text.length, text: async () => text }] } });
+  fireEvent.change(screen.getByLabelText("Backup password or recovery key"), { target: { value: f.recoveryKey } }); fireEvent.click(screen.getByText("Open local backup"));
+  expect(await screen.findByRole("status")).toHaveTextContent("this device’s unsent edits"); expect(download).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Save decrypted recovery JSON"));
+  expect(download.mock.calls[0]![0]).toBe("trackyourtime-private-workspace-export.json");
+  const raw = await (download.mock.calls[0]![1] as NodeBlob).text(), value = JSON.parse(raw);
+  expect(value.confirmedRecords).toHaveLength(2); expect(value.records.find((row: { id: string }) => row.id === "tag").value.name).toBe("Unsent private rename");
+  expect(value.pending).toEqual(f.archive.replica.pending); expect(value.identity).toBeUndefined(); expect(value.inventory).toBeUndefined();
+  for (const secret of [f.secrets.master, f.secrets.privateKey.d!, f.secrets.signingPrivateKey.d!, f.recoveryKey]) expect(raw).not.toContain(secret);
+  expect(await f.replica.exportRecovery()).toEqual(f.archive.replica); expect(fetcher).not.toHaveBeenCalled();
 });

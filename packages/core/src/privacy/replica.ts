@@ -13,8 +13,10 @@ import { privateWorkspaceChainRoot, signPrivateChainedWorkspaceEdit, verifyPriva
 import type { VerifiedPrivateDirectory } from "./directory.js";
 const plainSchema = privateRecordRefSchema.extend({ value: z.record(z.string(), z.json()) }).strict();
 const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable(), chain: privateWorkspaceChainSchema.nullable().default(null), directoryDigest: z.string().nullable().default(null) }).strict();
-const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), activationRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict().refine((state) => !state.activationRoot || (!!state.head && state.revision >= 1 && (state.revision !== 1 || state.head === state.activationRoot)), "Private replica activation checkpoint is inconsistent");
-type State = z.infer<typeof stateSchema>;
+const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), activationRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict().refine((state) => state.revision !== 0 || (state.head === null && state.records.length === 0), "Private replica zero checkpoint contains committed data").refine((state) => !state.activationRoot || (!!state.head && state.revision >= 1 && (state.revision !== 1 || state.head === state.activationRoot)), "Private replica activation checkpoint is inconsistent");
+export const privateReplicaRecoveryStateSchema = stateSchema;
+export type PrivateReplicaRecoveryState = z.infer<typeof stateSchema>;
+type State = PrivateReplicaRecoveryState;
 const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
 export class PrivateReplicaConflictError extends Error {
   constructor() { super("The workspace changed while this edit was offline. The queued edit was kept for review."); this.name = "PrivateReplicaConflictError"; }
@@ -44,11 +46,16 @@ export type PrivateReplicaTransport = {
  * values between calls. Each bounded part is encrypted; the segmented state size bound applies. */
 export async function createPrivateWorkspaceReplica(options: {
   storage: KeyValueStorage; scope: PrivateStorageScope; exclusive: QueueExclusive;
+  /** Root-specific staging uses the final slot before any irreversible pin.
+   * The default remains readable for earlier local-only replicas. */
+  storageKey?: string;
   resolveStorageKey: () => PrivateStorageKey | null;
   resolveIdentity: () => PrivateReplicaIdentity | null;
 }) {
   const scope = { ...options.scope };
   const { userId, workspaceId } = scope;
+  const storageKey = options.storageKey ?? "replica";
+  if (!/^replica(?::[A-Za-z0-9_-]{43})?$/.test(storageKey)) throw new Error("Invalid private replica storage slot");
   const encrypted = await createPrivateStorage({ storage: options.storage, scope, resolveKey: options.resolveStorageKey });
   const storage = segmentedPrivateStorage(encrypted, () => identity().check);
   const identity = () => {
@@ -57,10 +64,12 @@ export async function createPrivateWorkspaceReplica(options: {
     return { ...value, check: () => { if (!value.current()) throw new PrivateStorageLockedError(); } };
   };
   const load = async (): Promise<State> => {
-    const raw = await storage.getItem("replica");
-    return raw === null ? { v: 1, revision: 0, head: null, activationRoot: null, records: [], pending: [] } : stateSchema.parse(JSON.parse(raw));
+    const raw = await storage.getItem(storageKey);
+    const state = raw === null ? { v: 1 as const, revision: 0, head: null, activationRoot: null, records: [], pending: [] } : stateSchema.parse(JSON.parse(raw));
+    if (state.activationRoot && storageKey !== "replica" && storageKey !== `replica:${state.activationRoot}`) throw new Error("Private history differs from its storage root; the copy was kept");
+    return state;
   };
-  const save = (state: State) => storage.setItem("replica", JSON.stringify(state));
+  const save = (state: State) => storage.setItem(storageKey, JSON.stringify(state));
   const pull = async (transport: PrivateReplicaTransport, through?: number) => {
     const access = identity(), state = await load(); access.check();
     if (state.head !== null && (!transport.chainedChanges || !access.directory)) throw new Error("This workspace requires verified chained history; stored data was kept");
@@ -96,6 +105,7 @@ export async function createPrivateWorkspaceReplica(options: {
   };
   const installInitial = async (state: State, root: string, records: readonly z.infer<typeof encryptedRecordSchema>[]) => {
     const access = identity(); access.check();
+    if (storageKey !== "replica" && storageKey !== `replica:${root}`) throw new Error("Initial snapshot differs from its private storage root");
     if (state.pending.length) throw new Error("Keep or export pending edits before installing an initial snapshot");
     if (state.revision === 1 && state.head === root && canonicalJson(state.records) === canonicalJson(records)) {
       if (!state.activationRoot) { await save({ ...state, activationRoot: root }); access.check(); }
@@ -107,6 +117,7 @@ export async function createPrivateWorkspaceReplica(options: {
   };
   return {
     namespace: encrypted.namespace,
+    exportRecovery: () => options.exclusive(async () => { const access = identity(), state = await load(); access.check(); return structuredClone(state); }),
     checkpoint: () => options.exclusive(async () => {
       const access = identity(), state = await load(); access.check();
       return { activationRoot: state.activationRoot, revision: state.revision, head: state.head, pending: state.pending.length };

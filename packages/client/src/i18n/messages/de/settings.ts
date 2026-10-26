@@ -4,6 +4,15 @@ import type { settings as source } from "../en/settings";
 
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
+  privateBackups: {
+    title: "Private Workspace-Sicherungen",
+    description: "Speichere eine verschlüsselte Kopie des Workspace-Verlaufs und nicht gesendeter Änderungen dieses Geräts. Öffne sie offline mit deinem Wiederherstellungsschlüssel.",
+    limits: "Enthält lesbare Daten dieses Geräts, sein Kontoverzeichnis und die genauen ausstehenden Änderungen. Private Daten anderer Mitglieder und lokale Aktivitätsdaten sind ausgeschlossen. Andere Geräte können neuere Daten haben.",
+    download: "Verschlüsselte private Workspace-Sicherung speichern",
+    manualHint: "Prüfe, ob der Download gespeichert wurde. Bewahre den Wiederherstellungsschlüssel getrennt von der Sicherungsdatei auf.",
+    schedule: "Ordnersicherungen laufen, solange dieser Workspace geöffnet und private Daten entsperrt sind. Jede neue Datei wird erneut geöffnet und geprüft. Vorhandene Dateien bleiben beim Abschalten erhalten.",
+    failed: "Die private Workspace-Sicherung ist fehlgeschlagen. Vorhandene Dateien und nicht gesendete Änderungen bleiben erhalten. Entsperre private Daten und versuche es erneut.",
+  },
   automaticBackups: {
     title: "Automatische lokale Sicherungen",
     description: "Speichere verschlüsselte Sicherungen dieses Arbeitsbereichs in einem Ordner deiner Wahl. Sie laufen, solange dieser Arbeitsbereich geöffnet und deine privaten Daten entsperrt sind.",
@@ -32,6 +41,7 @@ export const settings: Translation<typeof source> = {
     working: "Wird vorbereitet …",
     openFailed: "Die Sicherung konnte nicht geöffnet werden. Prüfe Datei und Sicherungspasswort oder Wiederherstellungsschlüssel.",
     openedCombined: "Sicherung geprüft, einschließlich Integrationseinstellungen und geheimer Schlüssel. Beim Speichern der JSON entsteht eine unverschlüsselte Kopie. Die Wiederherstellung auf dem Server ist noch in Entwicklung.",
+    openedPrivate: "Private Workspace-Sicherung geprüft. Der Export enthält bestätigte Daten und nicht gesendete Änderungen dieses Geräts. Beim Speichern der JSON entsteht eine unverschlüsselte Kopie. Die Gerätewiederherstellung ist noch in Entwicklung.",
     opened: "Sicherung geprüft. Du kannst die entschlüsselte Wiederherstellungs-JSON speichern. Das Wiederherstellen auf einem Server ist noch in Entwicklung.",
   },
   backups: {

@@ -1,4 +1,4 @@
-import { parseCombinedRecoveryKeyBackup, parseRecoveryKeyBackup, type RecoveryBackupFolder } from "@starter/core";
+import { parseCombinedRecoveryKeyBackup, parsePrivateWorkspaceBackup, parseRecoveryKeyBackup, PRIVATE_RECOVERY_MAX_FILE_BYTES, type RecoveryBackupFolder } from "@starter/core";
 import { privateDatabaseName } from "./private-indexed-storage";
 export type BackupDirectory = FileSystemDirectoryHandle & {
   queryPermission: (options: { mode: "readwrite" }) => Promise<PermissionState>;
@@ -48,16 +48,25 @@ export async function recoveryBackupFolder(scope: BackupFolderScope, value?: Bac
   }));
 }
 export function backupFolderWriter(directory: BackupDirectory): RecoveryBackupFolder {
+  return folderWriter(directory, false);
+}
+export function privateBackupFolderWriter(directory: BackupDirectory): RecoveryBackupFolder {
+  return folderWriter(directory, true);
+}
+function folderWriter(directory: BackupDirectory, privateWorkspace: boolean): RecoveryBackupFolder {
+  const limit = privateWorkspace ? PRIVATE_RECOVERY_MAX_FILE_BYTES : 36 * 1024 * 1024;
   const nameCheck = (name: string) => {
-    if (!/^trackyourtime-recovery-[0-9TZ-]+-[0-9a-f-]{36}\.tytrecovery$/.test(name)) throw new Error("Invalid backup filename");
+    const pattern = privateWorkspace ? /^trackyourtime-private-recovery-[0-9TZ-]+-[0-9a-f-]{36}\.tytrecovery$/ : /^trackyourtime-recovery-[0-9TZ-]+-[0-9a-f-]{36}\.tytrecovery$/;
+    if (!pattern.test(name)) throw new Error("Invalid backup filename");
   };
   return {
     granted: async () => (await directory.queryPermission({ mode: "readwrite" })) === "granted",
     async write(name, contents, current) {
       nameCheck(name);
-      if (contents.length > 36 * 1024 * 1024) throw new Error("Backup exceeds its file limit");
+      if (contents.length > limit) throw new Error("Backup exceeds its file limit");
       const parsed = JSON.parse(contents);
-      if (parsed?.header?.format === "trackyourtime-recovery-key-backup-v2") parseCombinedRecoveryKeyBackup(parsed);
+      if (privateWorkspace) parsePrivateWorkspaceBackup(parsed);
+      else if (parsed?.header?.format === "trackyourtime-recovery-key-backup-v2") parseCombinedRecoveryKeyBackup(parsed);
       else parseRecoveryKeyBackup(parsed);
       if (!current()) throw new Error("Private data changed during backup");
       const file = await directory.getFileHandle(name, { create: true });
@@ -70,7 +79,7 @@ export function backupFolderWriter(directory: BackupDirectory): RecoveryBackupFo
         await stream.close();
       } catch (error) { try { await stream.abort(); } catch { /* The failed new file is removed by the job. */ } throw error; }
     },
-    async read(name) { nameCheck(name); const file = await (await directory.getFileHandle(name)).getFile(); if (file.size > 36 * 1024 * 1024) throw new Error("Backup exceeds its file limit"); return file.text(); },
+    async read(name) { nameCheck(name); const file = await (await directory.getFileHandle(name)).getFile(); if (file.size > limit) throw new Error("Backup exceeds its file limit"); return file.text(); },
     async remove(name) { nameCheck(name); await directory.removeEntry(name); },
   };
 }
