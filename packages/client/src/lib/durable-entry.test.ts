@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {}, isWorkspaceContentProcedure: () => false, assertStandardContentRequest: async () => () => {} }));
 import { durableEntryEnvelope, durableQueuedWrite, OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
 
 vi.mock("@/lib/api-origin", () => ({

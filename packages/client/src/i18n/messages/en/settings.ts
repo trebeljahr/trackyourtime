@@ -7,6 +7,13 @@
  * with `t.rich`. Words every screen uses are already in `common`.
  */
 export const settings = {
+  privateWorkspaceGate: {
+    lockedTitle: "Unlock private workspace data",
+    failedTitle: "Private data is unavailable",
+    lockedDetail: "This device keeps encrypted workspace data. Unlock your private data keys to continue.",
+    failed: "Could not verify this device’s private data settings. Allow storage for this app, then try again. Existing work was kept.",
+    retry: "Try again", openBackup: "Open a local backup", signOut: "Sign out",
+  },
   privateBackups: {
     title: "Private workspace backups",
     description: "Save an encrypted copy of this device’s workspace history and unsent edits. Open it offline with your saved recovery key.",
@@ -65,6 +72,7 @@ export const settings = {
     failed: "Could not encrypt or unlock local history. Check your keys and try again. Existing history was kept.",
   },
   privateData: {
+    keysUnavailable: "Your existing encryption keys are unavailable here. Connect to your server, or open a saved local backup.",
     verificationTitle: "Your key verification code",
     verificationHint: "Compare this code with a workspace owner through a trusted call or message before sharing encrypted data. This code is safe to share. Keep your recovery key private.",
     verificationLocked: "Unlock your private data to see the code derived from your keys on this device.",

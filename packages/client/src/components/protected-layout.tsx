@@ -10,6 +10,7 @@ import { StartupScreen } from "@/components/startup-screen";
 import { isTokenShell } from "@/lib/shell";
 import { AppShell } from "@/components/app-shell";
 import { loginRedirectHref } from "@/lib/safe-next";
+import { PrivateWorkspaceBoundary } from "./private-workspace-boundary";
 
 type Verdict = "checking" | "in" | "out";
 
@@ -19,7 +20,7 @@ export function ProtectedLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isAuthenticated, isLoading, sessionError } = useAuth();
+  const { user, isAuthenticated, isLoading, sessionError } = useAuth();
   // Native hydration includes the bearer token and selected API origin.
   const { token: nativeToken, ready: sessionReady } = useNativeSession();
 
@@ -84,5 +85,5 @@ export function ProtectedLayout({
     return <StartupScreen />;
   }
 
-  return <AppShell>{children}</AppShell>;
+  return <PrivateWorkspaceBoundary userId={user?.id ?? null}><AppShell>{children}</AppShell></PrivateWorkspaceBoundary>;
 }

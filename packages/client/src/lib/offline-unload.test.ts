@@ -13,6 +13,8 @@
  * duplicate mostly did not happen by luck.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 
 const isNative = vi.fn(() => false);
 vi.mock("@/lib/shell", async () =>

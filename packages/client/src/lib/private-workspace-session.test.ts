@@ -9,7 +9,7 @@ vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiO
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => state.level }));
 vi.mock("./native-session", () => ({ getNativeToken: () => state.token }));
-vi.mock("./shell", () => ({ clientId: () => "desktop" }));
+vi.mock("./shell", () => ({ clientId: () => "desktop", isCapacitor: () => false }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
 const { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, signPrivateAccountWorkspaceInventory, signPrivateWorkspaceDevicePolicy } = await import("./private-replica");

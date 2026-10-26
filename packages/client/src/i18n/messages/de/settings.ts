@@ -4,6 +4,13 @@ import type { settings as source } from "../en/settings";
 
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
+  privateWorkspaceGate: {
+    lockedTitle: "Private Workspace-Daten entsperren",
+    failedTitle: "Private Daten sind nicht verfügbar",
+    lockedDetail: "Dieses Gerät bewahrt verschlüsselte Workspace-Daten auf. Entsperre deine privaten Datenschlüssel, um fortzufahren.",
+    failed: "Die privaten Dateneinstellungen dieses Geräts konnten nicht geprüft werden. Erlaube Speicherzugriff für diese App und versuche es erneut. Vorhandene Arbeit bleibt erhalten.",
+    retry: "Erneut versuchen", openBackup: "Lokale Sicherung öffnen", signOut: "Abmelden",
+  },
   privateBackups: {
     title: "Private Workspace-Sicherungen",
     description: "Speichere eine verschlüsselte Kopie des Workspace-Verlaufs und nicht gesendeter Änderungen dieses Geräts. Öffne sie offline mit deinem Wiederherstellungsschlüssel.",
@@ -62,6 +69,7 @@ export const settings: Translation<typeof source> = {
     failed: "Der lokale Verlauf konnte nicht verschlüsselt oder entsperrt werden. Prüfe deine Schlüssel. Vorhandene Daten wurden beibehalten.",
   },
   privateData: {
+    keysUnavailable: "Deine vorhandenen Verschlüsselungsschlüssel sind hier nicht verfügbar. Verbinde dich mit deinem Server oder öffne eine gespeicherte lokale Sicherung.",
     verificationTitle: "Dein Schlüssel-Prüfcode",
     verificationHint: "Vergleiche diesen Code über einen vertrauenswürdigen Anruf oder eine Nachricht mit dem Workspace-Eigentümer, bevor ihr verschlüsselte Daten teilt. Diesen Code kannst du weitergeben. Halte deinen Wiederherstellungsschlüssel geheim.",
     verificationLocked: "Entsperre deine privaten Daten, um den Code aus deinen Schlüsseln auf diesem Gerät anzuzeigen.",

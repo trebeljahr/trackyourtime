@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// Transport behavior is isolated from enrollment; private dispatch has separate real-client tests.
+vi.mock("./private-content-route", () => ({ isWorkspaceContentProcedure: () => false, assertStandardContentRequest: async () => () => {}, currentWorkspaceContentRoute: async () => { throw new Error("Unexpected private routing"); }, readPrivateWorkspaceQuery: async () => { throw new Error("Unexpected private read"); } }));
 import { getUntypedClient, TRPCClientError } from "@trpc/client";
 import { initTRPC, TRPCError } from "@trpc/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";

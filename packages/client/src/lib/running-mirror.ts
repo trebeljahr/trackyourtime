@@ -41,6 +41,8 @@ import type { TimeEntry } from "@starter/shared";
 
 import { isCapacitor, isTokenShell } from "@/lib/shell";
 import { preferencesStorage } from "@/mobile/preferences-storage";
+import { assertStandardWorkspaceContent } from "./private-content-route";
+import { isPrivateContentRefusal } from "./private-content-error";
 
 const MIRROR_KEY = "trackyourtime.running-entry";
 
@@ -105,13 +107,22 @@ export const writeRunningMirror = async (
     await store().removeItem(MIRROR_KEY);
     return;
   }
-  await store().setItem(MIRROR_KEY, encodeVersioned(MIRROR_SPEC.version, entry));
+  try {
+    const check = await assertStandardWorkspaceContent(entry.authorId, entry.workspaceId); check();
+    await store().setItem(MIRROR_KEY, encodeVersioned(MIRROR_SPEC.version, entry)); check();
+  } catch (error) {
+    if (!isPrivateContentRefusal(error)) throw error;
+    await store().removeItem(MIRROR_KEY);
+  }
 };
 
 /** Read the mirror back. Null on web, and whenever it holds nothing usable. */
 export const readRunningMirror = async (): Promise<TimeEntry | null> => {
   if (!isTokenShell()) return null;
-  return parseMirrored(await store().getItem(MIRROR_KEY));
+  const entry = parseMirrored(await store().getItem(MIRROR_KEY));
+  if (!entry) return null;
+  try { const check = await assertStandardWorkspaceContent(entry.authorId, entry.workspaceId); check(); return entry; }
+  catch (error) { if (!isPrivateContentRefusal(error)) throw error; await store().removeItem(MIRROR_KEY); return null; }
 };
 
 /**

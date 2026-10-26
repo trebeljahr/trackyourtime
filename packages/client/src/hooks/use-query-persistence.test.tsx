@@ -11,7 +11,7 @@ const mock = vi.hoisted(() => ({
   snapshot: { activeId: "w1" as string | null },
   owner: "u1",
   membership: { data: [{ id: "w1", role: "member", permissions: { money: false } }], isError: false },
-  activate: vi.fn(async (_scope: CacheScope) => {}), pause: vi.fn(), forget: vi.fn(async () => {}),
+  protect: vi.fn(async (_scope: unknown) => {}), activate: vi.fn(async (_scope: CacheScope) => {}), pause: vi.fn(), forget: vi.fn(async () => {}),
 }));
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => mock.auth }));
 vi.mock("@/hooks/use-api-origin", () => ({ useApiOrigin: () => mock.origin }));
@@ -22,7 +22,7 @@ vi.mock("@/lib/active-workspace", () => ({
   getKnownWorkspacesOwner: () => mock.owner,
   subscribeActiveWorkspace: () => () => {},
 }));
-vi.mock("@/lib/app-query-persistence", () => ({ getQueryPersistence: () => ({ activate: mock.activate, pause: mock.pause, forget: mock.forget }) }));
+vi.mock("@/lib/app-query-persistence", () => ({ getQueryPersistence: () => ({ protectPrivateAccount: mock.protect, activate: mock.activate, pause: mock.pause, forget: mock.forget }) }));
 vi.mock("@/lib/trpc", () => ({ trpc: { workspaces: { list: { useQuery: () => mock.membership } } } }));
 function Probe() { useQueryPersistence(); return null; }
 function mount() {
@@ -32,6 +32,7 @@ function mount() {
   return { ...view, update: () => view.rerender(tree()) };
 }
 beforeEach(() => {
+  localStorage.clear(); mock.protect.mockClear();
   mock.auth = { user: { id: "u1" }, isLoading: false }; mock.origin = { ready: true };
   mock.snapshot = { activeId: "w1" }; mock.owner = "u1";
   mock.membership = { data: [{ id: "w1", role: "member", permissions: { money: false } }], isError: false };
@@ -67,4 +68,11 @@ describe("persistence access gate", () => {
     await waitFor(() => expect(mock.forget).toHaveBeenCalledTimes(1));
     view.unmount(); expect(mock.pause).toHaveBeenCalledTimes(1);
   });
+});
+
+it("does not activate plaintext catalog persistence for an enrolled private account", async () => {
+  const { requirePrivateRouting } = await import("@/lib/private-routing-requirement");
+  await requirePrivateRouting({ server: "https://one.test", userId: "u1" }, () => true);
+  const view = mount(); await waitFor(() => expect(mock.protect).toHaveBeenCalledWith({ server: "https://one.test", userId: "u1" }));
+  expect(mock.activate).not.toHaveBeenCalled(); view.unmount(); localStorage.clear();
 });

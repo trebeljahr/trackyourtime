@@ -76,6 +76,8 @@ export type {
 } from "@starter/core";
 
 import { translate } from "@/i18n/translate";
+import { assertStandardWorkspaceContent } from "./private-content-route";
+import { isPrivateContentRefusal } from "./private-content-error";
 import { currentServerApiLevel } from "@/lib/server-level";
 import {
   preferencesStorage,
@@ -160,6 +162,12 @@ export const getOfflineQueue = (): OfflineQueue => {
       storage: getStorage(),
       key: OFFLINE_QUEUE_STORAGE_KEY,
       durableEntries: true,
+      beforeContentWrite: async (row) => {
+        // Legacy unstamped rows remain inspectable/recoverable. Live entry
+        // boundaries below require an actor before creating another row.
+        if (!row.owner || !row.server || !row.workspaceId) return () => {};
+        return assertStandardWorkspaceContent(row.owner, row.workspaceId, row.server);
+      },
       exclusive: typeof window === "undefined" ? undefined : async (task) => {
         // Finish a native store migration under this same lock before entering
         // normal queue ownership. Acquiring it from a storage read inside the
@@ -569,10 +577,12 @@ export const enqueueOffline = async <K extends OfflineOp>(
   // stamped before it lands would be unstamped — claimable by whichever
   // workspace resolves first.
   await whenActiveWorkspaceReady();
+  const actor = addressed === undefined ? owner ?? lastOwner : addressed.owner;
+  if (!actor) throw new OfflineQueueScopeNotReadyError();
   await getOfflineQueue().enqueue(
     op,
     payload,
-    (addressed === undefined ? owner ?? lastOwner : addressed.owner) ?? undefined,
+    actor,
     addressed?.server ?? getAbsoluteApiOrigin(),
     (workspaceId === undefined ? getActiveWorkspaceId() : workspaceId) ?? undefined,
   );
@@ -611,6 +621,7 @@ export const submitDurableEntry = async <T>(
 
 /** Attach the optimistic entry to its existing saved request, never enqueue twice. */
 export const retainDurableEntry = async (error: unknown, tempId?: string): Promise<boolean> => {
+  if (isPrivateContentRefusal(error)) return false;
   const queued = durableQueuedWrite(error);
   if (!queued) return false;
   if (tempId) await getOfflineQueue().amendPayloads((row) => row.id === queued.rowId
@@ -1113,6 +1124,7 @@ export const isTransientServerError = (error: unknown): boolean =>
  * conflict, auth) is never a network error — those must roll back.
  */
 export const isNetworkError = (error: unknown): boolean => {
+  if (isPrivateContentRefusal(error)) return false;
   if (durableQueuedWrite(error)) return true;
   if (hasServerCode(error)) return false;
   if (!isOnline()) return true;

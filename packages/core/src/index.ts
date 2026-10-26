@@ -68,3 +68,5 @@ export * from "./privacy/preparation-request.js";
 
 export * from "./privacy/original-stage-request.js";
 export * from "./privacy/private-recovery.js";
+
+export * from "./privacy/catalog-view.js";

@@ -77,6 +77,9 @@ function checks(capture: () => void, current: () => boolean) {
 export async function createPrivateAccountInventorySync(options: Scope & {
   storage: KeyValueStorage; exclusive: QueueExclusive; capture: () => () => void;
   resolveStorageKey: () => PrivateStorageKey | null; resolveIdentity: () => PrivateInventorySyncIdentity | null;
+  /** A client can durably require unlock before private state is published.
+   * It must not take this same account lock or send content over the network. */
+  beforePrivateState?: (phase: "read" | "publish", inventoryDigest: string) => Promise<void>;
 }) {
   const scope = { server: options.server, userId: options.userId };
   const encrypted = await createPrivateStorage({ storage: options.storage, scope: { ...scope, workspaceId: PRIVATE_ACCOUNT_INVENTORY_SCOPE }, resolveKey: options.resolveStorageKey });
@@ -107,12 +110,16 @@ export async function createPrivateAccountInventorySync(options: Scope & {
     const raw = await storage.getItem("inventory-sync"); access.check();
     if (raw === null) return null;
     if (new TextEncoder().encode(raw).length > MAX_STATE_BYTES) throw new PrivateStorageIntegrityError();
-    return decode(stateSchema.parse(JSON.parse(raw)), access);
+    const decoded = await decode(stateSchema.parse(JSON.parse(raw)), access);
+    if (decoded.profile.signed.inventory.workspaces.some((row) => row.mode === "encrypted")) await options.beforePrivateState?.("read", await privateRecordDigest({ inventory: decoded.profile.checkpoint.digest, conflict: decoded.state.conflict }));
+    access.check(); return decoded;
   }
   async function save(state: State, access: Access) {
     const checked = stateSchema.parse(state), raw = JSON.stringify(checked);
     if (new TextEncoder().encode(raw).length > MAX_STATE_BYTES) throw new Error("Pending account inventory exceeds local storage limits. Existing versions were kept.");
-    await decode(checked, access); access.check(); await storage.setItem("inventory-sync", raw); access.check();
+    const decoded = await decode(checked, access); access.check();
+    if (decoded.profile.signed.inventory.workspaces.some((row) => row.mode === "encrypted")) await options.beforePrivateState?.("publish", await privateRecordDigest({ inventory: decoded.profile.checkpoint.digest, conflict: decoded.state.conflict }));
+    access.check(); await storage.setItem("inventory-sync", raw); access.check();
     const saved = await load(access);
     if (!saved || canonicalJson(saved.state) !== canonicalJson(checked)) throw new PrivateStorageIntegrityError();
     return saved;

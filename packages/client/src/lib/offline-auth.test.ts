@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 import { createOfflineQueue, memoryStorage } from "@starter/core";
 
 import { isAuthError, isForbiddenError, isNetworkError } from "@/lib/offline";

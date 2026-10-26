@@ -10,6 +10,8 @@
  */
 import { TRPCClientError } from "@trpc/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 import {
   amendQueuedStart,
   cancelQueuedForTemp,

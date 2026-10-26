@@ -17,6 +17,7 @@ import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 
 import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
+import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -83,6 +84,35 @@ export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => 
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
     : withWorkspaceId(op.input, PENDING_WORKSPACE);
   return next(input === op.input ? op : { ...op, input });
+};
+
+/** Consume private operations before the legacy outbox or transport can see
+ * plaintext. Unsupported private operations refuse rather than fall back. */
+export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  if (!isWorkspaceContentProcedure(op.path)) return next(op);
+  return observable((observer) => {
+    let cancelled = false, subscription: { unsubscribe: () => void } | undefined;
+    const abort = new AbortController();
+    void (async () => {
+      await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
+      if (cancelled) return;
+      const input = op.input !== null && typeof op.input === "object" && !Array.isArray(op.input) ? op.input as Record<string, unknown> : null;
+      const workspaceId = input && typeof input.workspaceId === "string" && input.workspaceId !== PENDING_WORKSPACE ? input.workspaceId : getActiveWorkspaceId();
+      const addressed = input?.workspaceId === PENDING_WORKSPACE ? (workspaceId === null ? Object.fromEntries(Object.entries(input).filter(([key]) => key !== "workspaceId")) : { ...input, workspaceId }) : op.input;
+      const route = await currentWorkspaceContentRoute(workspaceId, abort.signal);
+      if (cancelled) return;
+      if (route.mode === "encrypted") {
+        const value = await readPrivateWorkspaceQuery(route, op.path, addressed, op.type); route.check();
+        if (!cancelled) { observer.next({ result: { data: value } } as never); observer.complete(); }
+      } else {
+        route.check(); subscription = next({ ...op, input: addressed }).subscribe({
+          next: (value) => { try { route.check(); observer.next(value); } catch (error) { observer.error(TRPCClientError.from(error instanceof Error ? error : new Error("Workspace data changed"))); } },
+          error: (error) => observer.error(error), complete: () => observer.complete(),
+        });
+      }
+    })().catch((error) => { if (!cancelled) observer.error(TRPCClientError.from(error)); });
+    return () => { cancelled = true; abort.abort(); subscription?.unsubscribe(); };
+  });
 };
 
 /** Save every supported entry write before the transport sees any bytes. */
@@ -243,10 +273,11 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
       return fetchSyncSnapshot(query, () => {
         if (!isTokenShell()) {
           const token = getNativeToken();
-          return fetch(url, {
+          const init = {
             ...options,
-            credentials: token ? "omit" : "include",
-          });
+            credentials: token ? "omit" as const : "include" as const,
+          };
+          return assertStandardContentRequest(String(url), init).then((check) => { check(); return fetch(url, init); });
         }
         // The token shells choose their server at runtime (`lib/api-origin.ts`).
         // The link above keeps the build-time URL; the request is rebased
@@ -257,7 +288,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
         return Promise.all([
           whenApiOriginReady(),
           whenActiveWorkspaceReady(),
-        ]).then(() => {
+        ]).then(async () => {
           const token = getNativeToken();
           const settled = settlePendingWorkspace(
             String(url),
@@ -269,11 +300,12 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
           const headers = new Headers(settled.init?.headers);
           if (token) headers.set("authorization", `Bearer ${token}`);
           else headers.delete("authorization");
-          return fetch(rebaseApiUrl(settled.url), {
+          const target = rebaseApiUrl(settled.url), init = {
             ...settled.init,
             headers,
-            credentials: token ? "omit" : "include",
-          });
+            credentials: token ? "omit" as const : "include" as const,
+          };
+          const check = await assertStandardContentRequest(target, init); check(); return fetch(target, init);
         });
       });
     },
@@ -292,6 +324,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
   return trpc.createClient({
     links: [
       workspaceLink(),
+      privateContentLink(),
       durableEntryLink(),
       syncSnapshotLink(),
       versionRefusalLink(),

@@ -16,6 +16,7 @@ import {
 } from "@/lib/offline";
 import { isCapacitor } from "@/lib/shell";
 import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
+import { subscribePrivateView, subscribePrivateViewEpoch } from "./private-view-lifecycle";
 
 /**
  * React Query, configured for the host it is running on.
@@ -49,6 +50,7 @@ import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
  * tab is shown the previous one's cached entries until each query refetches.
  */
 let appQueryClient: QueryClient | null = null;
+let unbindPrivateViews = () => {};
 
 /** Drop every cached answer. Called on sign-out and account deletion. */
 export const clearAppQueryCache = async (): Promise<void> => {
@@ -96,7 +98,11 @@ export const createAppQueryClient = (): QueryClient => {
   }
   appQueryClient.setQueryDefaults([["tasks", "projectLinks"]], { staleTime: 60_000 });
   bindCatalogCaches(appQueryClient);
-  getQueryPersistence(appQueryClient);
+  const client = appQueryClient, persistence = getQueryPersistence(client);
+  unbindPrivateViews();
+  const protect = subscribePrivateView((scope) => { void persistence.protectPrivateAccount(scope); });
+  const clear = subscribePrivateViewEpoch(() => { void client.cancelQueries(); client.clear(); });
+  unbindPrivateViews = () => { protect(); clear(); };
   return appQueryClient;
 };
 

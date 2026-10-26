@@ -1,4 +1,5 @@
 "use client";
+import { subscribePrivateViewEpoch } from "@/lib/private-view-lifecycle";
 
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -372,6 +373,7 @@ export const useSync = (): SyncStatus => {
  * right on the first frame after 90 seconds in the background.
  */
 export const timerStore = createTimerStore();
+subscribePrivateViewEpoch(() => { timerStore.getState().clear(); });
 
 // The running timer is a person's. Whoever signs in next in this tab must not
 // see the previous account's clock while their own `entries.current` is on its

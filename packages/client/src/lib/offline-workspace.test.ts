@@ -9,7 +9,9 @@
  * workspace the account left is held and named — never replayed, never
  * deleted until someone says so. The pure queue rules are in core.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 import {
   replayOfflineMutation,
   type OfflineReplayMutators,

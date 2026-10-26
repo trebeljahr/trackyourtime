@@ -478,11 +478,16 @@ export const createOfflineQueue = ({
   key = "trackyourtime.offline-queue",
   exclusive,
   durableEntries = false,
+  beforeContentWrite,
 }: {
   storage: KeyValueStorage;
   key?: string;
   exclusive?: QueueExclusive;
   durableEntries?: boolean;
+  /** App privacy boundary, checked under the queue lock before new/changed
+   * plaintext or a replay is persisted. Missing hooks preserve core clients.
+   * The returned guard fences changes during later persistence awaits. */
+  beforeContentWrite?: (row: Readonly<Pick<QueuedMutation, "id" | "op" | "owner" | "server" | "workspaceId">>) => Promise<() => void>;
 }): OfflineQueue => {
   /**
    * Set when the stored queue is in a format newer than this build — a
@@ -585,11 +590,14 @@ export const createOfflineQueue = ({
     createdAt: new Date().toISOString(), owner, server,
     ...(workspaceId ? { workspaceId } : {}), apiLevel: API_LEVEL,
   });
+  const contentScope = ({ id, op, owner, server, workspaceId }: QueuedMutation) => Object.freeze({ id, op, owner, server, workspaceId });
+  const contentValue = (row: QueuedMutation) => JSON.stringify([row.op, row.payload, row.submittedInput, row.owner, row.server, row.workspaceId]);
 
   return {
     submit: (op, payload, scope, runner) => serial(async () => {
       const rows = await read();
       const row = newRow(op, payload, scope.owner, scope.server, scope.workspaceId);
+      const check = await beforeContentWrite?.(contentScope(row)); check?.();
       rows.push(row);
       await write(rows);
       // Preserve account/server FIFO. Work held for another workspace may still
@@ -599,7 +607,9 @@ export const createOfflineQueue = ({
       try {
         const frozen = freezeDurableEntry(row);
         rows[rows.length - 1] = frozen;
+        check?.();
         await write(rows);
+        check?.();
         const result = await runner(frozen);
         await write(rows.filter((item) => item.id !== row.id));
         return result;
@@ -611,6 +621,7 @@ export const createOfflineQueue = ({
       serial(async () => {
         const mutation = newRow(op, payload, owner, server, workspaceId);
         const mutations = await read();
+        const check = await beforeContentWrite?.(contentScope(mutation)); check?.();
         mutations.push(mutation);
         await write(mutations);
         return mutation;
@@ -621,6 +632,7 @@ export const createOfflineQueue = ({
     amendPayloads: (amend) =>
       serial(async () => {
         const mutations = await read();
+        const before = mutations.map((row) => ({ value: contentValue(row), scope: contentScope(row) }));
         let changed = 0;
         const next = mutations.map((row) => {
           const payload = amend(row);
@@ -628,14 +640,29 @@ export const createOfflineQueue = ({
           changed += 1;
           return { ...row, payload };
         });
-        if (changed > 0) await write(next);
-        return changed;
+        const altered = next.flatMap((row, index) => contentValue(row) !== before[index]!.value ? [{ row, before: before[index]!.scope }] : []);
+        if (changed > 0 || altered.length > 0) {
+          const guards: (() => void)[] = [];
+          for (const { row, before: original } of altered) if (beforeContentWrite) {
+            guards.push(await beforeContentWrite(original));
+            if (JSON.stringify(original) !== JSON.stringify(contentScope(row))) guards.push(await beforeContentWrite(contentScope(row)));
+          }
+          for (const check of guards) check(); await write(next);
+        }
+        return Math.max(changed, altered.length);
       }),
 
     amendRows: (amend) =>
       serial(async () => {
         const rows = await read();
-        await write(await amend(rows));
+        const before = new Map(rows.map((row) => [row.id, { value: contentValue(row), scope: contentScope(row) }]));
+        const next = await amend(rows), guards: (() => void)[] = [];
+        for (const row of next) if (before.get(row.id)?.value !== contentValue(row) && beforeContentWrite) {
+          const original = before.get(row.id)?.scope;
+          if (original) guards.push(await beforeContentWrite(original));
+          if (!original || JSON.stringify(original) !== JSON.stringify(contentScope(row))) guards.push(await beforeContentWrite(contentScope(row)));
+        }
+        for (const check of guards) check(); await write(next);
       }),
 
     size: () => serial(async () => (await read()).length),
@@ -756,6 +783,7 @@ export const createOfflineQueue = ({
           }
           let verdict: void | FlushVerdict;
           try {
+            const check = await beforeContentWrite?.(contentScope(mutation)); check?.();
             if (durableEntries && mutation.submittedInput === undefined && isDurableEntryOp(mutation.op) && typeof (mutation.payload as { input?: { operationId?: unknown } })?.input?.operationId !== "string") {
               verdict = { hold: "refused", code: "LEGACY_WRITE_OUTCOME_UNKNOWN", message: "This older saved write may already have reached the server. Check your entries before recovering it." };
             } else {
@@ -764,6 +792,7 @@ export const createOfflineQueue = ({
               mutations[index] = mutation;
               await write([...kept, ...mutations.slice(index)]);
             }
+            check?.();
             verdict = await runner(mutation);
             }
           } catch (error) {

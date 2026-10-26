@@ -8,11 +8,23 @@ let session: { userId: string; origin: string; secrets: UnlockedIdentity } | nul
 let generation = 0;
 let resolvedAccount: string | null | undefined;
 const listeners = new Set<() => void>();
+const accountListeners = new Set<() => void>();
+export const privateAccountId = (): string | null | undefined => resolvedAccount;
+export function whenPrivateAccountReady(signal?: AbortSignal): Promise<string | null> {
+  if (signal?.aborted) return Promise.reject(signal.reason ?? new Error("Account lookup canceled"));
+  if (resolvedAccount !== undefined) return Promise.resolve(resolvedAccount);
+  return new Promise((resolve, reject) => {
+    const cleanup = () => { accountListeners.delete(read); signal?.removeEventListener("abort", abort); };
+    const read = () => { if (resolvedAccount !== undefined) { cleanup(); resolve(resolvedAccount); } };
+    const abort = () => { cleanup(); reject(signal?.reason ?? new Error("Account lookup canceled")); };
+    accountListeners.add(read); signal?.addEventListener("abort", abort, { once: true }); read();
+  });
+}
 let version = 0;
 export const privateSessionVersion = (): number => version;
 const changed = () => { version++; for (const listener of listeners) listener(); };
 export function lockPrivateData(): void { generation++; session = null; void desktopActivity()?.lock?.().catch(() => undefined); changed(); }
-subscribeApiOrigin(lockPrivateData);
+subscribeApiOrigin(() => { resolvedAccount = undefined; lockPrivateData(); for (const listener of accountListeners) listener(); });
 export function privateSession(userId: string): UnlockedIdentity | null {
   return session?.userId === userId && session.origin === getApiOrigin() ? session.secrets : null;
 }
@@ -130,6 +142,7 @@ export async function resumePrivateActivity(userId: string): Promise<void> {
 export function privateAccountChanged(userId: string | null): void {
   if ((resolvedAccount != null && resolvedAccount !== userId) || (session && session.userId !== userId)) lockPrivateData();
   resolvedAccount = userId;
+  for (const listener of accountListeners) listener();
 }
 
 /** Private workspace replicas use their own scoped namespace. The legacy

@@ -53,6 +53,8 @@ export function createQueryPersistence(client: QueryClient, storage: KeyValueSto
   let scope: CacheScope | null = null;
   let epoch = 0;
   let accepting = false;
+  const privateAccounts = new Set<string>();
+  const accountKey = (value: Pick<CacheScope, "server" | "userId">) => JSON.stringify([value.server, value.userId]);
   let rows = new Map<string, SavedQuery>();
   const fetchEpoch = new WeakMap<Query, number>();
   const networkData = new WeakMap<Query, unknown>();
@@ -118,9 +120,19 @@ export function createQueryPersistence(client: QueryClient, storage: KeyValueSto
     void save();
   });
 
+  /** Stop plaintext caching before a private result is emitted, without
+   * canceling that live read. The replica owns persistence for this account. */
+  const protectPrivateAccount = (account: Pick<CacheScope, "server" | "userId">): Promise<void> => {
+    const prior = privateAccounts.has(accountKey(account)); privateAccounts.add(accountKey(account));
+    if (scope && accountKey(scope) === accountKey(account)) { epoch++; accepting = false; scope = null; rows.clear(); }
+    if (prior) return io;
+    return serialize(async () => { await storage.removeItem(QUERY_SNAPSHOT_KEY); });
+  };
   return {
+    protectPrivateAccount,
     /** Caller supplies a resolved session and fresh server membership; disk grants no access. */
     async activate(next: CacheScope): Promise<void> {
+      if (privateAccounts.has(accountKey(next))) { await protectPrivateAccount(next); return; }
       if (scopeKey(scope) === scopeKey(next)) return;
       const at = ++epoch;
       const changing = scope !== null;

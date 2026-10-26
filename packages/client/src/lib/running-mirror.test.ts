@@ -4,6 +4,7 @@
  * instead of an empty screen.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 import { createTimerStore } from "@starter/core";
 import type { TimeEntry } from "@starter/shared";
 

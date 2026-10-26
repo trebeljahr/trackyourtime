@@ -7,6 +7,8 @@
  * in packages/core/src/tests/offline-queue-server.test.ts.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 
 const CLOUD = "https://api.trackyourtime.dev";
 const OWN = "https://track.example.com";

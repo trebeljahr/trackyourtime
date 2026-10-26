@@ -8,7 +8,9 @@
  * These are the client-side half of that. The pure queue mechanics live in
  * core-offline-queue.test.ts.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 import {
   __resetOfflineQueueForTests,
   __resetOfflineQueueOwnerForTests,
@@ -38,6 +40,12 @@ const startInput = (description: string): OfflineStartInput => ({
   timeZone: "Europe/Berlin",
   originId: "tab-1",
 });
+
+/** Seed an already existing legacy row through the compatibility queue. */
+const seedLegacyStart = async (description: string, tempId: string) => {
+  await getOfflineQueue().enqueue("entries.start", { input: startInput(description), tempId });
+  await refreshPendingCount();
+};
 
 /** Replay everything the current account is allowed to replay. */
 const replay = async (): Promise<string[]> => {
@@ -120,8 +128,8 @@ describe("queue ownership", () => {
 
   it("lets the first account to sign in adopt rows queued before stamping", async () => {
     // No owner resolved yet — the shape a build predating ownership wrote,
-    // and the shape a mutation queued mid-session-resolution still writes.
-    await enqueueOffline("entries.start", startInput("legacy"), "temp-1");
+    // recovered through the compatibility loader rather than a new write.
+    await seedLegacyStart("legacy", "temp-1");
     expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
 
     // Unknown owner is not the same as "somebody else queued this": with no
@@ -151,8 +159,8 @@ describe("queue ownership", () => {
   });
 
   it("reports how many legacy rows an account adopted", async () => {
-    await enqueueOffline("entries.start", startInput("one"), "temp-1");
-    await enqueueOffline("entries.start", startInput("two"), "temp-2");
+    await seedLegacyStart("one", "temp-1");
+    await seedLegacyStart("two", "temp-2");
 
     expect(await setOfflineQueueOwner("user-a")).toBe(2);
     // Nothing left to adopt, so a later switch claims nothing.
@@ -211,9 +219,9 @@ describe("queue ownership before the session resolves", () => {
     expect(await getOfflineQueue().size()).toBe(1);
   });
 
-  it("only leaves a row unowned on a device that has never had an account", async () => {
-    await enqueueOffline("entries.start", startInput("first ever"), "temp-1");
-    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
+  it("refuses a new anonymous row on a device that has never resolved an account", async () => {
+    await expect(enqueueOffline("entries.start", startInput("first ever"), "temp-1")).rejects.toThrow("still loading");
+    expect(await getOfflineQueue().size()).toBe(0);
   });
 });
 
@@ -225,7 +233,7 @@ describe("sealing the queue on sign-out", () => {
 
   it("claims what is still unowned for the departing account", async () => {
     // Queued before this device ever resolved an account, then signed in.
-    await enqueueOffline("entries.start", startInput("legacy"), "temp-1");
+    await seedLegacyStart("legacy", "temp-1");
     await setOfflineQueueOwner("user-a");
     // …and something queued while A was signed in.
     await enqueueOffline("entries.start", startInput("A's work"), "temp-2");
@@ -244,10 +252,10 @@ describe("sealing the queue on sign-out", () => {
     await setOfflineQueueOwner("user-a");
     await sealOfflineQueueOwner();
 
-    // B's cold-launch row is B's, not A's, even before B's session resolves.
-    await enqueueOffline("entries.start", startInput("B's work"), "temp-1");
-    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
-
+    // A new row cannot borrow A's forgotten stamp. An older unowned row is
+    // still recoverable once B explicitly signs in.
+    await expect(enqueueOffline("entries.start", startInput("B's work"), "temp-1")).rejects.toThrow("still loading");
+    await seedLegacyStart("B's work", "temp-1");
     await setOfflineQueueOwner("user-b");
     expect(await replay()).toEqual(["B's work"]);
   });
@@ -271,8 +279,8 @@ describe("sealing the queue on sign-out", () => {
     // so the seal really did reach `OFFLINE_QUEUE_OWNER_STORAGE_KEY` rather
     // than only clearing the module's own state.
     __resetOfflineQueueOwnerForTests();
-    await enqueueOffline("entries.start", startInput("after relaunch"), "temp-1");
-    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
+    await expect(enqueueOffline("entries.start", startInput("after relaunch"), "temp-1")).rejects.toThrow("still loading");
+    expect(await getOfflineQueue().size()).toBe(0);
   });
 });
 
@@ -330,7 +338,7 @@ describe("another account's queued rows", () => {
   });
 
   it("leaves unowned rows alone — they are not somebody else's yet", async () => {
-    await enqueueOffline("entries.start", startInput("unowned"), "temp-1");
+    await seedLegacyStart("unowned", "temp-1");
     await setOfflineQueueOwner("user-a");
     // Adoption already claimed it, so there is nothing foreign to discard.
     expect(await discardForeignQueued()).toBe(0);
@@ -355,7 +363,7 @@ describe("discarding the queue of a deleted account", () => {
     await sealOfflineQueueOwner();
 
     // Unowned: queued before A's session resolved on this launch.
-    await enqueueOffline("entries.start", startInput("pre-resolution"), "temp-0");
+    await seedLegacyStart("pre-resolution", "temp-0");
     await setOfflineQueueOwner("user-a");
     await enqueueOffline("entries.start", startInput("A's work"), "temp-a");
     // `setOfflineQueueOwner` adopted the unowned row; put one back to prove an
@@ -376,8 +384,8 @@ describe("discarding the queue of a deleted account", () => {
     expect(getOfflineQueueOwner()).toBeNull();
 
     __resetOfflineQueueOwnerForTests();
-    await enqueueOffline("entries.start", startInput("next person"), "temp-1");
-    expect((await getOfflineQueue().list())[0].owner).toBeUndefined();
-    expect(getPendingCount()).toBe(1);
+    await expect(enqueueOffline("entries.start", startInput("next person"), "temp-1")).rejects.toThrow("still loading");
+    expect(await getOfflineQueue().size()).toBe(0);
+    expect(getPendingCount()).toBe(0);
   });
 });

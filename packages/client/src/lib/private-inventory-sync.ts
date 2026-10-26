@@ -3,11 +3,13 @@ import { privateSession } from "./private-session";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateClientScope as binding } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
+import { requirePrivateRouting } from "./private-routing-requirement";
 /** Always use the account-wide host lock. This adapter does not enroll or
  * recover a missing profile automatically and never uses a plaintext queue. */
 export async function privateAccountWorkspaceInventorySync(userId: string, storage: KeyValueStorage, exclusive: QueueExclusive) {
   const { server, check, current } = binding(userId);
   const sync = await createPrivateAccountInventorySync({ server, userId, storage, exclusive, capture: () => { check(); return check; },
+    beforePrivateState: (phase, digest) => requirePrivateRouting({ server, userId }, current, phase === "publish", digest),
     resolveStorageKey: () => {
       check(); const key = decodeSecret(privateSession(userId)!.master, 32);
       return { key, current, release: () => key.fill(0) };

@@ -8,6 +8,7 @@ import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 import { getActiveWorkspaceSnapshot, getKnownWorkspacesOwner, getServerActiveWorkspaceSnapshot, subscribeActiveWorkspace } from "@/lib/active-workspace";
 import { getQueryPersistence } from "@/lib/app-query-persistence";
 import { trpc } from "@/lib/trpc";
+import { privateRoutingRequired } from "@/lib/private-routing-requirement";
 
 /** Mounted once in the protected shell. Saved queries never decide authentication. */
 export function useQueryPersistence(): void {
@@ -31,7 +32,13 @@ export function useQueryPersistence(): void {
       persistence.pause();
       return;
     }
-    void persistence.activate({ server, userId: user.id, workspaceId: activeId, access });
+    let cancelled = false;
+    void privateRoutingRequired({ server, userId: user.id }).then(async (required) => {
+      if (cancelled) return;
+      if (required) await persistence.protectPrivateAccount({ server, userId: user.id });
+      else await persistence.activate({ server, userId: user.id, workspaceId: activeId, access });
+    }).catch(() => { if (!cancelled) persistence.pause(); });
+    return () => { cancelled = true; };
   }, [client, isLoading, origin.ready, user, activeId, member, memberships.data, memberships.isError, server, access]);
 
   useEffect(() => () => { getQueryPersistence(client).pause(); }, [client]);

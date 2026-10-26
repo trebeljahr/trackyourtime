@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.
+vi.mock("./private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {} }));
 import { __resetOfflineQueueForTests, __resetOfflineQueueOwnerForTests, adoptUnstampedOfflineRows, enqueueOffline, getOfflineQueue, OfflineQueueScopeNotReadyError, setOfflineQueueOwner } from "./offline";
 import { __resetActiveWorkspaceForTests } from "./active-workspace";
 import { OFFLINE_QUEUE_STORAGE_KEY, type OfflineCreateInput } from "@starter/core";

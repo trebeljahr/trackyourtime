@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// Transport behavior is isolated from enrollment; private dispatch has separate real-client tests.
+vi.mock("./private-content-route", () => ({ isWorkspaceContentProcedure: () => false, assertStandardContentRequest: async () => () => {}, currentWorkspaceContentRoute: async () => { throw new Error("Unexpected private routing"); }, readPrivateWorkspaceQuery: async () => { throw new Error("Unexpected private read"); } }));
 
 /**
  * The web request path, asserted rather than assumed.

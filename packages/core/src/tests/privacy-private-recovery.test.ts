@@ -130,3 +130,12 @@ it("writes only ciphertext and keeps earlier files when readback fails or permis
   await assert.rejects(writePrivateWorkspaceBackup(options), /folder access is unavailable/); assert.equal(captures, count); assert.deepEqual(files, before);
   assert.ok(f.key.some((byte) => byte !== 0));
 });
+
+it("publishes private inventory only after the durable client routing fence succeeds and preserves existing data on refusal", async () => {
+  const f = await fixture(), files = new Map<string, string>(), phases: string[] = []; let allow = false;
+  const storage = { getItem: async (key: string) => files.get(key) ?? null, setItem: async (key: string, value: string) => { files.set(key, value); }, removeItem: async (key: string) => { files.delete(key); } };
+  const sync = await createPrivateAccountInventorySync({ ...f.inventoryOptions, storage, beforePrivateState: async (phase, digest) => { phases.push(phase); assert.match(digest, /^[A-Za-z0-9_-]{43}$/); if (!allow) throw new Error("Routing storage denied"); } });
+  await assert.rejects(sync.enroll(f.enrollment), /Routing storage denied/); assert.equal(files.size, 0); assert.deepEqual(phases, ["publish"]);
+  allow = true; await sync.enroll(f.enrollment); const before = new Map(files); allow = false;
+  await assert.rejects(sync.read(), /Routing storage denied/); assert.deepEqual(files, before); assert.ok(phases.includes("read"));
+});

@@ -18,11 +18,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
 type Enrollment = Awaited<ReturnType<typeof newPrivateIdentity>>;
-export function PrivateDataCard(): React.JSX.Element | null {
+export function PrivateDataCard({ unlockOnly = false }: { unlockOnly?: boolean } = {}): React.JSX.Element | null {
   const { user } = useAuth();
-  return user ? <PrivateDataForUser key={user.id} id={user.id} /> : null;
+  return user ? <PrivateDataForUser key={`${user.id}:${unlockOnly}`} id={user.id} unlockOnly={unlockOnly} /> : null;
 }
-function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
+function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolean }): React.JSX.Element {
   const t = useT("settings");
   const native = useIsTokenShell();
   const deviceUnlockSupported = useServerSupports("privacy.deviceUnlock");
@@ -42,12 +42,13 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
     try { await task(); } catch { setProblem(t("privateData.failed")); } finally { setPending(false); }
   };
   return <Card data-testid="private-data-settings">
-    <CardHeader><CardTitle>{t("privateData.title")}</CardTitle><CardDescription>{t("privateData.description")}</CardDescription></CardHeader>
+    <CardHeader><CardTitle>{t("privateData.title")}</CardTitle>{!unlockOnly && <CardDescription>{t("privateData.description")}</CardDescription>}</CardHeader>
     <CardContent className="space-y-4">
       <p className="max-w-prose text-sm text-muted-foreground">{t("privateData.recoveryExplanation")}</p>
       {native && <p className="max-w-prose text-sm text-muted-foreground">{t(deviceUnlockSupported ? "privateData.nativeBrowserUnlock" : "privateData.nativePasskeys")}</p>}
-      {!identity && !draft && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await newPrivateIdentity(id)))}>{t("privateData.prepare")}</Button>}
-      {draft && <div className="max-w-xl space-y-3">
+      {unlockOnly && !identity && !account.isLoading && <p role="status" className="text-sm">{t("privateData.keysUnavailable")}</p>}
+      {!unlockOnly && !current && !identity && !draft && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await newPrivateIdentity(id)))}>{t("privateData.prepare")}</Button>}
+      {!unlockOnly && draft && <div className="max-w-xl space-y-3">
         <p className="text-sm">{t("privateData.saveRecovery")}</p>
         <code className="block break-all rounded-md bg-muted p-3 text-sm select-all">{draft.recoveryKey}</code>
         <Button variant="outline" onClick={() => downloadBlob("trackyourtime-recovery-key.json", new Blob([JSON.stringify({ format: "trackyourtime-recovery-key-v1", userId: id, server: privateDataOrigin(), recoveryKey: draft.recoveryKey }, null, 2)], { type: "application/json" }))}>{t("privateData.downloadRecovery")}</Button>
@@ -94,8 +95,8 @@ function PrivateDataForUser({ id }: { id: string }): React.JSX.Element {
           } finally { secret.fill(0); }
         })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockPrivateData}>{t("privateData.lock")}</Button></div>
       </div>}
-      <PrivateActivity userId={id} />
-      {identity && <PrivateKeyCode userId={id} />}
+      {!unlockOnly && <PrivateActivity userId={id} />}
+      {!unlockOnly && identity && <PrivateKeyCode userId={id} />}
       {(problem || account.isError) && <p role="alert" className="text-sm text-destructive">{problem ?? t("privateData.failed")}</p>}
     </CardContent>
   </Card>;

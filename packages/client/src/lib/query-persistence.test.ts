@@ -256,3 +256,22 @@ describe("catalog persistence", () => {
     await persistence.forget(); persistence.dispose();
   });
 });
+
+it("keeps private results in memory while refusing plaintext persistence and later reactivation for that account", async () => {
+  const f = await savedFixture(), original = await f.store.getItem(QUERY_SNAPSHOT_KEY); expect(original).not.toBeNull();
+  await f.persistence.protectPrivateAccount(scope);
+  const privateData = [{ id: "private-project", name: "Decrypted private project" }];
+  await f.c.fetchQuery({ queryKey: key("projects", { includeArchived: true }), queryFn: async () => privateData });
+  await f.persistence.activate(scope); await f.persistence.settled();
+  expect(await f.store.getItem(QUERY_SNAPSHOT_KEY)).toBeNull(); expect(f.c.getQueryData(key("projects", { includeArchived: true }))).toEqual(privateData);
+  await f.persistence.activate({ ...scope, workspaceId: "another-workspace" }); await f.persistence.settled(); expect(await f.store.getItem(QUERY_SNAPSHOT_KEY)).toBeNull();
+  f.persistence.dispose();
+});
+it("invalidates an in-flight plaintext cache write before returning a private view", async () => {
+  const backing = memoryStorage(), held = deferred<void>(), entered = deferred<void>();
+  const store = { ...backing, setItem: async (key: string, value: string) => { entered.resolve(); await held.promise; await backing.setItem(key, value); } };
+  const c = client(), persistence = createQueryPersistence(c, store, () => instant);
+  await persistence.activate(scope); await c.fetchQuery({ queryKey: key(), queryFn: async () => project }); await entered.promise;
+  const protectedCopy = persistence.protectPrivateAccount(scope); held.resolve(); await protectedCopy; await persistence.settled();
+  expect(await backing.getItem(QUERY_SNAPSHOT_KEY)).toBeNull(); expect(c.getQueryData(key())).toEqual(project); persistence.dispose();
+});
