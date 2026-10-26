@@ -18,7 +18,7 @@ export function quotaCollections(): Record<string, string> {
     PrivateRecord: "privaterecords", PrivateWorkspaceCommit: "privateworkspacecommits",
     PrivateSnapshotChunk: "privatesnapshotchunks", PrivateSnapshotReader: "privatesnapshotreaders",
     PrivateDirectory: "privatedirectories", PrivateMigrationReceipt: "privatemigrationreceipts",
-    PrivateWorkspace: "privateworkspaces", PrivateProjectionRoot: "privateprojectionroots", PrivateProjectionReader: "privateprojectionreaders",
+    PrivatePreparationReservation: "privatepreparationreservations", PrivateWorkspace: "privateworkspaces", PrivateProjectionRoot: "privateprojectionroots", PrivateProjectionReader: "privateprojectionreaders",
   };
 }
 
@@ -86,7 +86,7 @@ async function baseline(workspaceId: string, state: State, refresh = false): Pro
   if (!refresh && cached !== undefined) return cached;
   await fence(`workspace:${workspaceId}`, state);
   const stored = await StorageUsage.findById(workspaceId).lean();
-  if (!refresh && stored?.version === 3) { state.usage.set(workspaceId, stored.bytes); return stored.bytes; }
+  if (!refresh && stored?.version === 4) { state.usage.set(workspaceId, stored.bytes); return stored.bytes; }
   let bytes = 0;
   // One scan on adoption, never one scan per timer tick. All later writes use deltas.
   for (const [modelName, collection] of Object.entries(quotaCollections())) {
@@ -95,7 +95,7 @@ async function baseline(workspaceId: string, state: State, refresh = false): Pro
     ], { session: transactionSession() }).toArray();
     bytes += Number(sum?.bytes ?? 0);
   }
-  await StorageUsage.updateOne({ _id: workspaceId }, { $set: { bytes, version: 3 } }, { upsert: true });
+  await StorageUsage.updateOne({ _id: workspaceId }, { $set: { bytes, version: 4 } }, { upsert: true });
   state.usage.set(workspaceId, bytes);
   return bytes;
 }
@@ -219,7 +219,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
   // These models store ciphertext/commitments and must remain writable during
   // preparation/private mode. Authentication and workspace fences stay in the
   // private services; ordinary models keep their plaintext-write guard.
-  const privateData = ["PrivateRecord", "PrivateWorkspaceCommit", "PrivateSnapshotChunk", "PrivateSnapshotReader", "PrivateDirectory", "PrivateMigrationReceipt", "PrivateWorkspace", "PrivateProjectionRoot", "PrivateProjectionReader"].includes(model.modelName);
+  const privateData = ["PrivateRecord", "PrivateWorkspaceCommit", "PrivateSnapshotChunk", "PrivateSnapshotReader", "PrivateDirectory", "PrivateMigrationReceipt", "PrivateWorkspace", "PrivateProjectionRoot", "PrivateProjectionReader", "PrivatePreparationReservation"].includes(model.modelName);
   const marker = Symbol.for("trackyourtime.storageQuota");
   if (model[marker]) return;
   model[marker] = true;

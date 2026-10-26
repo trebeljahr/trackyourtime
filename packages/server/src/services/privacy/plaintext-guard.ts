@@ -19,6 +19,7 @@ export async function guardPlaintextWorkspaceWrites(workspaceIds: readonly strin
   for (const workspaceId of [...new Set(workspaceIds.filter((id) => typeof id === "string" && id.length > 0))].sort()) {
     await fenceWorkspace(workspaceId);
     const mode = await PrivateWorkspace.findOne({ workspaceId }).lean();
+    if (mode?.state === "reserved") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Reserved workspace originals cannot change. Finish or recover the conversion first." });
     if (erasure.getStore()?.has(workspaceId)) {
       // A departing member changes the frozen source. Cancel disposable
       // preparation in the same transaction as the erasure write, rather

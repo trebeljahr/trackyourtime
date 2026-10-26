@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import mongoose from "mongoose";
 import { TRPCError } from "@trpc/server";
 import { PrivateAccountErasureFence } from "../../models/PrivateAccountErasureFence.js";
+import { PrivatePreparationReservation } from "../../models/PrivatePreparationReservation.js";
+import { PrivateWorkspace } from "../../models/PrivateData.js";
+import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { transactionSession, withBusinessTransaction } from "../business-transaction.js";
 function id(userId: string) {
   if (typeof userId !== "string" || !userId || userId.length > 100) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -26,15 +29,18 @@ export async function fencePrivateAccount(userId: string): Promise<void> {
 export function beginPrivateAccountErasure(userId: string): Promise<void> {
   const accountId = id(userId);
   return withBusinessTransaction(async () => {
-    try { await PrivateAccountErasureFence.updateOne({ _id: accountId }, { $set: { erased: true }, $inc: { serial: 1 } }, { upsert: true }); }
+    try { await PrivateAccountErasureFence.updateOne({ _id: accountId }, { $setOnInsert: { erased: false }, $inc: { serial: 1 } }, { upsert: true }); }
     catch (error) {
       if (error instanceof mongoose.mongo.MongoServerError && error.code === 11000) {
         if (transactionSession()) { error.addErrorLabel("TransientTransactionError"); throw error; }
         // A standalone first-write race needs no multi-document transaction.
-        await PrivateAccountErasureFence.updateOne({ _id: accountId }, { $set: { erased: true }, $inc: { serial: 1 } });
-        return;
+        await PrivateAccountErasureFence.updateOne({ _id: accountId }, { $inc: { serial: 1 } });
+      } else {
+        throw error;
       }
-      throw error;
     }
+    const workspaces = await WorkspaceMember.distinct("workspaceId", { userId });
+    if (await PrivatePreparationReservation.exists({ memberIds: userId }) || await PrivateWorkspace.exists({ state: "reserved", $or: [{ ownerId: userId }, { workspaceId: { $in: workspaces } }] })) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Finish or recover the reserved workspace conversion before deleting this account. Account keys and frozen data were kept." });
+    await PrivateAccountErasureFence.updateOne({ _id: accountId }, { $set: { erased: true } });
   });
 }

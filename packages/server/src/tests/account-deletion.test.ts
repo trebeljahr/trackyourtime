@@ -79,6 +79,7 @@ const seed = (): NonNullable<Parameters<typeof memoryRowStore>[0]> => ({
   ],
   privateAccounts: [{ id: "vault-a", userId: ALICE }, { id: "vault-b", userId: BOB }],
   privateInventoryVersions: [{ id: "inventory-a", userId: ALICE }, { id: "inventory-b", userId: BOB }],
+  privatePreparationReservations: [{ id: "reservation-solo", workspaceId: SOLO }, { id: "reservation-team", workspaceId: TEAM }, { id: "reservation-bob", workspaceId: BOBS }],
   privateDeviceRequests: [{ id: "unlock-a", userId: ALICE }, { id: "unlock-b", userId: BOB }],
   privateMigrationReceipts: [{ id: "proof-solo", workspaceId: SOLO, userId: ALICE }, { id: "proof-team-alice", workspaceId: TEAM, userId: ALICE }, { id: "proof-team-bob", workspaceId: TEAM, userId: BOB }, { id: "proof-former", workspaceId: "former", userId: ALICE }],
   privateSnapshotChunks: [{ id: "chunk-solo", workspaceId: SOLO }, { id: "chunk-team", workspaceId: TEAM }, { id: "chunk-bob", workspaceId: BOBS }],
@@ -324,6 +325,7 @@ describe("deleteAccountData", () => {
     assert.deepEqual(ids(store, "authPasskeys"), ["pk-b"]);
     assert.deepEqual(ids(store, "privateAccounts"), ["vault-b"]);
     assert.deepEqual(ids(store, "privateInventoryVersions"), ["inventory-b"]);
+    assert.deepEqual(ids(store, "privatePreparationReservations"), ["reservation-bob", "reservation-team"]);
     assert.deepEqual(ids(store, "privateDeviceRequests"), ["unlock-b"]);
     assert.deepEqual(ids(store, "privateMigrationReceipts"), ["proof-team-bob"]);
     assert.deepEqual(ids(store, "privateSnapshotChunks"), ["chunk-bob", "chunk-team"]);

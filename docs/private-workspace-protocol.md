@@ -501,10 +501,11 @@ source deletion. All plaintext checksums and temporary receipts must retire.
 
 The shared workspace/account quota ledger now includes materialized encrypted
 records, immutable journal and snapshot copies, reader indexes, public directory
-history, temporary content receipts and workspace mode rows. Recipient grants
-count at their full stored BSON size. Every row retains the ordinary 4 KiB
-record/index floor. Ledger version 3 rebaselines existing data before the next
-accounted mutation; old version 1 totals cannot hide pre-existing private bytes.
+history, temporary content receipts, permanent reservations and workspace mode
+rows. Recipient grants count at their full stored BSON size. Every row retains the ordinary 4 KiB
+record/index floor. Ledger version 4 rebaselines existing data before the next
+accounted mutation; old totals cannot hide pre-existing private bytes or
+permanent-reservation metadata.
 
 These private models use the same transactional workspace/account storage fences
 and before-commit growth checks. They skip only the plaintext-mode guard;
@@ -1076,6 +1077,38 @@ quota reconstruction, durable final reservation and post-cutover work/rollback
 still require their own recovery workflow. No public route exposes this archive
 or enables conversion; operator storage/copies remain part of the plaintext
 retirement inventory.
+
+## Permanent preparation reservation
+
+After full content verification, a separate owner-signed consent binds the
+verified snapshot, exact mode/directory/root, session and unique reservation ID.
+The independent operator checkpoint file includes that exact signed intent;
+its proof binds the intent digest in addition to full source/artifact digests.
+An originals-only or intent-free file cannot authorize permanent reservation.
+
+The internal reservation transaction takes every participant's account-erasure
+fence, rechecks current keys, consent and the independently verified saved file,
+then atomically stores a non-expiring reservation and changes mode to `reserved`.
+Proof/consent freshness and the preparation lease are checked again before commit.
+Any failure rolls mode, metadata and charged bytes back together. Exact retries
+retain the first reservation after authorization/lease expiry; changed consent
+cannot replace it. No public endpoint mounts this transition.
+
+Reserved workspaces refuse plaintext writes, new preparation and cancellation
+or expiry cleanup. Verified reader projections remain available for device
+enrollment after lease expiry. Missing/inconsistent reservation state fails
+closed. Account deletion checks reservations before committing its irreversible
+key-erasure marker, serialized against reservation by those same account fences.
+Both a surviving reservation row and reserved mode/membership can protect keys
+after partial metadata loss. This hold must finish or recover before deletion;
+it does not silently cancel an already pinned activation root.
+
+Reservation publishes no account inventory/device pins, enables no private
+content writes and retires no originals. The complete controller, recover/resume
+workflow from saved consent/checkpoint, participant device acknowledgements,
+ownership handoff and production installation restore/rollback remain required.
+Temporary reservation proofs contain source commitments and must retire at
+final activation; the residual audit refuses them until that happens.
 
 ## Remaining rollout dependencies
 

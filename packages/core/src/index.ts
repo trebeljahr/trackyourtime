@@ -46,6 +46,7 @@ export * from "./privacy/mode-policy.js";
 export * from "./privacy/account-inventory.js";
 export * from "./privacy/inventory-version.js";
 export * from "./privacy/inventory-sync.js";
+export * from "./privacy/preparation-reservation.js";
 export * from "./privacy/migration-proof.js";
 export * from "./privacy/recovery-backup.js";
 export * from "./privacy/recovery-backup-job.js";

@@ -27,7 +27,7 @@ const privateFields: Record<string, string[]> = {
 const privateCollections = ["privateaccounts", "privatedevicerequests", ...Object.keys(privateFields)];
 const operationalCollections = ["storageusages", "storagefences", "workspacewritefences", "importbudgets", "importleases", "scheduledjobs"];
 const accountCollections = ["user", "account", "session", "verification", "member", "invitation", "deviceCode", "twoFactor", "passkey", "profiles", "avatars", "userpreferences"];
-const special = ["workspacemembers", "apitokens", "webhooksubscriptions", "webhookdeliveries", "privatemigrationreceipts", "privateworkspaces", "organization"];
+const special = ["workspacemembers", "apitokens", "webhooksubscriptions", "webhookdeliveries", "privatemigrationreceipts", "privatepreparationreservations", "privateworkspaces", "organization"];
 /** Query $nin/$ne use array-element matching. Retirement must compare the
  * entire retained value, or ["", "private content"] could pass as empty. */
 const outside = (field: string, allowed: unknown[]) => ({ $expr: { $not: { $in: [{ $ifNull: [`$${field}`, null] }, allowed] } } });
@@ -65,6 +65,7 @@ export async function auditPrivateWorkspaceRetirement(db: Db, workspaceId: strin
   await count("workspacemembers", "personal-labels", { workspaceId, $or: [outside("name", [null, ""]), outside("hourlyRate", [null])] });
   await unknownFields("workspacemembers", { workspaceId }, ["_id", "workspaceId", "userId", "role", "name", "hourlyRate", "canViewOthersTime", "canViewOthersMoney", "createdAt", "updatedAt", "__v"]);
   await count("privatemigrationreceipts", "source-checksums", { workspaceId });
+  await count("privatepreparationreservations", "source-checksums", { workspaceId });
   await count("privatepreparationrequests", "source-checksums", { workspaceId });
   await count("privateworkspaces", "source-checksums", { workspaceId, $or: [outside("sourceRevision", ["retired"]), outside("supplementRevision", [null, "retired"]), outside("originalStage", [null]), outside("operatorBackup", [null])] });
   for (const [collection, fields] of Object.entries(privateFields)) await unknownFields(collection, { workspaceId }, ["_id", "createdAt", "updatedAt", "__v", ...fields]);

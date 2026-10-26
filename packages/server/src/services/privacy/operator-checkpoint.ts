@@ -7,7 +7,7 @@ import { BSON } from "mongodb";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { canonicalJson, deriveSecret, fingerprint, seal, signPrivateChange, unseal, type PublicKey } from "@starter/core";
-import { RECOVERY_KINDS, RECOVERY_SUPPLEMENT_KINDS, RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS } from "@starter/shared";
+import { RECOVERY_KINDS, RECOVERY_SUPPLEMENT_KINDS, RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS, signedPrivatePreparationReservationSchema, type SignedPrivatePreparationReservation } from "@starter/shared";
 import { beforeBusinessCommit, fenceWorkspace, transactionSession, withBusinessTransaction } from "../business-transaction.js";
 import { PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import { captureOperatorRecoveryArchive, verifyOperatorRecoveryArchive, type OperatorRecoveryScope } from "./operator-recovery.js";
@@ -23,13 +23,13 @@ const hex = z.string().regex(/^[a-f0-9]{64}$/), digest = z.string().regex(/^[A-Z
 const scopeSchema = z.object({ server: z.string().min(1).max(2048), workspaceId: z.string().min(1).max(100), ownerId: z.string().min(1).max(100), migrationId: z.uuid(), modeId: z.string().regex(/^[a-f0-9]{24}$/), directoryDigest: digest, snapshotRoot: digest }).strict();
 const typedRows = z.array(z.record(z.string(), z.unknown())).max(RECOVERY_MAX_RECORDS);
 const controlsSchema = z.object({ privateworkspaces: typedRows, privatedirectories: typedRows, privaterecords: typedRows, privatesnapshotchunks: typedRows, privatesnapshotreaders: typedRows, privateprojectionroots: typedRows, privateprojectionreaders: typedRows, privatemigrationreceipts: typedRows }).strict();
-const archiveSchema = z.object({ format: z.literal("trackyourtime-operator-checkpoint-v1"), originals: z.unknown(), controls: controlsSchema, controlsDigest: hex }).strict();
-const headerSchema = scopeSchema.extend({ format: z.literal("trackyourtime-operator-checkpoint-file-v1"), createdAt: z.iso.datetime(), controlsDigest: hex }).strict();
+const archiveSchema = z.object({ format: z.literal("trackyourtime-operator-checkpoint-v1"), originals: z.unknown(), controls: controlsSchema, controlsDigest: hex, reservation: signedPrivatePreparationReservationSchema.nullable().default(null) }).strict();
+const headerSchema = scopeSchema.extend({ format: z.literal("trackyourtime-operator-checkpoint-file-v1"), createdAt: z.iso.datetime(), controlsDigest: hex, reservationDigest: hex.nullable().optional() }).strict();
 const fileSchema = z.object({ header: headerSchema, box: z.object({ v: z.literal(1), nonce: z.string().regex(/^[A-Za-z0-9_-]{16}$/), data: z.string().min(22).max(36 * 1024 * 1024).regex(/^[A-Za-z0-9_-]+$/) }).strict() }).strict();
-export const signedOperatorCheckpointProofSchema = z.object({ proof: scopeSchema.extend({ protocol: z.literal("trackyourtime-operator-checkpoint-proof-v1"), v: z.literal(1), sourceRevision: hex, supplementRevision: hex, controlsDigest: hex, fileSha256: hex, operatorFingerprint: digest, verifiedAt: z.number().int().nonnegative(), expiresAt: z.number().int().nonnegative() }).strict(), signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) }).strict();
+export const signedOperatorCheckpointProofSchema = z.object({ proof: scopeSchema.extend({ protocol: z.literal("trackyourtime-operator-checkpoint-proof-v1"), v: z.literal(1), sourceRevision: hex, supplementRevision: hex, controlsDigest: hex, reservationDigest: hex.nullable().optional(), fileSha256: hex, operatorFingerprint: digest, verifiedAt: z.number().int().nonnegative(), expiresAt: z.number().int().nonnegative() }).strict(), signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/) }).strict();
 export type SignedOperatorCheckpointProof = z.infer<typeof signedOperatorCheckpointProofSchema>;
 const verifiedFiles = new WeakSet<object>();
-type VerifiedFile = Readonly<OperatorRecoveryScope & { sourceRevision: string; supplementRevision: string; controlsDigest: string; fileSha256: string; verifiedAt: number }>;
+type VerifiedFile = Readonly<OperatorRecoveryScope & { sourceRevision: string; supplementRevision: string; controlsDigest: string; reservationDigest: string | null; fileSha256: string; verifiedAt: number }>;
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 function bounds(value: unknown) { if (Buffer.byteLength(JSON.stringify(value)) > RECOVERY_MAX_BYTES) throw new Error("Operator checkpoint exceeds its supported size. Original data was kept."); }
 function scopeOf(input: unknown) {
@@ -58,13 +58,21 @@ export async function verifyOperatorCheckpointArchive(input: unknown, expected?:
   if (modes.length !== 1 || !mode || String(mode._id) !== scope.modeId || mode.ownerId !== scope.ownerId || mode.migrationId !== scope.migrationId || mode.state !== "migrating" || Number(mode.revision) !== 0 || mode.head !== null || mode.backupVerified !== false || mode.directoryDigest !== scope.directoryDigest || mode.sourceRevision !== originals.snapshot.sourceRevision || mode.supplementRevision !== originals.supplement.sourceRevision) throw new Error("Operator checkpoint preparation does not match");
   if (roots.length !== 1 || !root || root.root !== scope.snapshotRoot) throw new Error("Operator checkpoint initial root does not match");
   if (!archive.controls.privatedirectories.length || !archive.controls.privateprojectionreaders.length || archive.controls.privatesnapshotreaders.length) throw new Error("Operator checkpoint frozen artifacts are incomplete");
+  if (archive.reservation) {
+    const { request, signature } = archive.reservation;
+    if (request.server !== scope.server || request.workspaceId !== scope.workspaceId || request.userId !== scope.ownerId || request.migrationId !== scope.migrationId || request.modeId !== scope.modeId || request.directoryDigest !== scope.directoryDigest || request.snapshotRoot !== scope.snapshotRoot) throw new Error("Operator checkpoint reservation consent does not match");
+    const latest = decoded("privatedirectories").find((row) => row.digest === scope.directoryDigest) as { signed?: { directory?: { members?: { userId: string; signingPublicKey: PublicKey }[] } } } | undefined;
+    const owner = latest?.signed?.directory?.members?.find((member) => member.userId === scope.ownerId);
+    if (!owner || owner.signingPublicKey.d) throw new Error("Operator checkpoint reservation signing key is missing");
+    await verifyPrivateChange(owner.signingPublicKey, request, signature);
+  }
   return { ...archive, originals };
 }
 /** Privileged internal capture after content receipts, in the same workspace
  * snapshot as all originals. Never expose another member's artifacts to an
  * owner API. The frozen preparation is still disposable until reservation. */
-export async function captureOperatorCheckpointArchive(inputScope: OriginalStageScope, expectedRoot: string) {
-  const scope = { ...inputScope };
+export async function captureOperatorCheckpointArchive(inputScope: OriginalStageScope, expectedRoot: string, inputConsent: SignedPrivatePreparationReservation | null = null) {
+  const scope = { ...inputScope }, reservation = inputConsent ? signedPrivatePreparationReservationSchema.parse(inputConsent) : null;
   return withBusinessTransaction(async () => {
     await fenceWorkspace(scope.workspaceId);
     const originals = await captureOperatorRecoveryArchive(scope, expectedRoot);
@@ -83,7 +91,7 @@ export async function captureOperatorCheckpointArchive(inputScope: OriginalStage
         }
       } finally { await cursor.close(); }
     }
-    return verifyOperatorCheckpointArchive({ format: "trackyourtime-operator-checkpoint-v1", originals, controls, controlsDigest: hash(controls) });
+    return verifyOperatorCheckpointArchive({ format: "trackyourtime-operator-checkpoint-v1", originals, controls, controlsDigest: hash(controls), reservation });
   });
 }
 async function keyFor(raw: Uint8Array, scope: OperatorRecoveryScope) {
@@ -94,7 +102,7 @@ export async function encryptOperatorCheckpointArchive(input: unknown, independe
   const raw = new Uint8Array(independentKey); let key: Uint8Array | undefined;
   try {
     const archive = await verifyOperatorCheckpointArchive(input), scope = checkpointOf(archive.originals);
-    const header = headerSchema.parse({ ...scope, format: "trackyourtime-operator-checkpoint-file-v1", createdAt: archive.originals.createdAt, controlsDigest: archive.controlsDigest });
+    const header = headerSchema.parse({ ...scope, format: "trackyourtime-operator-checkpoint-file-v1", createdAt: archive.originals.createdAt, controlsDigest: archive.controlsDigest, reservationDigest: archive.reservation ? hash(archive.reservation.request) : null });
     key = await keyFor(raw, scope);
     return fileSchema.parse({ header, box: await seal(key, archive, canonicalJson(header)) });
   } finally { raw.fill(0); key?.fill(0); }
@@ -105,7 +113,7 @@ export async function openOperatorCheckpointArchive(input: unknown, independentK
     if (canonicalJson(scope) !== canonicalJson(checkpointOf(expected))) throw new Error("Operator checkpoint belongs to another preparation");
     key = await keyFor(raw, scope);
     const archive = await verifyOperatorCheckpointArchive(await unseal<unknown>(key, file.box, canonicalJson(file.header)), scope);
-    if (archive.controlsDigest !== file.header.controlsDigest || archive.originals.createdAt !== file.header.createdAt) throw new Error("Operator checkpoint header differs from its archive");
+    if (archive.controlsDigest !== file.header.controlsDigest || archive.originals.createdAt !== file.header.createdAt || (archive.reservation ? hash(archive.reservation.request) : null) !== (file.header.reservationDigest ?? null)) throw new Error("Operator checkpoint header differs from its archive");
     return archive;
   } finally { raw.fill(0); key?.fill(0); }
 }
@@ -124,7 +132,7 @@ export async function verifyOperatorCheckpointCopy(input: unknown, independentKe
         const restored = await db.collection(kind).find({}, { promoteValues: false, promoteLongs: false }).collation({ locale: "simple" }).sort({ _id: 1 }).toArray();
         if (hash(BSON.EJSON.serialize(restored, { relaxed: false })) !== hash(rows)) throw new Error("Operator checkpoint restore differs from the saved typed artifacts");
       }
-      return { ...checkpointOf(archive.originals), sourceRevision: archive.originals.snapshot.sourceRevision, supplementRevision: archive.originals.supplement.sourceRevision, controlsDigest: archive.controlsDigest };
+      return { ...checkpointOf(archive.originals), sourceRevision: archive.originals.snapshot.sourceRevision, supplementRevision: archive.originals.supplement.sourceRevision, controlsDigest: archive.controlsDigest, reservationDigest: archive.reservation ? hash(archive.reservation.request) : null };
     } finally { await db.dropDatabase(); }
   });
 }
@@ -160,8 +168,8 @@ export async function signOperatorCheckpointProof(file: VerifiedFile, privateKey
 /** The independent operational key must come from pinned installation policy,
  * never this request or the owner's account key. Call within the reservation
  * transaction. Revalidation does not itself reserve, activate or retire data. */
-export async function verifyOperatorCheckpointProof(inputScope: OriginalStageScope, input: SignedOperatorCheckpointProof, trustedOperatorKey: PublicKey) {
-  const scope = { ...inputScope }, signed = signedOperatorCheckpointProofSchema.parse(input), key = structuredClone(trustedOperatorKey), { proof } = signed;
+export async function verifyOperatorCheckpointProof(inputScope: OriginalStageScope, input: SignedOperatorCheckpointProof, trustedOperatorKey: PublicKey, inputConsent: SignedPrivatePreparationReservation | null = null) {
+  const scope = { ...inputScope }, signed = signedOperatorCheckpointProofSchema.parse(input), key = structuredClone(trustedOperatorKey), consent = inputConsent ? signedPrivatePreparationReservationSchema.parse(inputConsent) : null, { proof } = signed;
   const current = () => {
     const now = Date.now();
     if (proof.verifiedAt > now + 30_000 || proof.expiresAt <= now || proof.expiresAt <= proof.verifiedAt || proof.expiresAt - proof.verifiedAt > 3_600_000) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Operator checkpoint proof expired. Recheck the saved file and restore drill." });
@@ -171,8 +179,8 @@ export async function verifyOperatorCheckpointProof(inputScope: OriginalStageSco
   current(); await verifyPrivateChange(key, proof, signed.signature);
   return withBusinessTransaction(async () => {
     await fenceWorkspace(scope.workspaceId); current();
-    const archive = await captureOperatorCheckpointArchive(scope, proof.snapshotRoot);
-    if (archive.originals.modeId !== proof.modeId || archive.originals.directoryDigest !== proof.directoryDigest || archive.originals.snapshot.sourceRevision !== proof.sourceRevision || archive.originals.supplement.sourceRevision !== proof.supplementRevision || archive.controlsDigest !== proof.controlsDigest) throw new TRPCError({ code: "CONFLICT", message: "The saved operator checkpoint covers different originals or frozen artifacts. Source data was kept." });
+    const archive = await captureOperatorCheckpointArchive(scope, proof.snapshotRoot, consent);
+    if (archive.originals.modeId !== proof.modeId || archive.originals.directoryDigest !== proof.directoryDigest || archive.originals.snapshot.sourceRevision !== proof.sourceRevision || archive.originals.supplement.sourceRevision !== proof.supplementRevision || archive.controlsDigest !== proof.controlsDigest || (proof.reservationDigest ?? null) !== (archive.reservation ? hash(archive.reservation.request) : null)) throw new TRPCError({ code: "CONFLICT", message: "The saved operator checkpoint covers different originals, frozen artifacts or reservation consent. Source data was kept." });
     const mode = await PrivateWorkspace.findById(proof.modeId).lean(); if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
     requireActivePrivatePreparation(mode); current();
     beforeBusinessCommit(async () => { current(); requireActivePrivatePreparation(mode); });

@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { PrivatePreparationReservation } from "../../models/PrivatePreparationReservation.js";
 import { PrivateMigrationReceipt, PrivateSourceChallengeRequest, PrivateProjectionRoot, PrivateProjectionReader, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 
@@ -13,6 +14,7 @@ export async function discardPrivatePreparation(workspaceId: string, migrationId
   if (!await supportsBusinessTransactions()) throw new TRPCError({ code: "PRECONDITION_FAILED" });
   return withBusinessTransaction(async () => {
     await fenceWorkspace(workspaceId);
+    if (await PrivatePreparationReservation.exists({ workspaceId })) return false;
     const mode = await PrivateWorkspace.findOne({ workspaceId, migrationId, state: "migrating", revision: 0, head: null, backupVerified: false }).lean();
     if (!mode || (expiredOnly && mode.leaseUntil.getTime() > now)) return false;
     if (await PrivateWorkspaceCommit.exists({ workspaceId })) throw new TRPCError({ code: "CONFLICT", message: "Preparation has unexpected committed history. Data was kept for recovery." });

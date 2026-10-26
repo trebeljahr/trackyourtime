@@ -6,6 +6,14 @@ import mongoose from "mongoose";
 import { createKeyPair, createSigningPair, createPrivatePreparationRequest, createPrivateOriginalStageRequest, createPrivateProjectionOwnerProof, createPrivateProjectionPersonalProof, deriveRecoveryBackupKey, encryptCombinedRecoveryKeyBackup, encodeSecret, randomSecret, canonicalJson, decryptPrivateRecord, encryptPrivateRecord, partitionPrivateRecovery, partitionPrivateRecoverySupplement, privateInitialSnapshotProjection, privateMemberKeyFingerprint, privateSourceSessionBinding, signPrivateChange, signPrivateInitialProjectionRoot, signPrivateWorkspaceDirectory, verifyPrivateInitialProjection, verifyPrivateWorkspaceDirectory, type PlainPrivateRecord, type PublicKey, type VerifiedPrivateDirectory } from "@starter/core";
 import { canWritePrivateRecord, type PrivateDirectoryMember, type SignedPrivatePreparationRequest, type SignedPrivateProjectionOwnerProof, type SignedPrivateProjectionPersonalProof } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateMigrationReceipt, PrivatePreparationRequest, PrivateProjectionReader, PrivateProjectionRoot, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateSourceChallengeRequest, PrivateWorkspace, PrivateWorkspaceCommit } from "../models/PrivateData.js";
+import { PrivatePreparationReservation } from "../models/PrivatePreparationReservation.js";
+import { PrivateAccountErasureFence } from "../models/PrivateAccountErasureFence.js";
+import { createPrivatePreparationReservation } from "@starter/core";
+import { reservePrivatePreparation } from "../services/privacy/reserve-preparation.js";
+import { beginPrivateAccountErasure, fencePrivateAccount } from "../services/privacy/account-erasure-fence.js";
+import { assertStandardWorkspace } from "../services/privacy/access.js";
+import { privateProjectionSnapshotRoot } from "../services/privacy/projection-snapshots.js";
+import { StorageUsage } from "../models/StorageUsage.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { env } from "../config/env.js";
@@ -34,7 +42,7 @@ async function request(now?: number) {
   return createPrivatePreparationRequest({ archive: await combinedWorkspaceRecovery(scope.workspaceId, scope.userId, scope.server), directory, userId: scope.userId, sessionId: scope.sessionId, migrationId: crypto.randomUUID(), secrets: owner, current: () => true, now });
 }
 describe("signed client preparation lease", { skip: skipWithoutDatabase }, () => {
-  before(() => connectTestDatabase("privacy-client-preparation", [PrivateAccount, PrivateDirectory, PrivatePreparationRequest, PrivateWorkspace, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateMigrationReceipt, PrivateWorkspaceCommit, PrivateSourceChallengeRequest, WorkspaceMember, WorkspaceWriteFence] as never));
+  before(() => connectTestDatabase("privacy-client-preparation", [PrivateAccount, PrivateDirectory, PrivatePreparationRequest, PrivatePreparationReservation, PrivateAccountErasureFence, PrivateWorkspace, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateMigrationReceipt, PrivateWorkspaceCommit, PrivateSourceChallengeRequest, WorkspaceMember, WorkspaceWriteFence] as never));
   beforeEach(async () => {
     await clearTestDatabase(); const people: PrivateDirectoryMember[] = [];
     for (const userId of ["member", "owner"]) {
@@ -91,8 +99,116 @@ describe("signed client preparation lease", { skip: skipWithoutDatabase }, () =>
         return userId === "owner" ? await createPrivateProjectionOwnerProof(options) : await createPrivateProjectionPersonalProof(options);
       } finally { backupKey.fill(0); }
     }
-    return { ...f, root, proof, readiness: () => privateProjectionPreparationReadiness(f.workerScope, root) };
+    const ownerSnapshot = () => verifyPrivateInitialProjection({ signed, sharedRecords: privateInitialSnapshotProjection(captured.records.filter((row) => !["favorites", "integrations"].includes(row.kind)), "owner"), personalRecords: privateInitialSnapshotProjection(captured.records.filter((row) => ["favorites", "integrations"].includes(row.kind)), "owner"), scope, directory, secrets: owner, current: () => true });
+    return { ...f, root, proof, ownerSnapshot, readiness: () => privateProjectionPreparationReadiness(f.workerScope, root) };
   }
+  async function reservationFixture() {
+    const f = await contentVerification(), key = randomSecret(), operator = await createSigningPair(), folder = await mkdtemp("/private/tmp/trackyourtime-reservation-test-");
+    try {
+      await recordPrivateProjectionOwnerProof(scope, await f.proof("owner"));
+      await recordPrivateProjectionPersonalProof({ ...scope, userId: "member" }, await f.proof("member"));
+      const snapshot = await f.ownerSnapshot();
+      const mode = (await PrivateWorkspace.findOne().lean())!;
+      const consent = await createPrivatePreparationReservation({ snapshot, directory, modeId: String(mode._id), reservationId: crypto.randomUUID(), sessionId: scope.sessionId, secrets: owner, current: () => true });
+      const archive = await captureOperatorCheckpointArchive(f.workerScope, f.root, consent);
+      const saved = await saveOperatorCheckpointCopy(join(folder, "checkpoint.tytoperator"), archive, key, process.env.TEST_MONGOD_PATH!);
+      assert.deepEqual(archive.reservation, consent);
+      assert.match(saved.reservationDigest!, /^[a-f0-9]{64}$/);
+      const operatorProof = await signOperatorCheckpointProof(saved, operator.privateKey, operator.publicKey);
+      return { ...f, consent, operatorProof, operator, reserve: () => reservePrivatePreparation(scope, consent, operatorProof, operator.publicKey) };
+    } finally { key.fill(0); await rm(folder, { recursive: true, force: true }); }
+  }
+  const needsMongod = { skip: !process.env.TEST_MONGOD_PATH && "TEST_MONGOD_PATH needs an operator-local mongod binary" };
+  it("permanently reserves a verified root before device pins and keeps it readable past all leases", needsMongod, async () => {
+    const f = await reservationFixture(), before = (await StorageUsage.findById(scope.workspaceId).lean())!.bytes;
+    const expected = { reserved: true, root: f.root, directoryDigest: directory.digest, reservationId: f.consent.request.reservationId };
+    assert.deepEqual(await f.reserve(), expected);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "reserved");
+    assert.ok((await StorageUsage.findById(scope.workspaceId).lean())!.bytes > before);
+    assert.equal((await StorageUsage.findById(scope.workspaceId).lean())!.version, 4);
+    const artifacts = JSON.stringify(await PrivateSnapshotChunk.find().lean());
+    const clock = mock.method(Date, "now", () => f.operatorProof.proof.expiresAt + 86_400_000);
+    try {
+      assert.deepEqual(await f.reserve(), expected);
+      assert.equal(await discardPrivatePreparation(scope.workspaceId, f.workerScope.migrationId), false);
+      assert.equal(await discardPrivatePreparation(scope.workspaceId, f.workerScope.migrationId, true), false);
+      await assert.rejects(assertStandardWorkspace(scope.workspaceId), /PRIVATE_WORKSPACE_REQUIRES_UNLOCK/);
+      await assert.rejects(runVerifiedPrivateOriginalStage(f.workerScope), /no longer writable/);
+      assert.equal((await privateProjectionSnapshotRoot(scope)).manifest.migrationId, f.workerScope.migrationId);
+      assert.equal((await privateProjectionSnapshotRoot({ ...scope, userId: "member" })).manifest.migrationId, f.workerScope.migrationId);
+    } finally { clock.mock.restore(); }
+    for (const userId of ["owner", "member"]) {
+      await assert.rejects(beginPrivateAccountErasure(userId), /before deleting this account/);
+      await withBusinessTransaction(() => fencePrivateAccount(userId));
+    }
+    assert.equal(await PrivateAccountErasureFence.countDocuments({ erased: true }), 0);
+    await beginPrivateAccountErasure("unrelated");
+    assert.equal(await PrivateAccountErasureFence.countDocuments({ erased: true }), 1);
+    assert.equal(await PrivateAccount.countDocuments(), 2);
+    assert.equal(JSON.stringify(await PrivateSnapshotChunk.find().lean()), artifacts);
+    assert.equal(await mongoose.connection.db!.collection("favorites").countDocuments(), 2);
+    assert.ok((await auditPrivateWorkspaceRetirement(mongoose.connection.db!, scope.workspaceId)).leaks.some((row) => row.collection === "privatepreparationreservations" && row.reason === "source-checksums"));
+    // A partial recovery must still protect keys if the reservation row is
+    // missing but the permanent workspace mode survived.
+    await PrivatePreparationReservation.collection.deleteMany({ workspaceId: scope.workspaceId });
+    for (const userId of ["owner", "member"]) await assert.rejects(beginPrivateAccountErasure(userId), /before deleting this account/);
+    assert.equal(await PrivateAccountErasureFence.countDocuments({ erased: true }), 1);
+    await assert.rejects(privateProjectionSnapshotRoot(scope), /reservation is missing/);
+  });
+  it("rolls reservation and its quota/account fences back if mode publication fails", needsMongod, async () => {
+    const f = await reservationFixture(), before = (await StorageUsage.findById(scope.workspaceId).lean())!.bytes;
+    const failure = mock.method(PrivateWorkspace, "updateOne", async () => { throw new Error("Injected reservation publication failure"); });
+    try { await assert.rejects(f.reserve(), /Injected reservation publication failure/); } finally { failure.mock.restore(); }
+    assert.equal(await PrivatePreparationReservation.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+    assert.equal((await StorageUsage.findById(scope.workspaceId).lean())!.bytes, before);
+    let at = Date.now(); const clock = mock.method(Date, "now", () => at);
+    try {
+      await assert.rejects(withBusinessTransaction(async () => { await f.reserve(); at = f.consent.request.expiresAt; }), /Reservation consent expired/);
+    } finally { clock.mock.restore(); }
+    assert.equal(await PrivatePreparationReservation.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+    assert.equal((await StorageUsage.findById(scope.workspaceId).lean())!.bytes, before);
+    assert.deepEqual(await f.reserve(), { reserved: true, root: f.root, directoryDigest: directory.digest, reservationId: f.consent.request.reservationId });
+  });
+  it("refuses expired/cross-session/forged consent and changed operational checkpoints without reserving", needsMongod, async () => {
+    const f = await reservationFixture();
+    const forged = structuredClone(f.consent); forged.signature = await signPrivateChange(member.signingPrivateKey, forged.request);
+    await assert.rejects(reservePrivatePreparation(scope, forged, f.operatorProof, f.operator.publicKey), { code: "FORBIDDEN" });
+    await assert.rejects(reservePrivatePreparation({ ...scope, sessionId: "different" }, f.consent, f.operatorProof, f.operator.publicKey), { code: "NOT_FOUND" });
+    const clock = mock.method(Date, "now", () => f.consent.request.expiresAt);
+    try { await assert.rejects(f.reserve(), /consent expired/); } finally { clock.mock.restore(); }
+    const changed = structuredClone(f.operatorProof); changed.proof.controlsDigest = "a".repeat(64); changed.signature = await signPrivateChange(f.operator.privateKey, changed.proof);
+    await assert.rejects(reservePrivatePreparation(scope, f.consent, changed, f.operator.publicKey), { code: "CONFLICT" });
+    const missingIntent = structuredClone(f.operatorProof); delete missingIntent.proof.reservationDigest; missingIntent.signature = await signPrivateChange(f.operator.privateKey, missingIntent.proof);
+    await assert.rejects(reservePrivatePreparation(scope, f.consent, missingIntent, f.operator.publicKey), { code: "CONFLICT" });
+    const differentIntent = structuredClone(f.consent); differentIntent.request.reservationId = crypto.randomUUID(); differentIntent.signature = await signPrivateChange(owner.signingPrivateKey, differentIntent.request);
+    await assert.rejects(reservePrivatePreparation(scope, differentIntent, f.operatorProof, f.operator.publicKey), { code: "CONFLICT" });
+    assert.equal(await PrivatePreparationReservation.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+    assert.equal(await PrivateAccountErasureFence.countDocuments({ erased: true }), 0);
+  });
+  it("lets an erasure that wins the account fence prevent a late reservation", needsMongod, async () => {
+    const f = await reservationFixture(); let release!: () => void, enter!: () => void;
+    const ready = new Promise<void>((resolve) => { enter = resolve; }), wait = new Promise<void>((resolve) => { release = resolve; });
+    const deletion = withBusinessTransaction(async () => { await beginPrivateAccountErasure("member"); enter(); await wait; });
+    await ready;
+    const refused = assert.rejects(f.reserve(), /Account erasure has started/); release(); await deletion;
+    await refused;
+    assert.equal(await PrivatePreparationReservation.countDocuments(), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "migrating");
+  });
+  it("lets a reservation that wins the account fence refuse deletion before the irreversible marker", needsMongod, async () => {
+    const f = await reservationFixture(); let release!: () => void, enter!: () => void;
+    const ready = new Promise<void>((resolve) => { enter = resolve; }), wait = new Promise<void>((resolve) => { release = resolve; });
+    const pending = withBusinessTransaction(async () => { await f.reserve(); enter(); await wait; });
+    await ready;
+    const refused = assert.rejects(beginPrivateAccountErasure("member"), /before deleting this account/);
+    release(); await pending; await refused;
+    assert.equal(await PrivateAccountErasureFence.countDocuments({ erased: true }), 0);
+    assert.equal((await PrivateWorkspace.findOne().lean())!.state, "reserved");
+    assert.equal(await PrivatePreparationReservation.countDocuments(), 1);
+  });
   it("requires current saved-file owner and opaque-personal verification without revealing missing members", async () => {
     const f = await contentVerification();
     assert.deepEqual(await f.readiness(), { status: "awaiting-verification" });

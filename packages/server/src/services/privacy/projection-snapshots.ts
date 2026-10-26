@@ -6,6 +6,7 @@ import { WorkspaceMember } from "../../models/WorkspaceMember.js";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
 import { captureCompleteProjectionPreparation, isPersonalPrivateKind, type ProjectionPreparationScope } from "./projection-proposal.js";
 import { requireActivePrivatePreparation } from "./preparation.js";
+import { requireReservedPrivatePreparation } from "./reserved-preparation.js";
 import { verifyPrivateChange } from "./signatures.js";
 const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const incomplete = () => new TRPCError({ code: "PRECONDITION_FAILED", message: "Initial projection storage is incomplete. Original data was kept." });
@@ -99,11 +100,14 @@ async function readerScope(scope: { server: string; workspaceId: string; userId:
   if (!await WorkspaceMember.exists({ workspaceId: scope.workspaceId, userId: scope.userId })) throw new TRPCError({ code: "NOT_FOUND" });
   const mode = await PrivateWorkspace.findOne({ workspaceId: scope.workspaceId }).lean();
   if (!mode) throw new TRPCError({ code: "NOT_FOUND" });
+  if (!["migrating", "reserved", "encrypted"].includes(mode.state)) throw new TRPCError({ code: "PRECONDITION_FAILED" });
   if (mode.state === "migrating") requireActivePrivatePreparation(mode);
+  const reservation = mode.state === "reserved" ? await requireReservedPrivatePreparation(mode, scope.server) : null;
   const root = await PrivateProjectionRoot.findOne({ workspaceId: scope.workspaceId, migrationId: mode.migrationId }).lean();
   const reader = await PrivateProjectionReader.findOne({ workspaceId: scope.workspaceId, migrationId: mode.migrationId, userId: scope.userId }).lean();
   if (!root || !reader || root.signed.manifest.server !== scope.server) throw new TRPCError({ code: "NOT_FOUND" });
   if (root.root !== await privateRecordDigest(root.signed.manifest)) throw incomplete();
+  if (reservation && (root.root !== reservation.root || root.signed.manifest.directoryDigest !== reservation.directoryDigest)) throw incomplete();
   if (mode.state === "encrypted" && (mode.revision < 1 || !mode.head || !/^[A-Za-z0-9_-]{43}$/.test(mode.head) || (mode.revision === 1 && mode.head !== root.root) || mode.directoryDigest !== root.signed.manifest.directoryDigest)) throw new TRPCError({ code: "PRECONDITION_FAILED" });
   return { root, reader };
 }

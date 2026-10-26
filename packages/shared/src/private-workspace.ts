@@ -166,6 +166,15 @@ export const privateOriginalStageRequestSchema = privatePreparationRequestSchema
 export const signedPrivateOriginalStageRequestSchema = z.object({ request: privateOriginalStageRequestSchema, signature: privateSignatureSchema }).strict();
 export type SignedPrivateOriginalStageRequest = z.infer<typeof signedPrivateOriginalStageRequestSchema>;
 
+/** Separate irreversible reservation consent, after complete content checks.
+ * Historical conversion consent does not authorize this transition. */
+export const privatePreparationReservationRequestSchema = privateOriginalStageRequestSchema.extend({
+  protocol: z.literal("trackyourtime-private-reservation-v1"), reservationId: z.uuid(),
+  modeId: z.string().regex(/^[a-f0-9]{24}$/), snapshotRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+}).strict();
+export const signedPrivatePreparationReservationSchema = z.object({ request: privatePreparationReservationRequestSchema, signature: privateSignatureSchema }).strict();
+export type SignedPrivatePreparationReservation = z.infer<typeof signedPrivatePreparationReservationSchema>;
+
 /** Internal encrypted account-inventory transport. A checked ciphertext is
  * not a trusted inventory/enrollment until its local checkpoint is verified. */
 export const privateInventoryVersionHeaderSchema = z.object({

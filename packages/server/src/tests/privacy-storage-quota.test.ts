@@ -56,7 +56,7 @@ describe("encrypted storage budgets", { skip: skipWithoutDatabase }, () => {
     await assert.rejects(PrivateRecord.create({ workspaceId: WS, ...await cipher("new") }), isQuota);
     assert.equal(await PrivateRecord.countDocuments(), 1);
     await PrivateRecord.deleteOne({ workspaceId: WS, id: "legacy" });
-    assert.equal(await used(), 8192); assert.equal((await StorageUsage.findById(WS).lean())!.version, 3);
+    assert.equal(await used(), 8192); assert.equal((await StorageUsage.findById(WS).lean())!.version, 4);
   });
   it("serializes encrypted growth across workspaces owned by the same account", async () => {
     const other = "private-quota-other";
@@ -68,5 +68,12 @@ describe("encrypted storage budgets", { skip: skipWithoutDatabase }, () => {
     assert.ok(isQuota((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason));
     assert.ok(await used() + await used(other) <= 65536);
     assert.equal(await mongoose.connection.db!.collection("privaterecords").countDocuments(), 1);
+  });
+  it("adopts version-three ledgers from actual permanent-reservation BSON before new growth", async () => {
+    await mongoose.connection.db!.collection("privatepreparationreservations").insertOne({ workspaceId: WS, retainedCheckpoint: "legacy synthetic reservation metadata" });
+    await StorageUsage.updateOne({ _id: WS }, { $set: { version: 3, bytes: 8192 } });
+    await PrivateRecord.create({ workspaceId: WS, ...await cipher("after-reservation-adoption") });
+    assert.ok(await used() >= 16384);
+    assert.equal((await StorageUsage.findById(WS).lean())!.version, 4);
   });
 });

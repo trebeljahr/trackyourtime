@@ -26,6 +26,7 @@ export type DeletionCollection =
   | "privateAccounts"
   | "privateInventoryVersions"
   | "privateDeviceRequests"
+  | "privatePreparationReservations"
   | "privatePreparationRequests"
   | "privateSourceChallenges"
   | "privateDirectories"
@@ -115,6 +116,7 @@ export function workspaceDeletionSteps(workspaceId: string): DeletionStep[] {
     scoped("privateProjectionRoots"),
     scoped("privateProjectionReaders"),
     scoped("privateMigrationReceipts"),
+    scoped("privatePreparationReservations"),
     scoped("privatePreparationRequests"),
     scoped("privateSourceChallenges"),
     scoped("privateWorkspaces"),

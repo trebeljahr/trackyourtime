@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { PrivatePreparationReservation } from "../../models/PrivatePreparationReservation.js";
 import { TRPCError } from "@trpc/server";
 import { partitionPrivateRecovery, partitionPrivateRecoverySupplement, privateRecordDigest, privateSourceSessionBinding } from "@starter/core";
 import { PRIVATE_PREPARATION_REQUEST_TTL_MS, RECOVERY_MAX_BYTES, RECOVERY_MAX_RECORDS, signedPrivatePreparationRequestSchema, type SignedPrivatePreparationRequest } from "@starter/shared";
@@ -30,6 +31,7 @@ export async function beginPrivateClientPreparation(inputScope: Scope, input: Si
   const requestDigest = await privateRecordDigest(request);
   return withBusinessTransaction(async () => {
     await fenceWorkspace(workspaceId); currentRequest(request);
+    if (await PrivatePreparationReservation.exists({ workspaceId })) throw new TRPCError({ code: "CONFLICT", message: "The frozen workspace is permanently reserved. Resume or recover that conversion." });
     const directory = await captureCurrentPreparationDirectory(scope);
     if (directory.digest !== request.directoryDigest) throw new TRPCError({ code: "CONFLICT", message: "Workspace keys changed. Verify them again before preparation." });
     const owner = directory.signed.directory.members.find((member) => member.userId === userId)!;

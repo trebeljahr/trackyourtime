@@ -1,3 +1,4 @@
+import { PrivatePreparationReservation } from "../../models/PrivatePreparationReservation.js";
 import { PRIVATE_USER_ONLY_KINDS } from "@starter/shared";
 import { PrivateInventoryVersion } from "../../models/PrivateInventoryVersion.js";
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
@@ -58,6 +59,7 @@ const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateMigrationReceipts: PrivateMigrationReceipt,
   privateDeviceRequests: PrivateDeviceRequest,
   privateSourceChallenges: PrivateSourceChallengeRequest,
+  privatePreparationReservations: PrivatePreparationReservation,
   privatePreparationRequests: PrivatePreparationRequest,
   privateRecords: PrivateRecord,
   privateWorkspaceCommits: PrivateWorkspaceCommit,
