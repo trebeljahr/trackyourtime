@@ -168,3 +168,32 @@ it("reads a cold private billing count while offline without waiting for the rad
   const app = wrapper(); onlineManager.setOnline(false); const view = renderHook(() => trpc.projects.billingImpact.useQuery({ id: project.id }), { wrapper: app.render });
   await waitFor(() => expect(view.result.current.isSuccess).toBe(true)); expect(view.result.current.data).toEqual({ entries: 0, invoiced: 0 }); expect(fetch).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
 });
+
+it.each(["reply", "storage"] as const)("retries a retained private draft after a lost %s confirmation without duplicate time or cache rows", async (kind) => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); await readPrivateDeviceAccessState("owner");
+  vi.stubGlobal("fetch", vi.fn(() => { throw new Error("Private retry must stay local"); }));
+  const { useEntryMutations, TRACKER_LIST_INPUT } = await import("@/components/tracker/use-entry-mutations"), { useEntrySubmission } = await import("@/components/tracker/use-entry-submission"), dispatcher = await import("@/lib/private-workspace-mutation"), { PrivateContentUnavailableError } = await import("@/lib/private-content-error");
+  if (kind === "reply") {
+    const original = dispatcher.mutatePrivateWorkspace; vi.spyOn(dispatcher, "mutatePrivateWorkspace").mockImplementationOnce(async (...args) => { await original(...args); throw new PrivateContentUnavailableError("Synthetic confirmation lost after durable save"); });
+  } else {
+    const hosts = await import("@/lib/private-replica"), original = hosts.privateWorkspaceStorageHost;
+    vi.spyOn(hosts, "privateWorkspaceStorageHost").mockImplementationOnce(async (...args) => {
+      const host = await original(...args); let writes = 0, unconfirmed: string | null = null;
+      return { ...host, storage: { ...host.storage,
+        setItem: async (key, value) => { await host.storage.setItem(key, value); if (key.includes("segments%3Areplica") && key.endsWith("%3Amanifest") && ++writes === 2) unconfirmed = key; },
+        getItem: async key => { if (key === unconfirmed) { unconfirmed = null; return null; } return host.storage.getItem(key); },
+      } };
+    });
+  }
+  const app = wrapper(), done = vi.fn(), view = renderHook(() => ({ entry: useEntryMutations(), submission: useEntrySubmission("one-private-draft", done), utils: trpc.useUtils() }), { wrapper: app.render });
+  const identity = view.result.current.submission.privateIntentId; expect(identity).toMatch(/^[0-9a-f-]{36}$/);
+  const input = { description: "One private retry", projectId: null, billable: true, start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", privateIntentId: identity };
+  act(() => view.result.current.submission.submit(() => view.result.current.entry.createManualEntry(input))); await waitFor(() => expect(view.result.current.submission.error).not.toBeNull()); expect(done).not.toHaveBeenCalled();
+  const data = await getTRPCClient({ streamQueries: false }).entries.list.query({ from: "2026-10-27T00:00:00.000Z", to: "2026-10-28T00:00:00.000Z" }); expect(data.entries).toHaveLength(1);
+  act(() => view.result.current.utils.entries.list.setInfiniteData(TRACKER_LIST_INPUT, { pages: [data], pageParams: [null] }));
+  const duplicateWrites: unknown[] = [], write = app.queryClient.setQueryData.bind(app.queryClient);
+  vi.spyOn(app.queryClient, "setQueryData").mockImplementation(((...args: Parameters<typeof write>) => { const result = write(...args), rows = result && typeof result === "object" && "pages" in result ? (result as { pages: { entries?: { id: string }[] }[] }).pages.flatMap(page => page.entries ?? []) : []; if (rows.filter(row => row.id === identity).length > 1) duplicateWrites.push(result); return result; }) as typeof write);
+  act(() => view.result.current.submission.submit(() => view.result.current.entry.createManualEntry(input))); await waitFor(() => expect(done).toHaveBeenCalledOnce());
+  expect(view.result.current.submission.privateIntentId).toBe(identity); expect(duplicateWrites).toEqual([]); expect((await getTRPCClient({ streamQueries: false }).entries.list.query({ from: "2026-10-27T00:00:00.000Z", to: "2026-10-28T00:00:00.000Z" })).entries).toHaveLength(1);
+  view.unmount(); app.queryClient.clear();
+});

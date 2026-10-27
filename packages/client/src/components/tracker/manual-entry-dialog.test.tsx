@@ -38,8 +38,12 @@ import { ManualEntryDialog } from "./manual-entry-dialog";
 
 afterEach(() => {
   cleanup();
+  privateMode.enabled = false;
   vi.clearAllMocks();
 });
+
+const privateMode = vi.hoisted(() => ({ enabled: false }));
+vi.mock("@/lib/private-workspace-mode-cache", async original => ({ ...await original<typeof import("@/lib/private-workspace-mode-cache")>(), observedWorkspaceMode: () => privateMode.enabled ? "encrypted" : null }));
 
 const seed = {
   description: "",
@@ -203,4 +207,16 @@ describe("ManualEntryDialog date and time editing", () => {
     expect(onAdd.mock.calls[0]![0].start).toBe("2026-10-01T21:30:17.000Z");
     expect(onAdd.mock.calls[0]![0].end).toBe("2026-10-01T22:30:42.000Z");
   });
+});
+
+it("keeps one private operation identity while a manual draft is retried and refreshes it after reopening", async () => {
+  privateMode.enabled = true;
+  const add = vi.fn<(args: ManualEntryArgs) => Promise<EntryMutationResult>>().mockResolvedValue({ ok: false, message: "Uncertain private save" });
+  const props = { open: true, onOpenChange: vi.fn(), seed, mutations: {} as never, onAdd: add };
+  const view = render(<ManualEntryDialog {...props} />);
+  fireEvent.click(screen.getByTestId("manual-entry-add")); await act(async () => { await Promise.resolve(); });
+  const first = add.mock.calls[0]![0].privateIntentId; expect(first).toMatch(/^[0-9a-f-]{36}$/);
+  fireEvent.click(screen.getByTestId("manual-entry-add")); await act(async () => { await Promise.resolve(); }); expect(add.mock.calls[1]![0].privateIntentId).toBe(first);
+  view.rerender(<ManualEntryDialog {...props} open={false} />); view.rerender(<ManualEntryDialog {...props} />);
+  fireEvent.click(screen.getByTestId("manual-entry-add")); await act(async () => { await Promise.resolve(); }); expect(add.mock.calls[2]![0].privateIntentId).not.toBe(first);
 });

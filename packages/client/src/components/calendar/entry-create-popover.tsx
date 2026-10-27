@@ -112,6 +112,7 @@ export function EntryCreatePopover({
   const submit = (): void => {
     submission.submit(() => actions.create({
       ...fields,
+      ...(submission.privateIntentId ? { privateIntentId: submission.privateIntentId } : {}),
       start: startIso,
       end: endIso,
     }));

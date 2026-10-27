@@ -7,6 +7,7 @@ import { assertPrivateMutationStillCurrent, privateMutationStillCurrent, capture
 import { useProjectOptions } from "@/hooks/use-catalog-options";
 
 import * as React from "react";
+import { observedWorkspaceMode } from "@/lib/private-workspace-mode-cache";
 import type { DetailedEntry } from "@starter/shared";
 
 import { toast } from "@/components/ui/sonner";
@@ -64,6 +65,7 @@ export type EntryPatch = {
 
 /** Everything needed to create an entry from a drag or the create dialog. */
 export type EntryDraft = {
+  privateIntentId?: string;
   description: string;
   projectId: string | null;
   taskId: string | null;
@@ -364,7 +366,9 @@ export const useCalendarActions = (
   const applyCreate = React.useCallback(
     (draft: EntryDraft): Promise<{ id: string; ok: true; saved: EntrySaveLocation } | { id: null; ok: false; message: string }> => {
       const scope = entryMutationScope();
-      const variables = { ...draft, originId: ORIGIN_ID, ...(scope.workspaceId === null ? {} : { workspaceId: scope.workspaceId }) };
+      const { privateIntentId, ...fields } = draft;
+      const identity = privateIntentId ?? (observedWorkspaceMode(scope.workspaceId) === "encrypted" ? crypto.randomUUID() : undefined);
+      const variables = { ...fields, ...(identity ? { __privateIntentId: identity } : {}), originId: ORIGIN_ID, ...(scope.workspaceId === null ? {} : { workspaceId: scope.workspaceId }) };
       createScopes.current.set(variables, scope);
       return createMutation
         .mutateAsync(variables)

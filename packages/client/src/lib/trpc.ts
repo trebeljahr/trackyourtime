@@ -182,6 +182,7 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
         const value = op.type === "mutation" ? await mutatePrivateWorkspace(route, op.path, addressed) : await readPrivateWorkspaceQuery(route, op.path, addressed, op.type); checkPrivateRequestScope(originalScope); route.check();
         if (!cancelled) { observer.next({ result: { data: value } } as never); observer.complete(); }
       } else {
+        if (input?.__privateIntentId !== undefined) throw new PrivateContentUnavailableError("Private entry intent cannot use standard storage");
         route.check(); subscription = next({ ...op, input: forwarded, context: { ...op.context, privateContentScope: originalScope } }).subscribe({
           next: (value) => { try { checkPrivateRequestScope(originalScope); route.check();
             if (selection) {

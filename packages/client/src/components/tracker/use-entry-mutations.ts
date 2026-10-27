@@ -4,6 +4,7 @@ import { assignPrivateMutationMetadata, assertPrivateMutationStillCurrent, priva
 import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
 
 import * as React from "react";
+import { observedWorkspaceMode } from "@/lib/private-workspace-mode-cache";
 import { useQueryClient, type Mutation } from "@tanstack/react-query";
 import { buildQuickStartInput, deviceTimeZone } from "@starter/core";
 import {
@@ -163,7 +164,7 @@ export const announceReplacedTimer = (result: unknown): void => {
 // here is gone, and the extension replays tagged rows through the same
 // contract rather than only this client understanding them.
 type StartInput = OfflineStartInput;
-type CreateInput = OfflineCreateInput & { workspaceId?: string };
+type CreateInput = OfflineCreateInput & { workspaceId?: string; __privateIntentId?: string };
 type UpdateInput = OfflineUpdateInput & { workspaceId?: string };
 
 const byStartDesc = (a: DetailedEntry, b: DetailedEntry): number => {
@@ -199,6 +200,8 @@ export type StartTimerArgs = {
 };
 
 export type ManualEntryArgs = StartTimerArgs & {
+  /** Stable for this private draft across uncertain-save retries. */
+  privateIntentId?: string;
   start: string;
   end: string;
 };
@@ -340,10 +343,11 @@ export const useEntryMutations = (): EntryMutations => {
         let found = false;
         const pages = data.pages.map((page) => ({
           ...page,
-          entries: page.entries.map((entry) => {
-            if (entry.id !== id) return entry;
+          entries: page.entries.flatMap((entry) => {
+            if (entry.id !== id && entry.id !== next.id) return [entry];
+            if (found) return [];
             found = true;
-            return next;
+            return [next];
           }),
         }));
         if (!found && pages[0]) {
@@ -1101,6 +1105,7 @@ export const useEntryMutations = (): EntryMutations => {
       };
       const scope = entryMutationScope();
       if (scope.workspaceId !== null) input.workspaceId = scope.workspaceId;
+      if (args.privateIntentId !== undefined || observedWorkspaceMode(scope.workspaceId) === "encrypted") input.__privateIntentId = args.privateIntentId ?? crypto.randomUUID();
       saveScopes.current.set(input, scope);
       const catalog = shapeContext();
       try {

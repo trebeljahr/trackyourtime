@@ -1,25 +1,72 @@
 import { z } from "zod";
 import { createEntrySchema, entryIdInputSchema, intervalIntersects, projectBillableByDefault, resolveHourlyRate, updateEntrySchema, type PrivateKind, type TimeEntry } from "@starter/shared";
+import { canonicalJson } from "./crypto.js";
 import { privateEntryReader } from "./entry-view.js";
 import { privateViewSource, type PrivateViewOptions } from "./view-source.js";
-import type { PlainPrivateRecord } from "./records.js";
+import { privateValue, type PlainPrivateRecord } from "./records.js";
 const paths = ["entries.create", "entries.update", "entries.remove"] as const;
 export type PrivateEntryEditPath = typeof paths[number];
 export const isPrivateEntryEdit = (path: string): path is PrivateEntryEditPath => (paths as readonly string[]).includes(path);
-export const PRIVATE_ENTRY_EDIT_KINDS: readonly PrivateKind[] = ["entries", "entryMoney", "clients", "projects", "projectMoney", "tasks", "tags", "settings", "settingsMoney", "members", "memberMoney", "approvals"];
+export const PRIVATE_ENTRY_EDIT_KINDS: readonly PrivateKind[] = ["entries", "entryMoney", "clients", "projects", "projectMoney", "tasks", "tags", "settings", "settingsMoney", "members", "memberMoney", "approvals", "imports"];
 const rate = z.number().finite().nonnegative().nullish().transform((value) => value ?? null);
 const id = z.string().min(1).max(100), instant = z.iso.datetime({ offset: true });
 const invoiceFields = ["clientId", "projectId", "taskId", "billable", "start", "end"];
-/** Completed manual time only. Starting, stopping or reopening a timer needs
- * account-wide coordination across standard and encrypted workspaces. */
-export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEntryEditPath; input: unknown; now?: number; newId?: () => string }): { records: PlainPrivateRecord[]; remove: Pick<PlainPrivateRecord, "kind" | "id" | "authorId">[]; result: TimeEntry | { success: true; id: string } } {
-  const { scope } = options, source = privateViewSource(options), { check, ofKind, value, paired } = source;
-  if (!isPrivateEntryEdit(options.path)) throw new Error("Unsupported private entry edit");
-  const raw = z.record(z.string(), z.unknown()).parse(options.input ?? {});
+declare const privateEntryIntentBrand: unique symbol;
+export type VerifiedPrivateEntryIntent = Readonly<{ scope: PrivateViewOptions["scope"]; path: PrivateEntryEditPath; intentId: string; receiptId: string; request: string; requestHash: string; current: () => boolean }> & { readonly [privateEntryIntentBrand]: true };
+const intents = new WeakSet<object>();
+function entryArguments(scope: PrivateViewOptions["scope"], path: PrivateEntryEditPath, rawInput: unknown) {
+  if (!isPrivateEntryEdit(path)) throw new Error("Unsupported private entry edit");
+  const raw = z.record(z.string(), z.unknown()).parse(rawInput ?? {});
   if (raw.workspaceId !== undefined && raw.workspaceId !== scope.workspaceId) throw new Error("Private entry intent belongs to another workspace");
   const { workspaceId: _workspace, ...input } = raw; void _workspace;
-  const args = (options.path === "entries.create" ? createEntrySchema.strict().parse(input) : options.path === "entries.update" ? updateEntrySchema.strict().parse(input) : entryIdInputSchema.strict().parse(input)) as Record<string, unknown>;
+  const args = (path === "entries.create" ? createEntrySchema.strict().parse(input) : path === "entries.update" ? updateEntrySchema.strict().parse(input) : entryIdInputSchema.strict().parse(input)) as Record<string, unknown>;
   if (args.operationId !== undefined) throw new Error("Standard queued operations cannot be replayed into private storage");
+  return args;
+}
+const hash = async (value: unknown) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson(value)))), byte => byte.toString(16).padStart(2, "0")).join("");
+/** The host prepares this from original frozen intent before waiting for the
+ * replica lock. Only branded, scope-bound descriptors can address receipts. */
+export async function preparePrivateEntryIntent(options: { scope: PrivateViewOptions["scope"]; path: PrivateEntryEditPath; input: unknown; intentId: string; current: () => boolean }): Promise<VerifiedPrivateEntryIntent> {
+  const scope = Object.freeze({ ...options.scope }), path = options.path, intentId = z.uuid().parse(options.intentId), current = options.current;
+  const check = () => { if (!current()) throw new Error("Private entry intent changed before preparation finished"); }; check();
+  const args = entryArguments(scope, path, options.input), request = canonicalJson(args);
+  const [identityHash, requestHash] = await Promise.all([hash([scope.userId, scope.workspaceId, intentId]), hash([path, args])]); check();
+  const prepared = Object.freeze({ scope, path, intentId, receiptId: `entryoperations:${identityHash}`, request, requestHash, current }) as VerifiedPrivateEntryIntent;
+  intents.add(prepared); return prepared;
+}
+/** Completed manual time only. Starting, stopping or reopening a timer needs
+ * account-wide coordination across standard and encrypted workspaces. */
+export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEntryEditPath; input: unknown; now?: number; newId?: () => string; intent?: VerifiedPrivateEntryIntent }): { records: PlainPrivateRecord[]; remove: Pick<PlainPrivateRecord, "kind" | "id" | "authorId">[]; result: TimeEntry | { success: true; id: string } } {
+  const { scope } = options, source = privateViewSource(options), { check, ofKind, value, paired } = source;
+  const args = entryArguments(scope, options.path, options.input), intent = options.intent;
+  if (intent) {
+    if (!intents.has(intent) || !intent.current() || intent.scope.server !== scope.server || intent.scope.userId !== scope.userId || intent.scope.workspaceId !== scope.workspaceId || intent.path !== options.path || intent.request !== canonicalJson(args)) throw new Error("Private entry intent differs from its original request");
+    const existing = ofKind("imports").find(row => row.id === intent.receiptId);
+    if (existing) {
+      if (existing.authorId !== scope.userId) throw new Error("Private entry receipt belongs to another author");
+      const receipt = z.record(z.string(), z.unknown()).parse(privateValue(existing.value));
+      if (receipt._id !== intent.receiptId.slice("entryoperations:".length) || receipt.protocol !== "trackyourtime-private-entry-operation-v1" || receipt.userId !== scope.userId || receipt.workspaceId !== scope.workspaceId || receipt.operation !== options.path || receipt.requestHash !== intent.requestHash) throw new Error("Private operation identity was reused for a different request");
+      let result: TimeEntry | { success: true; id: string };
+      if (options.path === "entries.remove") {
+        result = z.object({ success: z.literal(true), id }).strict().parse(receipt.result);
+        if (result.id !== args.id) throw new Error("Private deletion receipt differs from its original target");
+      } else {
+        const stored = z.record(z.string(), z.unknown()).parse(receipt.result), entryId = id.parse(stored.id);
+        if (!Object.hasOwn(stored, "hourlyRate")) throw new Error("Private entry receipt is missing its monetary snapshot");
+        const reader = privateEntryReader(privateViewSource({ ...options, records: [
+          { kind: "entries", id: entryId, authorId: scope.userId, value: { ...stored, _id: entryId } },
+          { kind: "entryMoney", id: entryId, authorId: scope.userId, value: { _id: entryId, hourlyRate: stored.hourlyRate } },
+        ] }));
+        result = reader.detailed(reader.quick[0]!);
+        if (result.end === null || result.authorId !== scope.userId || (options.path === "entries.create" ? result.id !== intent.intentId : result.id !== args.id)) throw new Error("Private entry receipt differs from its original target");
+      }
+      check(); if (!intent.current()) throw new Error("Private entry receipt changed"); return { records: [], remove: [], result };
+    }
+  }
+  const receipt = (result: TimeEntry | { success: true; id: string }): PlainPrivateRecord[] => {
+    if (!intent) return []; if (!intent.current()) throw new Error("Private entry intent changed before receipt publication");
+    return [{ kind: "imports", id: intent.receiptId, authorId: scope.userId, value: { _id: intent.receiptId.slice("entryoperations:".length), protocol: "trackyourtime-private-entry-operation-v1", workspaceId: scope.workspaceId, userId: scope.userId, requestHash: intent.requestHash, operation: options.path, result: structuredClone(result), createdAt: stamp, updatedAt: stamp } }];
+  };
   const prior = options.path === "entries.create" ? undefined : ofKind("entries").find((row) => row.id === args.id && row.authorId === scope.userId);
   if (options.path !== "entries.create" && !prior) throw new Error("Entry not found");
   const reader = privateEntryReader(source), oldRow = prior ? reader.quick.find((row) => row.doc.id === prior.id) : undefined;
@@ -43,7 +90,7 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
   if (options.path === "entries.remove") {
     if (old!.invoiceId) throw new Error("Invoiced time cannot be deleted");
     const remove = ["entries", "entryMoney"].map((kind) => ({ kind: kind as PrivateKind, id: prior!.id, authorId: scope.userId }));
-    check(); return { records: [] as PlainPrivateRecord[], remove, result: { success: true as const, id: prior!.id } };
+    const result = { success: true as const, id: prior!.id }; check(); return { records: receipt(result), remove, result };
   }
   if (old?.invoiceId && invoiceFields.some((field) => args[field] !== undefined)) throw new Error("Invoiced time can only be relabelled or retagged");
   const start = new Date(String(args.start ?? old?.start)).toISOString(), end = new Date(String(args.end ?? old?.end)).toISOString();
@@ -87,8 +134,8 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
   if (billable === undefined) { facts = billing(); billable = projectValue ? projectBillableByDefault({ billableDefault: z.boolean().parse(projectValue.billableDefault), hourlyRate: facts.projectRate }, facts.defaultRate, facts.memberRate) : false; }
   const resnapshot = !old || billable !== old.billable || projectId !== old.projectId;
   let financial: PlainPrivateRecord | null = null, currency = old?.currency;
-  const entryId = prior?.id ?? z.uuid().parse((options.newId ?? (() => crypto.randomUUID()))());
-  if (!prior && ofKind("entries").some((row) => row.id === entryId)) throw new Error("New entry identity already exists");
+  const entryId = prior?.id ?? z.uuid().parse(intent?.intentId ?? (options.newId ?? (() => crypto.randomUUID()))());
+  if (!prior && [...ofKind("entries"), ...ofKind("entryMoney")].some((row) => row.id === entryId)) throw new Error("New entry identity already exists");
   if (resnapshot) {
     facts ??= billing(); currency = facts.currency;
     const stored = prior ? ofKind("entryMoney").find((row) => row.id === prior.id)! : null;
@@ -105,5 +152,5 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
   const changed = new Set(records.map((row) => JSON.stringify([row.kind, row.id]))), after = options.records.filter((row) => !changed.has(JSON.stringify([row.kind, row.id]))).concat(records);
   const next = privateEntryReader(privateViewSource({ ...options, records: after })), row = next.quick.find((row) => row.doc.id === entryId);
   if (!row) throw new Error("Prepared private entry is missing");
-  const result: TimeEntry = next.detailed(row); check(); return { records, remove: [], result };
+  const result: TimeEntry = next.detailed(row); check(); if (intent && !intent.current()) throw new Error("Private entry intent changed"); return { records: records.concat(receipt(result)), remove: [], result };
 }

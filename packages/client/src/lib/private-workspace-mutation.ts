@@ -20,13 +20,14 @@ export async function mutatePrivateWorkspace(route: WorkspaceContentRoute, path:
     else if (isPrivateCatalogEdit(path)) saved = await copy.editCatalog(path, frozen);
     else if (isPrivateEntryEdit(path)) {
       if (!frozen || typeof frozen !== "object" || Array.isArray(frozen)) throw new PrivateContentUnavailableError();
-      const { __durableScope, __durableTempId, ...input } = frozen as Record<string, unknown>;
+      const { __durableScope, __durableTempId, __privateIntentId, ...input } = frozen as Record<string, unknown>;
       if (__durableScope !== undefined) {
         const scope = __durableScope as { owner?: unknown; server?: unknown; workspaceId?: unknown } | null;
         if (!scope || typeof scope !== "object" || scope.owner !== route.scope.userId || scope.server !== route.scope.server || scope.workspaceId !== route.scope.workspaceId) throw new PrivateContentUnavailableError("The original entry scope changed before this edit could finish");
       }
       if (__durableTempId !== undefined && (typeof __durableTempId !== "string" || !__durableTempId || __durableTempId.length > 200)) throw new PrivateContentUnavailableError();
-      saved = await copy.editEntry(path, input);
+      if (__privateIntentId !== undefined && typeof __privateIntentId !== "string") throw new PrivateContentUnavailableError();
+      saved = await copy.editEntry(path, input, __privateIntentId);
     } else throw new PrivateContentUnavailableError(); route.check();
     notifyPrivateWorkspaceEdit(copy.scope); return markPrivateLocalResult(saved.result);
   } catch (error) {

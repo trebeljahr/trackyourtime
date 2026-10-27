@@ -119,6 +119,7 @@ export async function assertStandardContentRequest(url: string, init?: RequestIn
   for (const [index, path] of paths.entries()) {
     if (!isWorkspaceContentProcedure(path)) continue;
     const input = target.searchParams.get("batch") === "1" ? raw?.[String(index)] : raw;
+    if (input !== null && typeof input === "object" && input.__privateIntentId !== undefined) throw new PrivateContentUnavailableError("Private entry intent cannot use standard HTTP");
     const workspaceId = input !== null && typeof input === "object" && typeof input.workspaceId === "string" ? input.workspaceId : null;
     const route = await currentWorkspaceContentRoute(workspaceId, init?.signal ?? undefined);
     const selection = path === "workspaces.setActive";

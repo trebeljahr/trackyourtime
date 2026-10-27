@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, type PrivateEntryEditPath } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, preparePrivateEntryIntent, type PrivateEntryEditPath } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -93,10 +93,11 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
           assertPolicy(); return privateCatalogEdit({ scope, directory, records, current, path, input: frozen });
         }); assertPolicy(); return result;
       },
-      editEntry: async (path: PrivateEntryEditPath, input: unknown) => {
+      editEntry: async (path: PrivateEntryEditPath, input: unknown, intentId?: string) => {
         const frozen = structuredClone(input); assertPolicy();
+        const intent = intentId === undefined ? undefined : await preparePrivateEntryIntent({ scope, path, input: frozen, intentId, current }); assertPolicy();
         const result = await replica.transact(PRIVATE_ENTRY_EDIT_KINDS, ({ records, directory }) => {
-          assertPolicy(); return privateEntryEdit({ scope, directory, records, current, path, input: frozen });
+          assertPolicy(); return privateEntryEdit({ scope, directory, records, current, path, input: frozen, intent });
         }); assertPolicy(); return result;
       },
       pull: async (transport: PrivateReplicaTransport, through?: number) => { assertPolicy(); const result = await replica.pull(transport, through); assertPolicy(); return result; },

@@ -430,3 +430,22 @@ it("reads private billing impact locally and keeps historical rates when the pro
   expect(await api.mutation("entries.create", { ...input, description: "New private hour" })).toMatchObject({ hourlyRate: 120 });
   expect(await api.query("projects.billingImpact", { id: project.id })).toEqual({ entries: 2, invoiced: 0 }); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
+
+it("reuses an encrypted entry receipt without adding another entry or journal edit", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); const fetcher = vi.fn(() => { throw new Error("Private receipt must stay local"); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), intentId = crypto.randomUUID(), input = { description: "One acknowledged private hour", start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", billable: true, __privateIntentId: intentId };
+  const first = await api.mutation("entries.create", input) as { id: string }; expect(first.id).toBe(intentId);
+  const { openPrivateWorkspaceSyncSession } = await import("./private-workspace-session"), copy = await openPrivateWorkspaceSyncSession("owner", "workspace");
+  try {
+    const before = await copy.checkpoint(); expect(await api.mutation("entries.create", { ...input })).toEqual(first); expect(await copy.checkpoint()).toEqual(before);
+    await expect(api.mutation("entries.create", { ...input, description: "Changed old operation" })).rejects.toThrow(); expect(await copy.checkpoint()).toEqual(before);
+    await api.mutation("entries.remove", { id: first.id }); const deleted = await copy.checkpoint(); expect(await api.mutation("entries.create", input)).toEqual(first); expect(await copy.checkpoint()).toEqual(deleted); await expect(api.query("entries.get", { id: first.id })).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+  } finally { copy.close(); }
+});
+it("keeps private-only entry identities out of both standard HTTP and the direct plaintext write boundary", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true); const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  const input = { description: "Private intent cannot downgrade", start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", __privateIntentId: crypto.randomUUID() };
+  await expect(client().mutation("entries.create", input)).rejects.toThrow("standard storage"); await expect(offline.submitDurableEntry("entries.create", input, fetcher)).rejects.toThrow("standard queue");
+  expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});

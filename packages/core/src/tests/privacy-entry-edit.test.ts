@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
-import { privateEntryEdit, type PrivateEntryEditPath } from "../privacy/entry-edit.js";
-import type { PlainPrivateRecord } from "../privacy/records.js";
+import { privateEntryEdit, preparePrivateEntryIntent, type VerifiedPrivateEntryIntent, type PrivateEntryEditPath } from "../privacy/entry-edit.js";
+import { privateRecordsToRecovery, partitionPrivateRecovery, type PlainPrivateRecord } from "../privacy/records.js";
 import type { TimeEntry } from "@starter/shared";
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "author" }, stamp = "2026-10-27T00:00:00.000Z";
 const span = { start: "2026-10-26T10:00:00.000Z", end: "2026-10-26T11:00:00.000Z" };
@@ -19,10 +19,11 @@ async function fixture() {
   add("clients", "client", {}); add("clients", "other-client", {}); add("tasks", "task", {}); add("tags", "tag", {});
   add("projects", "project", { clientId: "client", billableDefault: true }); add("projectMoney", "project", { hourlyRate: null });
   let open = true;
-  const plan = (path: PrivateEntryEditPath, input: unknown) => privateEntryEdit({ scope, directory, records, path, input, current: () => open, now: Date.parse(stamp) });
-  const edit = (path: PrivateEntryEditPath, input: unknown) => { const result = plan(path, input), changed = new Set([...result.records, ...result.remove].map((row) => `${row.kind}:${row.id}`)); records.splice(0, records.length, ...records.filter((row) => !changed.has(`${row.kind}:${row.id}`)), ...result.records); return result.result as TimeEntry; };
+  const plan = (path: PrivateEntryEditPath, input: unknown, intent?: VerifiedPrivateEntryIntent) => privateEntryEdit({ scope, directory, records, path, input, current: () => open, now: Date.parse(stamp), intent });
+  const edit = (path: PrivateEntryEditPath, input: unknown, intent?: VerifiedPrivateEntryIntent) => { const result = plan(path, input, intent), changed = new Set([...result.records, ...result.remove].map((row) => `${row.kind}:${row.id}`)); records.splice(0, records.length, ...records.filter((row) => !changed.has(`${row.kind}:${row.id}`)), ...result.records); return result.result as TimeEntry; };
   const create = (fields: Record<string, unknown> = {}) => edit("entries.create", { ...span, projectId: "project", taskId: "task", tagIds: ["tag", "tag"], ...fields });
-  return { records, add, plan, edit, create, lock: () => { open = false; } };
+  const intent = (path: PrivateEntryEditPath, input: unknown, intentId: string = crypto.randomUUID()) => preparePrivateEntryIntent({ scope, path, input, intentId, current: () => open });
+  return { records, directory, add, plan, edit, create, intent, lock: () => { open = false; } };
 }
 it("creates author-owned completed time with separate rate snapshots, member defaults and explicit client attribution", async () => {
   const f = await fixture(), entry = f.create({ description: "Private manual time", source: "desktop", timeZone: "Europe/Berlin" });
@@ -85,4 +86,44 @@ it("refuses invalid references, forged scopes/authors, unknown fields and standa
   assert.throws(() => f.plan("entries.update", { id: entry.id, end: span.start })); assert.deepEqual(f.records, before);
   const approval = f.add("approvals", "bad", { authorId: "owner", ...span, status: "draft" }, scope.userId); assert.throws(() => f.create(), /author/); f.records.splice(f.records.indexOf(approval), 1);
   f.lock(); assert.throws(() => f.create(), /changed/);
+});
+
+it("retains a private operation result and refuses to reuse its identity for changed input", async () => {
+  const f = await fixture(), input = { ...span, projectId: "project", billable: true, description: "One retained private entry" }, intent = await f.intent("entries.create", input);
+  const first = f.edit("entries.create", input, intent); assert.equal(first.id, intent.intentId); assert.equal(first.hourlyRate, 60);
+  f.records.find(row => row.kind === "projectMoney")!.value.hourlyRate = 150;
+  const replay = f.plan("entries.create", input, await f.intent("entries.create", input, intent.intentId)); assert.deepEqual(replay.result, first); assert.equal(replay.records.length, 0); assert.equal(replay.remove.length, 0);
+  const changed = { ...input, description: "Changed original intent" }; assert.throws(() => f.plan("entries.create", changed, intent), /original request/);
+  const reused = await f.intent("entries.create", changed, intent.intentId); assert.throws(() => f.plan("entries.create", changed, reused), /reused/);
+});
+it("keeps create and deletion receipts after entry deletion without recreating the time on retry", async () => {
+  const f = await fixture(), input = { ...span, description: "Historical operation" }, create = await f.intent("entries.create", input), entry = f.edit("entries.create", input, create), remove = await f.intent("entries.remove", { id: entry.id });
+  f.edit("entries.remove", { id: entry.id }, remove); const before = structuredClone(f.records);
+  assert.equal(f.records.filter(row => row.kind === "imports").length, 2); assert.equal(f.records.filter(row => row.kind === "entries").length, 0);
+  assert.deepEqual(f.plan("entries.create", input, await f.intent("entries.create", input, create.intentId)).result, entry);
+  assert.deepEqual(f.plan("entries.remove", { id: entry.id }, await f.intent("entries.remove", { id: entry.id }, remove.intentId)).result, { success: true, id: entry.id }); assert.deepEqual(f.records, before);
+});
+it("rejects forged, foreign and changed-scope private receipt descriptors", async () => {
+  const f = await fixture(), input = { ...span }, intent = await f.intent("entries.create", input);
+  assert.throws(() => f.plan("entries.create", input, { ...intent } as never), /original request/);
+  const foreign = await preparePrivateEntryIntent({ scope: { ...scope, userId: "owner" }, path: "entries.create", input, intentId: intent.intentId, current: () => true });
+  assert.throws(() => f.plan("entries.create", input, foreign), /original request/);
+  const entry = f.edit("entries.create", input, intent), receipt = f.records.find(row => row.kind === "imports")!; receipt.value.userId = "owner";
+  assert.throws(() => f.plan("entries.create", input, intent), /reused/); receipt.value.userId = scope.userId;
+  (receipt.value.result as Record<string, unknown>).workspaceId = "foreign"; assert.throws(() => f.plan("entries.create", input, intent));
+  (receipt.value.result as Record<string, unknown>).workspaceId = scope.workspaceId; (receipt.value.result as Record<string, unknown>).id = "another"; assert.throws(() => f.plan("entries.create", input, intent), /target/);
+  assert.equal(entry.authorId, scope.userId); f.lock(); assert.throws(() => f.plan("entries.create", input, intent), /changed/);
+});
+
+it("carries retained entry receipts through a lossless recovery round trip", async () => {
+  const f = await fixture(), input = { ...span, billable: true }, intent = await f.intent("entries.create", input), entry = f.edit("entries.create", input, intent);
+  const records = f.records.filter(row => ["entries", "entryMoney", "imports"].includes(row.kind));
+  const snapshot = await privateRecordsToRecovery(scope.workspaceId, records, stamp), restored = partitionPrivateRecovery(snapshot);
+  assert.equal(snapshot.collections.entryoperations.length, 1); assert.deepEqual(snapshot.collections.entryoperations[0]!.result, entry);
+  const receipt = restored.find(row => row.kind === "imports")!; assert.equal(receipt.id, intent.receiptId); assert.equal(receipt.authorId, scope.userId);
+  const replay = privateEntryEdit({ scope, directory: f.directory, records: restored, path: "entries.create", input, intent: await f.intent("entries.create", input, intent.intentId), current: () => true });
+  assert.equal(replay.records.length, 0); assert.deepEqual(replay.result, entry);
+});
+it("invalidates an asynchronous private intent preparation when the keys lock before hashing completes", async () => {
+  const f = await fixture(), pending = f.intent("entries.create", { ...span }); f.lock(); await assert.rejects(pending, /changed/);
 });

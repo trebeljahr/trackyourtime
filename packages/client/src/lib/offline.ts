@@ -1,3 +1,4 @@
+import { PrivateContentUnavailableError } from "./private-content-error";
 /**
  * Offline plumbing for the tracker.
  *
@@ -597,6 +598,7 @@ export const submitDurableEntry = async <T>(
   raw: unknown,
   send: (input: Record<string, unknown>) => Promise<T>,
 ): Promise<T> => {
+  if (raw && typeof raw === "object" && (raw as Record<string, unknown>).__privateIntentId !== undefined) throw new PrivateContentUnavailableError("Private entry intent cannot enter the standard queue");
   await Promise.all([hydrateLastOwner(), whenApiOriginReady(), whenActiveWorkspaceReady()]);
   const input = { ...(raw as Record<string, unknown>) };
   const captured = input.__durableScope as { owner: string | null; server: string; workspaceId: string | null } | undefined;

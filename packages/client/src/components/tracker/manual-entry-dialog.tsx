@@ -118,6 +118,7 @@ export function ManualEntryDialog({
     if (!startDateValid || !endDateValid || seconds <= 0) return;
     const args: ManualEntryArgs = {
       ...fields,
+      ...(submission.privateIntentId ? { privateIntentId: submission.privateIntentId } : {}),
       start: range.start,
       end: range.end,
     };

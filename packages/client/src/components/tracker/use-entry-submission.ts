@@ -1,16 +1,23 @@
 "use client";
 
 import * as React from "react";
+import { observedWorkspaceMode } from "@/lib/private-workspace-mode-cache";
 import { subscribeActiveWorkspace } from "@/lib/active-workspace";
 import { entryMutationScope, sameEntryMutationScope, type EntryMutationResult } from "@/lib/entry-mutation-result";
 import { userErrorMessage } from "@/lib/error-message";
 import { useT } from "@/i18n/use-t";
 
 export type EntrySubmission = {
+  privateIntentId?: string;
   pending: boolean;
   error: string | null;
   submit: (write: () => Promise<EntryMutationResult>) => void;
   dismiss: () => void;
+};
+
+const draftSession = (key: unknown) => {
+  const scope = entryMutationScope();
+  return { key, scope, privateIntentId: observedWorkspaceMode(scope.workspaceId) === "encrypted" ? crypto.randomUUID() : undefined };
 };
 
 /** Shared draft lifecycle. A synchronous gate also catches double Enter/click. */
@@ -18,13 +25,13 @@ export const useEntrySubmission = (key: unknown, onDone: () => void): EntrySubmi
   const t = useT("tracker");
   React.useSyncExternalStore(subscribeActiveWorkspace,
     () => JSON.stringify(entryMutationScope()), () => "");
-  const [session, setSession] = React.useState(() => ({ key, scope: entryMutationScope() }));
+  const [session, setSession] = React.useState(() => draftSession(key));
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const gate = React.useRef<object | null>(null);
   const currentSession = React.useRef(session);
   if (session.key !== key) {
-    const next = { key, scope: entryMutationScope() };
+    const next = draftSession(key);
     setSession(next);
     setPending(false);
     setError(null);
@@ -66,6 +73,7 @@ export const useEntrySubmission = (key: unknown, onDone: () => void): EntrySubmi
   };
 
   return {
+    privateIntentId: session.privateIntentId,
     pending,
     error: changed ? t("mutations.scopeChanged") : error,
     submit,
