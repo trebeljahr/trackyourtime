@@ -21,11 +21,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
 type Enrollment = Awaited<ReturnType<typeof preparePrivateAccountSetup>>;
-export function PrivateDataCard({ unlockOnly = false }: { unlockOnly?: boolean } = {}): React.JSX.Element | null {
+export function PrivateDataCard({ unlockOnly = false, hideDeviceUnlock = false }: { unlockOnly?: boolean; hideDeviceUnlock?: boolean } = {}): React.JSX.Element | null {
   const { user } = useAuth();
-  return user ? <PrivateDataForUser key={`${user.id}:${unlockOnly}`} id={user.id} unlockOnly={unlockOnly} /> : null;
+  return user ? <PrivateDataForUser key={`${user.id}:${unlockOnly}:${hideDeviceUnlock}`} id={user.id} unlockOnly={unlockOnly} hideDeviceUnlock={hideDeviceUnlock} /> : null;
 }
-function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolean }): React.JSX.Element {
+function PrivateDataForUser({ id, unlockOnly, hideDeviceUnlock }: { id: string; unlockOnly: boolean; hideDeviceUnlock: boolean }): React.JSX.Element {
   const t = useT("settings");
   const native = useIsTokenShell();
   const deviceUnlockSupported = useServerSupports("privacy.deviceUnlock");
@@ -80,12 +80,12 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
           try { await remember(draft.identity, draft.recoveryKey); } finally { await account.refetch(); }
         })}>{t("privateData.finishSetup")}</Button>
       </div>}
-      {identity && !current && <div className="grid max-w-xl justify-items-start gap-3">
-        {native && deviceUnlockSupported && <PrivateDeviceUnlock userId={id} />}
-        {!native && <Button variant="outline" disabled={pending || identity.passkeys.length === 0} onClick={() => void run(async () => { await unlockWithSavedPasskey(id, identity); await remember(identity); })}>{t("privateData.unlockPasskey")}</Button>}
+      {identity && !current && <div className="grid w-full min-w-0 max-w-xl justify-items-start gap-3">
+        {!hideDeviceUnlock && native && deviceUnlockSupported && <PrivateDeviceUnlock userId={id} />}
+        {!native && <Button variant="outline" className="h-auto max-w-full whitespace-normal text-left" disabled={pending || identity.passkeys.length === 0} onClick={() => void run(async () => { await unlockWithSavedPasskey(id, identity); await remember(identity); })}>{t("privateData.unlockPasskey")}</Button>}
         <Label htmlFor="private-recovery">{t("privateData.recoveryKey")}</Label>
         <Input id="private-recovery" type="password" autoComplete="off" value={recovery} onChange={(event) => setRecovery(event.target.value)} />
-        <Button variant="outline" disabled={pending || recovery.trim().length !== 43} onClick={() => void run(async () => { await unlockPrivateRecovery(id, identity, recovery); setRecovery(""); await remember(identity, recovery); })}>{t("privateData.unlockRecovery")}</Button>
+        <Button variant="outline" className="h-auto max-w-full whitespace-normal text-left" disabled={pending || recovery.trim().length !== 43} onClick={() => void run(async () => { await unlockPrivateRecovery(id, identity, recovery); setRecovery(""); await remember(identity, recovery); })}>{t("privateData.unlockRecovery")}</Button>
       </div>}
       {identity && current && <div className="space-y-3">
         <p role="status" className="text-sm">{t("privateData.unlocked")}</p>

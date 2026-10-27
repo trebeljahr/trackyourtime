@@ -5,6 +5,15 @@ import type { settings as source } from "../en/settings";
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
   privateWorkspaceGate: {
+    unknownTitle: "Dieses Konto auf diesem Gerät öffnen",
+    unknownDetail: "Entsperre für private Workspaces deine vorhandenen Schlüssel oder hole die Freigabe eines vertrauenswürdigen Geräts ein. Das Kontopasswort allein reicht dafür nicht.",
+    choosePrivate: "Private Workspaces öffnen",
+    standardTitle: "Standardspeicherung",
+    standardDetail: "Nur verwenden, wenn für dieses Konto keine private Workspace-Verschlüsselung aktiviert wurde. Bei der Standardspeicherung kann der Server Workspace-Daten lesen.",
+    standardConfirm: "Dieses Konto nutzt die Standardspeicherung. Mir ist bewusst, dass der Server Workspace-Daten lesen kann.",
+    chooseStandard: "Standardspeicherung auf diesem Gerät verwenden",
+    inventoryTitle: "Private Workspaces verbinden",
+    inventoryDetail: "Deine Schlüssel sind entsperrt. Gib dieses Gerät über ein bereits verbundenes Gerät frei, um deine Workspaces zu öffnen.",
     lockedTitle: "Private Workspace-Daten entsperren",
     failedTitle: "Private Daten sind nicht verfügbar",
     lockedDetail: "Dieses Gerät bewahrt verschlüsselte Workspace-Daten auf. Entsperre deine privaten Datenschlüssel, um fortzufahren.",
@@ -82,7 +91,7 @@ export const settings: Translation<typeof source> = {
     recoveryExplanation: "Ein Zurücksetzen des Passworts stellt den Kontozugang wieder her. Verschlüsselte Inhalte benötigen zusätzlich einen registrierten Passkey oder deinen Wiederherstellungsschlüssel. Eine Kopie außerhalb dieser App aufbewahren.",
     prepare: "Schlüssel einrichten", saveRecovery: "Diesen Wiederherstellungsschlüssel sicher aufbewahren. Wer ihn und deine verschlüsselte Identität besitzt, kann deine privaten Daten entsperren.",
     downloadRecovery: "Wiederherstellungsschlüssel speichern", confirmRecovery: "Die letzten 8 Zeichen eingeben, um das Speichern zu bestätigen", finishSetup: "Schlüssel speichern",
-    unlockPasskey: "Mit Passkey entsperren", recoveryKey: "Wiederherstellungsschlüssel", unlockRecovery: "Mit Wiederherstellungsschlüssel entsperren", unlocked: "Private Daten sind für diese Sitzung entsperrt.",
+    unlockPasskey: "Mit Passkey entsperren", recoveryKey: "Wiederherstellungsschlüssel", unlockRecovery: "Mit Wiederherstellungsschlüssel entsperren", unlocked: "Die Schlüssel für private Daten sind für diese Sitzung entsperrt.",
     addPasskey: "Passkey zur Verschlüsselung hinzufügen", lock: "Private Daten sperren", passkeyName: "Private Daten", fingerprint: "Fingerabdruck des Verschlüsselungsschlüssels: {fingerprint}",
     passkeyNoEncryption: "Dieser Passkey ist zur Anmeldung verfügbar. Das Gerät bietet dafür keine Verschlüsselung an. Private Daten weiterhin mit dem Wiederherstellungsschlüssel entsperren.",
     failed: "Die Anfrage konnte nicht abgeschlossen werden. Wiederherstellungsschlüssel oder Passkey prüfen und erneut versuchen. Bestehende verschlüsselte Daten wurden nicht ersetzt.",
@@ -94,6 +103,8 @@ export const settings: Translation<typeof source> = {
     failed: "Die Passkey-Anfrage konnte nicht abgeschlossen werden. Erneut in einem unterstützten Browser versuchen; eventuell ist eine neue Anmeldung nötig.",
   },
   privateDevice: {
+    startWeb: "Freigabe eines vertrauenswürdigen Geräts einholen", waitingWeb: "Öffne diesen Link auf einem Gerät, auf dem dieses Konto bereits entsperrt ist. Gib die Anfrage dort frei und trage dessen Code hier ein.",
+    approvalLink: "Freigabelink für dein vertrauenswürdiges Gerät", openApproval: "Freigabeseite öffnen",
     browserAddress: "Verwende eine vertrauenswürdige HTTPS-Browseradresse für diesen Server. Wähle den Server erneut oder nutze deinen Wiederherstellungsschlüssel.",
     start: "Mit dem Browser entsperren", starting: "Anfrage für private Daten wird geöffnet…", waiting: "Bestätige die Anfrage im Browser. Gib danach hier den Bestätigungscode ein.",
     reopen: "Browser erneut öffnen", cancel: "Anfrage abbrechen", codeLabel: "8-stelliger Code aus deinem Browser", confirm: "Bestätigen und entsperren",

@@ -1,4 +1,4 @@
-import { assertPrivateAccountInventory, PrivateAccountInventoryMissingError, privateWorkspaceSummary, permissionsFor, type WorkspaceSummary } from "@starter/core";
+import { assertPrivateAccountInventory, privateWorkspaceSummary, permissionsFor, type WorkspaceSummary } from "@starter/core";
 import { getActiveWorkspaceSnapshot, getKnownWorkspacesOwner } from "./active-workspace";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
@@ -8,6 +8,7 @@ import { openPrivateWorkspaceSession } from "./private-workspace-session";
 import { PrivateContentUnavailableError } from "./private-content-error";
 import { privateMetadataNetworkFailure } from "./private-metadata-network";
 import { notePrivateView } from "./private-view-lifecycle";
+import { privateDeviceAccessRevision, requireStandardDeviceAccess } from "./private-device-access";
 class StandardWorkspaceListError extends Error {
   constructor(readonly original: unknown) { super("Workspace metadata request failed", { cause: original }); }
 }
@@ -39,9 +40,10 @@ async function readList(readStandard: () => Promise<WorkspaceSummary[]>, signal?
     if (privateAccountId() !== userId || privateDataOrigin() !== scope.server || privateSessionVersion() !== version) throw new PrivateContentUnavailableError("Private data changed before the workspace list was ready");
   };
   alive(); const required = await privateRoutingRequired(scope); alive();
+  if (!privateSession(userId) && !required) { await requireStandardDeviceAccess(scope); alive(); }
   const cached = () => getKnownWorkspacesOwner() === userId ? getActiveWorkspaceSnapshot() : { activeId: null, workspaces: null };
-  const atStart = privateRoutingRevision();
-  const unchanged = () => { alive(); if (privateRoutingRevision() !== atStart) throw new PrivateContentUnavailableError("Workspace policy changed before the list was ready"); };
+  const atStart = privateRoutingRevision(), deviceAt = privateDeviceAccessRevision();
+  const unchanged = () => { alive(); if (privateRoutingRevision() !== atStart || privateDeviceAccessRevision() !== deviceAt) throw new PrivateContentUnavailableError("Workspace policy changed before the list was ready"); };
   if (!privateSession(userId) && required) {
     const here = cached(), ids = here.workspaces?.map((row) => row.id) ?? (here.activeId ? [here.activeId] : []);
     unchanged(); return ids.map((id) => lockedWorkspace(id, id === here.activeId));
@@ -49,9 +51,7 @@ async function readList(readStandard: () => Promise<WorkspaceSummary[]>, signal?
   const host = privateSession(userId) ? await privateAccountInventoryStorageHost(userId) : null;
   try {
     alive(); const sync = host ? await privateAccountWorkspaceInventorySync(userId, host.storage, host.exclusive) : null;
-    let profile;
-    try { profile = await sync?.read(); }
-    catch (error) { alive(); if (required || !(error instanceof PrivateAccountInventoryMissingError)) throw error; }
+    const profile = await sync?.read();
     alive();
     if (!profile) {
       unchanged(); const rows = await readStandard(); unchanged();

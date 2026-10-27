@@ -16,6 +16,7 @@ const session = await import("./private-session");
 const { privateAccountInventoryStorageHost } = await import("./private-replica");
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
 const { readWorkspaceList } = await import("./private-workspace-list");
+const { confirmStandardDeviceAccess } = await import("./private-device-access");
 const row = (id: string): WorkspaceSummary => ({ id, name: "Injected server name", kind: "personal", role: "admin", memberCount: 999, isDefault: false, permissions: permissionsFor("owner", { canViewOthersTime: true, canViewOthersMoney: true }) });
 beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); state.origin = "https://api.example.test"; state.owner = "owner"; state.activeId = "workspace"; state.workspaces = [row("workspace"), row("standard")]; session.lockPrivateData(); session.privateAccountChanged("owner"); });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -53,7 +54,8 @@ it("shows only generic navigation with no authority while locked, never requesti
   const result = await readWorkspaceList(transport); expect(result.map((r) => r.name)).toEqual(["Workspace", "Workspace"]);
   expect(result.every((r) => r.role === "member" && r.memberCount === 0 && Object.values(r.permissions).every((flag) => flag === false))).toBe(true); expect(transport).not.toHaveBeenCalled();
 });
-it("preserves unenrolled standard transport and refuses missing required inventory", async () => {
+it("preserves explicitly confirmed standard transport and refuses missing required inventory", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
   const transport = vi.fn(async () => [row("standard")]); expect(await readWorkspaceList(transport)).toEqual([row("standard")]);
   const f = await fixture(); vi.stubGlobal("indexedDB", new IDBFactory()); session.lockPrivateData(); session.installPrivateSession("owner", f.secrets);
   transport.mockClear(); await expect(readWorkspaceList(transport)).rejects.toThrow("could not be verified"); expect(transport).not.toHaveBeenCalled();

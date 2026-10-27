@@ -15,6 +15,7 @@ const { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, private
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
 const { workspaceContentRoute, currentWorkspaceContentRoute, readPrivateWorkspaceQuery, assertStandardContentRequest, isWorkspaceContentProcedure, assertStandardWorkspaceContent } = await import("./private-content-route");
 const { privateRoutingRequired, requirePrivateRouting } = await import("./private-routing-requirement");
+const { confirmStandardDeviceAccess } = await import("./private-device-access");
 beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged("owner"); });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function fixture() {
@@ -44,7 +45,8 @@ it("durably requires unlock after lock, restart, missing inventory and a new unl
   session.installPrivateSession("owner", f.secrets); expect(() => route.check()).toThrow(); expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("encrypted");
   vi.stubGlobal("indexedDB", new IDBFactory()); await expect(workspaceContentRoute("owner", "workspace")).rejects.toThrow("inventory is missing");
 });
-it("keeps existing unenrolled standard accounts compatible but refuses corrupted public metadata and unavailable storage", async () => {
+it("keeps explicitly confirmed standard accounts compatible but refuses corrupted public metadata and unavailable storage", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
   expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("standard");
   await requirePrivateRouting({ server: state.origin, userId: "owner" }, () => true);
   const marker = Object.keys(localStorage).find((key) => key.startsWith("trackyourtime.private-routing-required:"))!; localStorage.setItem(marker, "corrupt");

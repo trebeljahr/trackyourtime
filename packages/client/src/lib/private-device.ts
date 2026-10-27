@@ -2,6 +2,7 @@ import { createPrivateDeviceReceiver, encryptPrivateDeviceApproval } from "@star
 import { privateDeviceTransferSchema, type PrivateDeviceTransfer, type PrivateDeviceInvite, type PrivateIdentity } from "@starter/shared";
 import { assertIdentityKeys, checkedPrivateSession, installVerifiedPrivateSession, privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion } from "./private-session";
 import { getChosenWebUrl } from "./api-origin";
+import { isTokenShell } from "./shell";
 import { capturePrivateDeviceWorkspaceTrust, restorePrivateDeviceWorkspaceTrust } from "./private-device-workspace-trust";
 import { privateRoutingRequired, requirePrivateRouting } from "./private-routing-requirement";
 export class PrivateDeviceWebOriginError extends Error {
@@ -15,6 +16,10 @@ export function privateDeviceWebOrigin(): string {
   const selected = getChosenWebUrl() || process.env.NEXT_PUBLIC_WEB_URL;
   const api = new URL(privateDataOrigin());
   let target = selected || (api.origin === "https://api.trackyourtime.dev" ? "https://trackyourtime.dev" : null);
+  if (!target && !isTokenShell() && typeof window !== "undefined") {
+    const page = new URL(window.location.origin);
+    if (page.protocol === "https:" || (page.protocol === "http:" && loopback(page))) target = page.origin;
+  }
   if (!target && process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
     const page = new URL(window.location.origin);
     if (["http:", "https:"].includes(page.protocol) && loopback(api) && loopback(page)) target = page.origin;

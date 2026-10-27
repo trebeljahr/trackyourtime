@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createPrivateDeviceUnlock, privateDeviceWebOrigin, PrivateDeviceWebOriginError } from "@/lib/private-device";
 import { privateDataOrigin } from "@/lib/private-session";
-import { isElectron } from "@/lib/shell";
+import { isElectron, isCapacitor } from "@/lib/shell";
 import { trpc } from "@/lib/trpc";
 import { useT } from "@/i18n/use-t";
 type Request = Awaited<ReturnType<typeof createPrivateDeviceUnlock>>;
@@ -20,10 +20,12 @@ const openBrowser = async (url: string) => {
 };
 export function PrivateDeviceUnlock({ userId }: { userId: string }): React.JSX.Element {
   const t = useT("settings");
+  const native = isElectron() || isCapacitor();
   const createRequest = trpc.privacy.createDeviceUnlock.useMutation().mutateAsync;
   const pollStatus = trpc.privacy.deviceUnlockStatus.useMutation().mutateAsync;
   const cancelRequest = trpc.privacy.cancelDeviceUnlock.useMutation().mutateAsync;
   const request = React.useRef<Request | null>(null), url = React.useRef<string | null>(null);
+  const [approvalLink, setApprovalLink] = React.useState<string | null>(null);
   const [phase, setPhase] = React.useState<"idle" | "starting" | "waiting" | "confirm">("idle");
   const [code, setCode] = React.useState("");
   const [confirming, setConfirming] = React.useState(false);
@@ -32,6 +34,7 @@ export function PrivateDeviceUnlock({ userId }: { userId: string }): React.JSX.E
   const discard = React.useCallback(() => {
     generation.current++;
     setConfirming(false);
+    setApprovalLink(null);
     const current = request.current; request.current = null; url.current = null; current?.cancel();
     if (current && current.invite.server === privateDataOrigin()) void cancelRequest({ requestId: current.invite.requestId }).catch(() => undefined);
   }, [cancelRequest]);
@@ -75,15 +78,21 @@ export function PrivateDeviceUnlock({ userId }: { userId: string }): React.JSX.E
       request.current = next;
       await createRequest({ requestId: next.invite.requestId, publicKey: next.invite.publicKey });
       if (at !== generation.current) return;
-      const target = privateDeviceUrl(web, next.invite); url.current = target;
-      await openBrowser(target);
+      const target = privateDeviceUrl(web, next.invite); url.current = target; setApprovalLink(target);
+      if (native) await openBrowser(target);
       if (at === generation.current) setPhase("waiting");
     } catch (error) { if (at === generation.current) { discard(); setPhase("idle"); setProblem(error instanceof PrivateDeviceWebOriginError ? "browserAddress" : "failed"); } }
   };
   return <section className="space-y-2" data-testid="private-device-unlock">
-    {phase === "idle" && <Button variant="outline" onClick={() => void start()}>{t("privateDevice.start")}</Button>}
+    {phase === "idle" && <Button variant="outline" className="h-auto max-w-full whitespace-normal text-left" onClick={() => void start()}>{t(native ? "privateDevice.start" : "privateDevice.startWeb")}</Button>}
     {phase === "starting" && <p role="status" className="text-sm">{t("privateDevice.starting")}</p>}
-    {phase === "waiting" && <><p role="status" className="text-sm">{t("privateDevice.waiting")}</p><Button variant="outline" size="sm" onClick={() => { if (url.current) void openBrowser(url.current).catch(() => setProblem("failed")); }}>{t("privateDevice.reopen")}</Button></>}
+    {phase === "waiting" && <><p role="status" className="text-sm">{t(native ? "privateDevice.waiting" : "privateDevice.waitingWeb")}</p>
+      {native ? <Button variant="outline" size="sm" onClick={() => { if (url.current) void openBrowser(url.current).catch(() => setProblem("failed")); }}>{t("privateDevice.reopen")}</Button> : approvalLink && <div className="max-w-xl space-y-2">
+        <Label htmlFor="private-device-approval-link">{t("privateDevice.approvalLink")}</Label>
+        <Input id="private-device-approval-link" value={approvalLink} readOnly onFocus={(event) => event.currentTarget.select()} />
+        <Button asChild variant="outline" size="sm"><a href={approvalLink} target="_blank" rel="noopener noreferrer">{t("privateDevice.openApproval")}</a></Button>
+      </div>}
+    </>}
     {phase === "confirm" && <div className="max-w-xs space-y-2">
       <Label htmlFor="private-device-code">{t("privateDevice.codeLabel")}</Label>
       <Input id="private-device-code" autoComplete="one-time-code" spellCheck={false} disabled={confirming} maxLength={9} value={code} onChange={(event) => setCode(event.target.value)} />

@@ -91,6 +91,6 @@ export function PrivateDeviceApproval(): React.JSX.Element {
         {failed && <p role="alert" className="text-sm text-destructive">{t("privateDevice.failed")}</p>}
       </CardContent>
     </Card>
-    {!invalid && matches && supported && !unlocked && <PrivateDataCard />}
+    {!invalid && matches && supported && !unlocked && <PrivateDataCard unlockOnly />}
   </main>;
 }

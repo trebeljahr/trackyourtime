@@ -8,6 +8,15 @@
  */
 export const settings = {
   privateWorkspaceGate: {
+    unknownTitle: "Open this account on this device",
+    unknownDetail: "For private workspaces, unlock your existing keys or get approval from a trusted device. Your account password alone cannot open them.",
+    choosePrivate: "Open private workspaces",
+    standardTitle: "Standard storage",
+    standardDetail: "Use this only if this account has not enabled private workspace encryption. In standard storage, the server can read workspace data.",
+    standardConfirm: "This account uses standard storage. I understand that workspace data is readable by the server.",
+    chooseStandard: "Use standard storage on this device",
+    inventoryTitle: "Connect your private workspaces",
+    inventoryDetail: "Your keys are unlocked. Approve this device from an already connected device to open your workspaces.",
     lockedTitle: "Unlock private workspace data",
     failedTitle: "Private data is unavailable",
     lockedDetail: "This device keeps encrypted workspace data. Unlock your private data keys to continue.",
@@ -85,7 +94,7 @@ export const settings = {
     recoveryExplanation: "Password resets restore account access. Unlocking encrypted content also needs an enrolled passkey or your recovery key. Keep a recovery copy outside this app.",
     prepare: "Set up private data keys", saveRecovery: "Save this recovery key in a safe place. Anyone holding it and your encrypted identity can unlock your private data.",
     downloadRecovery: "Save recovery key", confirmRecovery: "Enter its last 8 characters to confirm you saved it", finishSetup: "Save private data keys",
-    unlockPasskey: "Unlock with passkey", recoveryKey: "Recovery key", unlockRecovery: "Unlock with recovery key", unlocked: "Private data is unlocked for this session.",
+    unlockPasskey: "Unlock with passkey", recoveryKey: "Recovery key", unlockRecovery: "Unlock with recovery key", unlocked: "Private data keys are unlocked for this session.",
     addPasskey: "Use a passkey for encryption", lock: "Lock private data", passkeyName: "Private data", fingerprint: "Encryption key fingerprint: {fingerprint}",
     passkeyNoEncryption: "This passkey is available for sign-in, but this device did not provide encryption support. Keep using your recovery key to unlock private data.",
     failed: "Could not complete this request. Check your recovery key or passkey and try again. Existing encrypted data has not been replaced.",
@@ -97,6 +106,8 @@ export const settings = {
     failed: "Could not complete the passkey request. Try again in a supported browser; you may need to sign in again.",
   },
   privateDevice: {
+    startWeb: "Get approval from a trusted device", waitingWeb: "Open this link on a device where this account is already unlocked. Approve it there, then enter that device’s code here.",
+    approvalLink: "Approval link for your trusted device", openApproval: "Open approval page",
     browserAddress: "Use a trusted HTTPS browser address for this server. Choose the server again, or use your recovery key.",
     start: "Unlock with your browser", starting: "Opening a private data request…", waiting: "Approve the request in your browser. Then enter its confirmation code here.",
     reopen: "Open browser again", cancel: "Cancel request", codeLabel: "8-character code from your browser", confirm: "Confirm and unlock",

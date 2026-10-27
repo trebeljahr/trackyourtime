@@ -98,7 +98,7 @@ export const privateWorkspaceListLink = (): TRPCLink<AppRouter> => () => ({ op, 
       const value = await readWorkspaceList(() => new Promise((resolve, reject) => {
         const cancel = () => reject(new Error("Workspace lookup canceled"));
         abort.signal.addEventListener("abort", cancel, { once: true });
-        subscription = next(op).subscribe({
+        subscription = next({ ...op, input: undefined }).subscribe({
           next: (result) => { if (result.result.type === undefined || result.result.type === "data") { abort.signal.removeEventListener("abort", cancel); resolve(result.result.data as never); } },
           error: (error) => { abort.signal.removeEventListener("abort", cancel); reject(error); },
           complete: () => { abort.signal.removeEventListener("abort", cancel); reject(new Error("Workspace list returned no data")); },

@@ -9,6 +9,7 @@ export { PrivateContentUnavailableError } from "./private-content-error";
 import { privateDisplayPreferences } from "./private-display-preferences";
 import { privateWorkspaceMemberMetadata } from "./private-member-metadata";
 import { notePrivateView } from "./private-view-lifecycle";
+import { privateDeviceAccessRevision, requireStandardDeviceAccess } from "./private-device-access";
 /** All content-bearing app routers, including queries whose filters contain
  * descriptions, client names, or other private values. Unsupported private
  * procedures fail here, before batching, durable entry storage or HTTP. */
@@ -33,17 +34,16 @@ async function resolveWorkspaceContentRoute(userId: string, workspaceId: string 
   const alive = () => { captured(); if (privateDataOrigin() !== server || privateSessionVersion() !== version) throw new PrivateContentUnavailableError("Private data changed before this operation could finish"); };
   alive();
   for (let attempt = 0; attempt < 3; attempt++) {
-    const at = privateRoutingRevision(), required = await privateRoutingRequired(scope); alive();
+    const at = privateRoutingRevision(), deviceAt = privateDeviceAccessRevision(), required = await privateRoutingRequired(scope); alive();
     let mode: "standard" | "encrypted" = "standard";
     if (!privateSession(userId)) {
       if (required) throw new PrivateContentUnavailableError();
+      await requireStandardDeviceAccess(scope); alive();
     } else {
       const host = await privateAccountInventoryStorageHost(userId);
       try {
         alive(); const inventories = await privateAccountWorkspaceInventorySync(userId, host.storage, host.exclusive);
-        let profile;
-        try { profile = await inventories.read(); }
-        catch (error) { alive(); if (required || !(error instanceof PrivateAccountInventoryMissingError)) throw error; }
+        const profile = await inventories.read();
         alive();
         if (profile) {
           if (!workspaceId) throw new PrivateContentUnavailableError("Choose a workspace from this device's trusted inventory before continuing");
@@ -51,8 +51,8 @@ async function resolveWorkspaceContentRoute(userId: string, workspaceId: string 
         }
       } finally { host.close(); }
     }
-    if (privateRoutingRevision() !== at) continue;
-    const check = () => { alive(); if (privateRoutingRevision() !== at) throw new PrivateContentUnavailableError("Workspace encryption policy changed before this operation could finish"); };
+    if (privateRoutingRevision() !== at || privateDeviceAccessRevision() !== deviceAt) continue;
+    const check = () => { alive(); if (privateRoutingRevision() !== at || privateDeviceAccessRevision() !== deviceAt) throw new PrivateContentUnavailableError("Workspace encryption policy changed before this operation could finish"); };
     check(); return { mode, scope, check };
   }
   throw new PrivateContentUnavailableError("Workspace policy is changing; retry after private data is ready");

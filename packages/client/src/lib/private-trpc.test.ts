@@ -18,6 +18,7 @@ const session = await import("./private-session");
 const offline = await import("./offline");
 const { getTRPCClient } = await import("./trpc");
 const { isPrivateContentRefusal } = await import("./private-content-error");
+const { confirmStandardDeviceAccess } = await import("./private-device-access");
 beforeEach(async () => {
   vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); vi.stubEnv("NEXT_PUBLIC_API_URL", state.origin);
   state.native = false; state.ready = async () => {}; localStorage.clear(); session.lockPrivateData(); session.privateAccountChanged("owner");
@@ -25,6 +26,13 @@ beforeEach(async () => {
 });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const client = () => getUntypedClient(getTRPCClient({ streamQueries: false }));
+it("keeps a first login on an unknown device out of standard HTTP and the plaintext outbox", async () => {
+  const fetcher = vi.fn(() => { throw new Error("A server claim must not choose standard mode"); }); vi.stubGlobal("fetch", fetcher);
+  await expect(client().query("workspaces.list")).rejects.toThrow("confirm standard storage");
+  await expect(client().query("tags.list", {})).rejects.toThrow("confirm standard storage");
+  await expect(client().mutation("entries.start", { description: "Private draft before device trust" })).rejects.toThrow("confirm standard storage");
+  expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); expect(localStorage.getItem(OFFLINE_QUEUE_STORAGE_KEY)).toBeNull();
+});
 it("never treats a recovered root on a cleared device as proof that workspace data is standard", async () => {
   const f = await privateRecoveryFixture(); await session.unlockPrivateRecovery("owner", { ...f.identity, passkeys: [] }, f.recoveryKey);
   const fetcher = vi.fn(() => { throw new Error("Untrusted root must not select standard HTTP"); }); vi.stubGlobal("fetch", fetcher);
@@ -67,13 +75,24 @@ it("preserves older plaintext work byte-for-byte while refusing replay and new e
   expect(localStorage.getItem(OFFLINE_QUEUE_STORAGE_KEY)).toBe(raw);
 });
 it("preserves ordinary standard workspace transport", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
   const fetcher = vi.fn(async (_url: RequestInfo | URL, input?: RequestInit) => {
     expect(input?.credentials).toBe("include");
     return new Response(JSON.stringify([{ result: { data: [{ id: "standard", name: "Standard tag" }] } }]), { headers: { "content-type": "application/json" } });
   }); vi.stubGlobal("fetch", fetcher);
   expect(await client().query("tags.list", {})).toEqual([{ id: "standard", name: "Standard tag" }]); expect(fetcher).toHaveBeenCalledOnce();
 });
+it("never sends caller filters through the account-wide workspace metadata request", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
+  const privateFilter = "Private description must never become account metadata";
+  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    expect(decodeURIComponent(String(url)) + String(init?.body)).not.toContain(privateFilter);
+    return new Response(JSON.stringify([{ result: { data: [{ id: "standard", name: "Standard workspace" }] } }]), { headers: { "content-type": "application/json" } });
+  }); vi.stubGlobal("fetch", fetcher);
+  expect(await client().query("workspaces.list", { search: privateFilter })).toMatchObject([{ id: "standard" }]); expect(fetcher).toHaveBeenCalledOnce();
+});
 it("rechecks private policy after native readiness before dispatching a previously batched standard body", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
   state.native = true; let calls = 0, resume!: () => void, enter!: () => void; const ready = new Promise<void>((resolve) => { enter = resolve; });
   state.ready = async () => { if (++calls === 2) { enter(); await new Promise<void>((resolve) => { resume = resolve; }); } };
   const fetcher = vi.fn(() => { throw new Error("Must not reach fetch"); }); vi.stubGlobal("fetch", fetcher);

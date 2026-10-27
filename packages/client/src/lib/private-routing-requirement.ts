@@ -9,6 +9,7 @@ let revision = 0;
 const digests = new Map<string, string>();
 export const privateRoutingRevision = () => revision;
 const changed = () => { revision++; for (const listener of listeners) listener(); };
+if (typeof window !== "undefined") window.addEventListener("storage", (event) => { if (event.key === null || event.key.startsWith(PREFIX)) changed(); });
 export const subscribePrivateRoutingRequirement = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 function storage(): KeyValueStorage {
   if (isCapacitor()) return preferencesStorage({ strict: true });

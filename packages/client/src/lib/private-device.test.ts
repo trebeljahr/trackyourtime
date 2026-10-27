@@ -3,12 +3,13 @@ import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createPrivateDeviceReceiver, encryptPrivateDeviceApproval } from "@starter/core";
-const state = vi.hoisted(() => ({ origin: "https://api.example.test", web: "https://app.example.test" as string | null, changed: null as (() => void) | null }));
+const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: true, web: "https://app.example.test" as string | null, changed: null as (() => void) | null }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getChosenWebUrl: () => state.web, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; } }));
+vi.mock("./shell", () => ({ isTokenShell: () => state.native, isCapacitor: () => false, clientId: () => "web" }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 const session = await import("./private-session");
 const { createPrivateDeviceUnlock, sealPrivateDeviceUnlock, privateDeviceWebOrigin } = await import("./private-device");
-beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); vi.stubEnv("NEXT_PUBLIC_WEB_URL", ""); state.web = "https://app.example.test"; state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
+beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); state.native = true; vi.stubEnv("NEXT_PUBLIC_WEB_URL", ""); state.web = "https://app.example.test"; state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
 afterEach(() => { session.lockPrivateData(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 it("uses the saved or known browser origin and refuses an unconfirmed replacement address", () => {
   expect(privateDeviceWebOrigin()).toBe("https://app.example.test");
@@ -58,4 +59,9 @@ it("rejects malformed identity bindings and cannot install an old response after
   state.origin = "https://other.example.test"; state.changed?.();
   await expect(switched.confirm(original.code)).rejects.toThrow("changed during");
   expect(session.privateSession("owner")).toBeNull(); switched.cancel();
+});
+
+it("uses the current trusted web page for browser-to-browser approval without an API-chosen origin", () => {
+  state.native = false; state.web = null; state.origin = "https://unknown.example.test";
+  expect(privateDeviceWebOrigin()).toBe(window.location.origin);
 });
