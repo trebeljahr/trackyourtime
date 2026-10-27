@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,14 +85,15 @@ export function ProjectBillingCell({
     setOpen(false);
     if (!billingChanged(project, next)) return;
 
+    const action = capturePrivateMutationAction();
     void prompt.ask(project, next).then(async (choice) => {
-      if (choice === null) return;
+      if (choice === null || !action.current()) return;
       const saved = await updateProject({
         id: project.id,
         ...next,
         applyToEntries: choice === "entries",
       });
-      if (!saved) return;
+      if (!saved || !action.current()) return;
       const rewritten = saved.entriesRewritten;
       const messages = translate("catalog");
       toast.success(

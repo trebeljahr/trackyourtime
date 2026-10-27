@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 import { ChevronRight } from "lucide-react";
 import {
   IDLE_BEHAVIORS,
@@ -204,8 +205,9 @@ function ProjectForm({
   );
 
   const handleCreateClient = (rawName: string): void => {
+    const action = capturePrivateMutationAction();
     void createClient({ name: rawName.trim() }).then((created) => {
-      if (created) setClientId(created.id);
+      if (created && action.current()) setClientId(created.id);
     });
   };
 
@@ -251,13 +253,14 @@ function ProjectForm({
     // than being dropped — otherwise clearing an override would be a no-op.
     const idle: IdleBehavior | null = idleBehavior === "" ? null : idleBehavior;
 
+    const action = capturePrivateMutationAction();
     if (project) {
       // A billing change asks first whether it reaches the time already
       // booked here; backing out of that question leaves the form open.
       void applyPrompt
         .ask(project, { billableDefault, hourlyRate })
         .then(async (choice) => {
-          if (choice === null) return;
+          if (choice === null || !action.current()) return;
           const saved = await updateProject({
             id: project.id,
             name: trimmed,
@@ -271,7 +274,7 @@ function ProjectForm({
             idleBehavior: idle,
             applyToEntries: choice === "entries",
           });
-          if (!saved) return;
+          if (!saved || !action.current()) return;
           const rewritten = saved.entriesRewritten?.entries ?? 0;
           const messages = translate("catalog");
           toast.success(
@@ -295,7 +298,7 @@ function ProjectForm({
       ...(budgetAmount === null ? {} : { budgetCurrency }),
       idleBehavior: idle,
     }).then((created) => {
-      if (!created) return;
+      if (!created || !action.current()) return;
       toast.success(
         translate("catalog")("projects.form.created", { name: created.name }),
       );

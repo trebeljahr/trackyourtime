@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 import type { ProjectBillingImpact } from "@starter/shared";
 
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ type Pending = {
   next: BillingChange;
   impact: ProjectBillingImpact;
   resolve: (choice: ApplyChoice) => void;
+  current: () => boolean;
 };
 
 export type ApplyToEntriesPrompt = {
@@ -72,9 +74,19 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
   const tc = useT("common");
   const utils = trpc.useUtils();
   const [pending, setPending] = React.useState<Pending | null>(null);
+  const pendingRef = React.useRef<Pick<Pending, "resolve" | "current"> | null>(null);
+  const lifetime = React.useRef({ mounted: true, revision: 0 });
+  React.useEffect(() => {
+    const life = lifetime.current; life.mounted = true;
+    return () => { life.mounted = false; life.revision++; pendingRef.current?.resolve(null); pendingRef.current = null; };
+  }, []);
 
   const ask = React.useCallback(
     async (project: ProjectOption, next: BillingChange): Promise<ApplyChoice> => {
+      const life = lifetime.current, action = capturePrivateMutationAction(), revision = ++life.revision;
+      const current = () => life.mounted && action.current() && life.revision === revision;
+      if (!current()) return null;
+      pendingRef.current?.resolve(null); pendingRef.current = null; setPending(null);
       if (!billingChanged(project, next)) return "new-only";
 
       let impact: ProjectBillingImpact;
@@ -84,22 +96,29 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
           { staleTime: 0 },
         );
       } catch (error) {
+        if (!current()) return null;
         toast.error(
           errorMessage(error, translate("catalog")("errors.countEntries")),
         );
         return null;
       }
+      if (!current()) return null;
       if (impact.entries === 0) return "new-only";
 
       return new Promise<ApplyChoice>((resolve) => {
-        setPending({ project, next, impact, resolve });
+        pendingRef.current?.resolve(null);
+        const task = { resolve, current }; pendingRef.current = task;
+        setPending({ project, next, impact, ...task });
       });
     },
     [utils],
   );
 
   const settle = (choice: ApplyChoice): void => {
-    pending?.resolve(choice);
+    const task = pendingRef.current;
+    if (!pending || task?.resolve !== pending.resolve) return;
+    pendingRef.current = null;
+    task.resolve(task.current() ? choice : null);
     setPending(null);
   };
 
