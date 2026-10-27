@@ -1,12 +1,12 @@
-import { canonicalJson, createPrivateAccountInventorySync, decodeSecret, PRIVATE_ACCOUNT_INVENTORY_SCOPE, PrivateAccountInventoryMissingError } from "@starter/core";
+import { canonicalJson, PrivateAccountInventoryMissingError } from "@starter/core";
 import { privateDeviceWorkspaceTrustSchema, type PrivateDeviceWorkspaceTrust } from "@starter/shared";
 import { privateClientScope } from "./private-client-scope";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateAccountInventoryTransport, privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
-import { privateRoutingRequired, requirePrivateRouting } from "./private-routing-requirement";
+import { privateRoutingRequired } from "./private-routing-requirement";
 import { privateSession, type UnlockedIdentity } from "./private-session";
-import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import { privateBoundRpc } from "./private-scoped-rpc";
+import { stagePrivateAccountInventory } from "./private-inventory-staging";
 /** Approving an enrolled device publishes its exact pending encrypted inventory
  * before handing over a short checkpoint. No business data or keys are sent in
  * plaintext; conflicts retain their existing refusal and durable outbox. */
@@ -37,18 +37,9 @@ export async function restorePrivateDeviceWorkspaceTrust(userId: string, input: 
   const { rpc, supported } = privateBoundRpc(binding, "privacy.accountInventory"); supported();
   const page = await rpc.privacy.inventoryVersions.mutate({ after: trust.transport.revision - 1, through: trust.transport.revision }); supported();
   if (page.through !== trust.transport.revision || page.next !== null || page.root !== trust.transport.root || page.versions.length !== 1 || page.versions[0]!.header.revision !== trust.transport.revision) throw new Error("Account inventory differs from this device's approved checkpoint");
-  const host = await openPrivateIndexedStorage(binding);
+  const sync = await stagePrivateAccountInventory(binding, secrets, binding.check);
   try {
     binding.check();
-    const sync = await createPrivateAccountInventorySync({ server: binding.server, userId, storage: host.storage, exclusive: host.exclusive(PRIVATE_ACCOUNT_INVENTORY_SCOPE),
-      capture: () => { binding.check(); return binding.check; },
-      beforePrivateState: (phase, digest) => requirePrivateRouting(binding, binding.current, phase === "publish", digest),
-      resolveStorageKey: () => { binding.check(); const key = decodeSecret(secrets.master, 32); return { key, current: binding.current, release: () => key.fill(0) }; },
-      resolveIdentity: () => {
-        binding.check(); const master = decodeSecret(secrets.master, 32), { kty, crv, x, y } = secrets.signingPrivateKey;
-        return { master, signingPrivateKey: secrets.signingPrivateKey, signingPublicKey: { kty, crv, x, y }, current: binding.current, release: () => master.fill(0) };
-      },
-    });
     await sync.restore(page.versions[0], trust); binding.check();
-  } finally { host.close(); }
+  } finally { sync.close(); }
 }

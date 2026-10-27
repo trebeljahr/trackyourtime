@@ -9,7 +9,8 @@ import * as React from "react";
 import { signPrivateChange } from "@starter/core";
 import { authClient } from "@/lib/auth-client";
 import { downloadBlob } from "@/lib/download";
-import { evaluatePrivatePasskey, installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
+import { evaluatePrivatePasskey, lockPrivateData, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
+import { preparePrivateAccountSetup, finishPrivateAccountSetup } from "@/lib/private-account-setup";
 import { useIsTokenShell } from "@/hooks/use-shell";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
@@ -19,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
-type Enrollment = Awaited<ReturnType<typeof newPrivateIdentity>>;
+type Enrollment = Awaited<ReturnType<typeof preparePrivateAccountSetup>>;
 export function PrivateDataCard({ unlockOnly = false }: { unlockOnly?: boolean } = {}): React.JSX.Element | null {
   const { user } = useAuth();
   return user ? <PrivateDataForUser key={`${user.id}:${unlockOnly}`} id={user.id} unlockOnly={unlockOnly} /> : null;
@@ -29,7 +30,6 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
   const native = useIsTokenShell();
   const deviceUnlockSupported = useServerSupports("privacy.deviceUnlock");
   const account = trpc.privacy.identity.useQuery({ userId: id }, { retry: false });
-  const enroll = trpc.privacy.enroll.useMutation();
   const updateIdentity = trpc.privacy.updateIdentity.useMutation();
   const [draft, setDraft] = React.useState<Enrollment | null>(null);
   const [confirmation, setConfirmation] = React.useState("");
@@ -68,7 +68,7 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
       <p className="max-w-prose text-sm text-muted-foreground">{t("privateData.recoveryExplanation")}</p>
       {native && <p className="max-w-prose text-sm text-muted-foreground">{t(deviceUnlockSupported ? "privateData.nativeBrowserUnlock" : "privateData.nativePasskeys")}</p>}
       {unlockOnly && !identity && !account.isLoading && cacheReady && <p role="status" className="text-sm">{t("privateData.keysUnavailable")}</p>}
-      {!unlockOnly && !current && !identity && !draft && cacheReady && !cacheFailed && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await newPrivateIdentity(id)))}>{t("privateData.prepare")}</Button>}
+      {!unlockOnly && !current && !identity && !draft && cacheReady && !cacheFailed && <Button variant="outline" disabled={pending || account.isLoading || account.isError} onClick={() => void run(async () => setDraft(await preparePrivateAccountSetup(id)))}>{t("privateData.prepare")}</Button>}
       {!unlockOnly && draft && <div className="max-w-xl space-y-3">
         <p className="text-sm">{t("privateData.saveRecovery")}</p>
         <code className="block break-all rounded-md bg-muted p-3 text-sm select-all">{draft.recoveryKey}</code>
@@ -76,7 +76,8 @@ function PrivateDataForUser({ id, unlockOnly }: { id: string; unlockOnly: boolea
         <Label htmlFor="private-confirm">{t("privateData.confirmRecovery")}</Label>
         <Input id="private-confirm" value={confirmation} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} />
         <Button disabled={pending || confirmation.trim() !== draft.recoveryKey.slice(-8)} onClick={() => void run(async () => {
-          draft.assertCurrent(); await enroll.mutateAsync({ identity: draft.identity, userId: id, server: privateDataOrigin() }); draft.assertCurrent(); installPrivateSession(id, draft.secrets); await remember(draft.identity, draft.recoveryKey); setDraft(null); setConfirmation(""); await account.refetch();
+          draft.assertCurrent(); await finishPrivateAccountSetup(draft); setDraft(null); setConfirmation("");
+          try { await remember(draft.identity, draft.recoveryKey); } finally { await account.refetch(); }
         })}>{t("privateData.finishSetup")}</Button>
       </div>}
       {identity && !current && <div className="grid max-w-xl justify-items-start gap-3">

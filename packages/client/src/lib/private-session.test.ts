@@ -6,9 +6,22 @@ const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: n
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; } }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => state.bridge }));
 const { installPrivateSession, lockPrivateData, newPrivateIdentity, privateSession, privateWorkspaceStorage, unlockPrivateRecovery, unlockPrivatePrf, wrapIdentityWithPrf, protectPrivateActivity, privateAccountChanged } = await import("./private-session");
-beforeEach(() => { vi.stubGlobal("crypto", webcrypto); state.origin = "https://api.example.test"; state.bridge = null; lockPrivateData(); privateAccountChanged(null); });
-afterEach(() => { state.bridge = null; lockPrivateData(); vi.unstubAllGlobals(); });
+beforeEach(() => { vi.stubGlobal("crypto", webcrypto); localStorage.clear(); state.origin = "https://api.example.test"; state.bridge = null; lockPrivateData(); privateAccountChanged(null); });
+afterEach(() => { state.bridge = null; lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("private session keys", () => {
+  it("keeps recovered keys inactive if durable routing protection cannot be confirmed", async () => {
+    const draft = await newPrivateIdentity("owner");
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {});
+    await expect(unlockPrivateRecovery("owner", draft.identity, draft.recoveryKey)).rejects.toThrow("confirm private routing");
+    expect(privateSession("owner")).toBeNull();
+  });
+  it("does not let a delayed recovery replace another unlock, even for the same account", async () => {
+    const first = await newPrivateIdentity("owner"), second = await newPrivateIdentity("owner"), decrypt = crypto.subtle.decrypt.bind(crypto.subtle);
+    let resume!: () => void, enter!: () => void; const entered = new Promise<void>((resolve) => { enter = resolve; });
+    vi.spyOn(crypto.subtle, "decrypt").mockImplementationOnce(async (...args) => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); return decrypt(...args); });
+    const pending = unlockPrivateRecovery("owner", first.identity, first.recoveryKey); await entered; installPrivateSession("owner", second.secrets); resume();
+    await expect(pending).rejects.toThrow("Private keys changed"); expect(privateSession("owner")).toEqual(second.secrets);
+  });
   it("restores the same identity using a recovery key without an account password", async () => {
     const draft = await newPrivateIdentity("owner");
     expect(JSON.stringify(draft.identity)).not.toContain(draft.secrets.master);

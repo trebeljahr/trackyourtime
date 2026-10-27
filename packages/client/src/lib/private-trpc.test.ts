@@ -25,6 +25,13 @@ beforeEach(async () => {
 });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const client = () => getUntypedClient(getTRPCClient({ streamQueries: false }));
+it("never treats a recovered root on a cleared device as proof that workspace data is standard", async () => {
+  const f = await privateRecoveryFixture(); await session.unlockPrivateRecovery("owner", { ...f.identity, passkeys: [] }, f.recoveryKey);
+  const fetcher = vi.fn(() => { throw new Error("Untrusted root must not select standard HTTP"); }); vi.stubGlobal("fetch", fetcher);
+  await expect(client().query("tags.list", {})).rejects.toThrow("inventory is missing");
+  await expect(client().mutation("entries.start", { description: "Must stay private" })).rejects.toThrow("inventory is missing");
+  expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
 it("serves verified private workspace names and permissions through the real account-wide client without HTTP", async () => {
   const f = await privateRecoveryFixture();
   f.archive.replica.pending[1]!.records.push({ kind: "workspaceIdentity", id: "organization", authorId: null, value: { workspaceId: "workspace", organization: { _id: "workspace", name: "Trusted private studio", kind: "team" } } });

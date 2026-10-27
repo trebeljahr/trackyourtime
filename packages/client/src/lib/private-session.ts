@@ -2,6 +2,7 @@ import { createKeyPair, createPrivateStorage, createSigningPair, decodeSecret, d
 import { desktopActivity } from "./desktop-activity";
 import type { PrivateIdentity } from "@starter/shared";
 import { getApiOrigin, subscribeApiOrigin } from "./api-origin";
+import { requirePrivateRouting } from "./private-routing-requirement";
 export const PRIVATE_PRF_INPUT = new TextEncoder().encode("trackyourtime-private-data-v1");
 export type UnlockedIdentity = { v: 1; master: string; privateKey: PublicKey; signingPrivateKey: PublicKey };
 let session: { userId: string; origin: string; secrets: UnlockedIdentity } | null = null;
@@ -40,6 +41,16 @@ export function privateOperationScope(userId: string): () => void {
     if (at !== generation || origin !== privateDataOrigin() || (resolvedAccount != null && resolvedAccount !== userId)) throw new Error("Private data changed during this operation");
   };
 }
+/** Imported keys cannot prove absence of private workspaces on a cleared/new
+ * device. Persist refusal of plaintext fallback before publishing those keys. */
+function privateImportScope(userId: string) {
+  const captured = privateOperationScope(userId), at = privateSessionVersion();
+  return () => { captured(); if (privateSessionVersion() !== at) throw new Error("Private keys changed during this unlock"); };
+}
+async function protectImportedRoot(userId: string, check: () => void) {
+  const scope = { server: privateDataOrigin(), userId };
+  await requirePrivateRouting(scope, () => { try { check(); return true; } catch { return false; } }); check();
+}
 export async function newPrivateIdentity(userId: string): Promise<{ identity: PrivateIdentity; secrets: UnlockedIdentity; recoveryKey: string; assertCurrent: () => void }> {
   const assertCurrent = privateOperationScope(userId), aad = context(userId);
   const pair = await createKeyPair(), signing = await createSigningPair(), recovery = randomSecret();
@@ -67,11 +78,11 @@ export function installVerifiedPrivateSession(userId: string, identity: Pick<Pri
   assertIdentityKeys(identity, secrets); installPrivateSession(userId, secrets);
 }
 export async function unlockPrivateRecovery(userId: string, identity: PrivateIdentity, recoveryKey: string): Promise<void> {
-  const assertCurrent = privateOperationScope(userId), aad = context(userId);
+  const assertCurrent = privateImportScope(userId), aad = context(userId);
   const raw = decodeSecret(recoveryKey.trim(), 32);
   try {
     const secrets = await unseal<UnlockedIdentity>(raw, identity.recovery, aad);
-    assertIdentityKeys(identity, secrets); assertCurrent(); installPrivateSession(userId, secrets);
+    assertIdentityKeys(identity, secrets); assertCurrent(); await protectImportedRoot(userId, assertCurrent); installPrivateSession(userId, secrets);
   }
   finally { raw.fill(0); }
 }
@@ -96,13 +107,13 @@ export async function wrapIdentityWithPrf(userId: string, secret: Uint8Array, id
   } finally { key.fill(0); }
 }
 export async function unlockPrivatePrf(userId: string, identity: PrivateIdentity, credentialId: string, secret: Uint8Array): Promise<void> {
-  const assertCurrent = privateOperationScope(userId), aad = context(userId);
+  const assertCurrent = privateImportScope(userId), aad = context(userId);
   const saved = identity.passkeys.find((p) => p.credentialId === credentialId);
   if (!saved) throw new Error("This passkey is not enrolled for encryption");
   const key = await deriveSecret(secret, aad);
   try {
     const secrets = await unseal<UnlockedIdentity>(key, saved.envelope, aad);
-    assertIdentityKeys(identity, secrets); assertCurrent(); installPrivateSession(userId, secrets);
+    assertIdentityKeys(identity, secrets); assertCurrent(); await protectImportedRoot(userId, assertCurrent); installPrivateSession(userId, secrets);
   } finally { key.fill(0); }
 }
 /** Evaluate credential-bound PRF output locally. It is never an API payload. */
@@ -118,7 +129,7 @@ export async function evaluatePrivatePasskey(credentialIds: string[]): Promise<{
   return { credentialId: credential.id, secret };
 }
 export async function unlockWithSavedPasskey(userId: string, identity: PrivateIdentity): Promise<void> {
-  const assertCurrent = privateOperationScope(userId);
+  const assertCurrent = privateImportScope(userId);
   const { credentialId, secret } = await evaluatePrivatePasskey(identity.passkeys.map((p) => p.credentialId));
   try { assertCurrent(); await unlockPrivatePrf(userId, identity, credentialId, secret); } finally { secret.fill(0); }
 }

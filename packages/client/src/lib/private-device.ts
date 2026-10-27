@@ -58,7 +58,10 @@ export async function createPrivateDeviceUnlock(userId: string) {
         // Restore with confirmation-authenticated temporary keys. Publishing a
         // session first could let an old standard policy leak private filters.
         await restorePrivateDeviceWorkspaceTrust(userId, value.workspaceTrust, { server, secrets: value.secrets, check: waiting }); waiting();
-      } else { const required = await privateRoutingRequired({ server, userId }); waiting(); if (required) throw new Error("This account needs its trusted workspace checkpoint before unlocking this device"); }
+      } else {
+        const required = await privateRoutingRequired({ server, userId }); waiting(); if (required) throw new Error("This account needs its trusted workspace checkpoint before unlocking this device");
+        await requirePrivateRouting({ server, userId }, () => { try { waiting(); return true; } catch { return false; } }); waiting();
+      }
       installVerifiedPrivateSession(userId, value.keys, value.secrets);
     },
     cancel: () => { canceled = true; receiver.cancel(); },
