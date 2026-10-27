@@ -65,3 +65,14 @@ test("older servers cannot silently drop a selected client", async () => {
     ),
   );
 });
+
+test("client workspace identities require confirmed API support before any request", async () => {
+  for (const level of [null, 34, NaN]) {
+    let calls = 0;
+    const api = createApiClient({ baseUrl: "https://example.test", serverApiLevel: () => level, fetchImpl: async () => { calls++; return new Response("{}"); } });
+    await assert.rejects(api.mutate("workspaces.create", { name: "New team", clientWorkspaceId: crypto.randomUUID() }), /Update the server/);
+    assert.equal(calls, 0);
+  }
+  assert.doesNotThrow(() => assertEntryClientSupported("workspaces.create", { name: "Legacy team" }, null));
+  assert.doesNotThrow(() => assertEntryClientSupported("workspaces.create", { clientWorkspaceId: crypto.randomUUID() }, 35));
+});

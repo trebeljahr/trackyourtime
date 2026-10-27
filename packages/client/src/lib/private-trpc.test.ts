@@ -6,12 +6,12 @@ import { getUntypedClient } from "@trpc/client";
 import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
 import { OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
-const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, ready: async () => {} }));
+const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, tokenRevision: 0, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: () => state.ready(), rebaseApiUrl: (url: string) => url }));
 vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => "workspace", isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), getKnownWorkspacesOwner: () => "owner", getActiveWorkspaceSnapshot: () => ({ activeId: "workspace", workspaces: null }), workspaceNameFor: () => "Synthetic workspace" }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => API_LEVEL, noteClientTooOld: () => {} }));
-vi.mock("./native-session", () => ({ getNativeToken: () => null }));
+vi.mock("./native-session", () => ({ getNativeToken: () => null, getNativeTokenRevision: () => state.tokenRevision }));
 vi.mock("./shell", () => ({ clientId: () => "web", isCapacitor: () => false, isTokenShell: () => state.native }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
@@ -21,7 +21,7 @@ const { isPrivateContentRefusal } = await import("./private-content-error");
 const { confirmStandardDeviceAccess } = await import("./private-device-access");
 beforeEach(async () => {
   vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); vi.stubEnv("NEXT_PUBLIC_API_URL", state.origin);
-  state.native = false; state.ready = async () => {}; localStorage.clear(); session.lockPrivateData(); session.privateAccountChanged("owner");
+  state.native = false; state.tokenRevision = 0; state.ready = async () => {}; localStorage.clear(); session.lockPrivateData(); session.privateAccountChanged("owner");
   offline.__resetOfflineQueueForTests(); offline.__resetOfflineQueueOwnerForTests(); await offline.setOfflineQueueOwner("owner");
 });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -77,7 +77,7 @@ it("preserves older plaintext work byte-for-byte while refusing replay and new e
 it("preserves ordinary standard workspace transport", async () => {
   await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
   const fetcher = vi.fn(async (_url: RequestInfo | URL, input?: RequestInit) => {
-    expect(input?.credentials).toBe("include");
+    expect(input?.credentials).toBe("include"); expect(new Headers(input?.headers).has("x-trackyourtime-local-scope")).toBe(false);
     return new Response(JSON.stringify([{ result: { data: [{ id: "standard", name: "Standard tag" }] } }]), { headers: { "content-type": "application/json" } });
   }); vi.stubGlobal("fetch", fetcher);
   expect(await client().query("tags.list", {})).toEqual([{ id: "standard", name: "Standard tag" }]); expect(fetcher).toHaveBeenCalledOnce();
@@ -99,6 +99,26 @@ it("rechecks private policy after native readiness before dispatching a previous
   const pending = client().mutation("tags.create", { name: "Private draft waiting for native readiness" }); await ready;
   await seedPrivateWorkspaceClient(await privateRecoveryFixture()); resume(); await expect(pending).rejects.toThrow("cannot use the standard HTTP"); expect(fetcher).not.toHaveBeenCalled();
 });
+it("never dispatches an earlier account's body after a native readiness wait changes the signed-in account", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "other" }, () => true);
+  state.native = true; let calls = 0, resume!: () => void, enter!: () => void; const entered = new Promise<void>((resolve) => { enter = resolve; });
+  state.ready = async () => { if (++calls === 2) { enter(); await new Promise<void>((resolve) => { resume = resolve; }); } };
+  const fetcher = vi.fn(async () => new Response(JSON.stringify([{ result: { data: { id: "created" } } }]), { headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetcher);
+  const pending = client().mutation("tags.create", { name: "Original account draft" }); await entered; session.privateAccountChanged("other"); resume();
+  await expect(pending).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled();
+});
+it("never dispatches an earlier draft after the native credential changes during readiness", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true); state.native = true;
+  let resume!: () => void, paused!: () => void, calls = 0;
+  const waiting = new Promise<void>((resolve) => { paused = resolve; });
+  state.ready = async () => { if (++calls === 2) { paused(); await new Promise<void>((resolve) => { resume = resolve; }); } };
+  const fetcher = vi.fn(async () => new Response(JSON.stringify([{ result: { data: {} } }]), { headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetcher);
+  const pending = client().mutation("tags.create", { name: "Credential-bound draft" });
+  await waiting; state.tokenRevision++; resume();
+  await expect(pending).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled();
+});
+
 
 it("does not read or write a private running timer through the plaintext desktop mirror", async () => {
   state.native = true; await seedPrivateWorkspaceClient(await privateRecoveryFixture());

@@ -335,3 +335,11 @@ describe("credentials changed during hydration", () => {
     expect(module.getNativeToken()).toBe(action === "sign-out" ? null : "new-account-token");
   });
 });
+
+it("changes the request credential generation when a stored token arrives", async () => {
+  const { module } = await load({ keychain: { [TOKEN_KEY]: "stored-token" }, preferences: { [MARKER_KEY]: "1" } });
+  const initial = module.getNativeTokenRevision(); await module.hydrateNativeSession();
+  expect(module.getNativeTokenRevision()).toBeGreaterThan(initial);
+  const hydrated = module.getNativeTokenRevision(); await module.hydrateNativeSession(); expect(module.getNativeTokenRevision()).toBe(hydrated);
+  await module.setNativeToken("new-token"); expect(module.getNativeTokenRevision()).toBeGreaterThan(hydrated);
+});

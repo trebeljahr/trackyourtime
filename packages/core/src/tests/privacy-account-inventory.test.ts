@@ -8,6 +8,7 @@ import { accountWorkspacePolicy, createPrivateAccountInventoryStore, PrivateAcco
 import { privateRecordDigest } from "../privacy/workspace-edits.js";
 import { PrivateStorageIntegrityError, PrivateStorageLockedError } from "../privacy/storage.js";
 import { memoryStorage } from "../storage.js";
+import { createPrivateAccountInventorySync } from "../privacy/inventory-sync.js";
 const scope = { server: "https://api.example.test", userId: "owner" };
 async function fixture() {
   const signing = await createSigningPair(), encryption = await createKeyPair(), key = randomSecret(), state = { open: true }, current = () => state.open;
@@ -38,6 +39,12 @@ it("requires explicit fresh local enrollment and chooses mode only from a comple
   assert.throws(() => accountWorkspacePolicy({ ...profile }, scope, "standard"), /current verified/);
   assert.ok(Object.isFrozen(profile.signed.inventory.workspaces));
   for (const raw of f.writes.values()) assert.doesNotMatch(raw, /account-workspace-inventory|signedPolicy|activationRoot|"mode"/);
+});
+it("cannot use standard workspace creation to add plaintext routing to a private account", async () => {
+  const f = await fixture(), master = f.options.resolveStorageKey()!.key;
+  const sync = await createPrivateAccountInventorySync({ ...f.options, resolveIdentity: () => ({ master, signingPrivateKey: f.signing.privateKey, signingPublicKey: f.signing.publicKey, current: () => f.state.open }) });
+  await sync.enroll(await f.sign()); const before = await sync.exportRecovery();
+  await assert.rejects(sync.prepareStandardWorkspace(), /encrypted initialization/); assert.deepEqual(await sync.exportRecovery(), before);
 });
 it("refuses private workspace removal/downgrade/replacement and accepts only consecutive account updates", async () => {
   const f = await fixture(), store = await createPrivateAccountInventoryStore(f.options), first = await f.sign(), profile = await store.enroll(first);

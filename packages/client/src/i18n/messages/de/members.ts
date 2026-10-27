@@ -109,6 +109,12 @@ export const members: Translation<typeof source> = {
     creating: "Wird erstellt …",
   },
   errors: {
+    privateCreation: {
+      server: "Aktualisiere deinen Server, um nach dem Einrichten privater Datenschlüssel weitere Workspaces anzulegen.",
+      private: "Workspaces für private Konten können noch nicht angelegt werden. Vorhandene Workspaces bleiben erhalten.",
+      local: "Der Workspace konnte nicht vorbereitet werden. Vorhandene Daten bleiben erhalten. Verbindung prüfen und erneut versuchen.",
+      response: "Der Server hat einen anderen Workspace zurückgegeben. Dein bisheriger Workspace-Zugriff bleibt erhalten.",
+    },
     ownerRequired: "Das kann nur ein Inhaber.",
     adminRequired: "Das kann nur ein Inhaber oder Admin.",
     cannotModifySelf: "Deine eigene Rolle und Sichtbarkeit kannst du nicht ändern.",

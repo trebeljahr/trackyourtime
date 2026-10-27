@@ -106,6 +106,12 @@ export const members = {
     creating: "Creating…",
   },
   errors: {
+    privateCreation: {
+      server: "Update your server to create workspaces after setting up private data keys.",
+      private: "Creating workspaces for private accounts is not available yet. Existing workspaces were kept.",
+      local: "Could not prepare this workspace. Existing data was kept. Reconnect and try again.",
+      response: "The server returned a different workspace. The app kept your existing workspace access.",
+    },
     ownerRequired: "Only an owner can do this.",
     adminRequired: "Only an owner or an admin can do this.",
     cannotModifySelf: "You cannot change your own role or visibility.",

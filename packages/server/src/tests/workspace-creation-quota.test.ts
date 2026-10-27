@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { randomBytes } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import type { BetterAuthOptions } from "better-auth";
 import type { SyncEvent } from "@starter/shared";
 import type { WorkspaceCreationDeps } from "../services/membership/workspaces.js";
@@ -93,6 +93,24 @@ describe("atomic workspace creation with storage limits", { skip: skipWithoutDat
     assert.equal((await WorkspaceSettingsModel.findOne({ workspaceId }).lean())?.currency, "EUR");
     assert.equal((await StorageUsage.findById(workspaceId).lean())?.bytes, 8192);
     assert.deepEqual(published, [{ userId: USER, event: { kind: "membership.changed", workspaceId, reason: "joined" } }]);
+  });
+
+  it("preserves a client UUID through the official auth adapter and all business rows", async () => {
+    const clientWorkspaceId = randomUUID(), result = await createTeamWorkspace(dependencies(), person, { ...input, clientWorkspaceId });
+    assert.equal(result.workspaceId, clientWorkspaceId);
+    const db = mongoose.connection.db!, adapter = mongodbAdapter(db as Parameters<typeof mongodbAdapter>[0])(authOptions), store = authMembershipStore(adapter);
+    assert.equal((await store.find("authOrganizations", { id: clientWorkspaceId }))[0]?.name, input.name);
+    assert.equal((await store.find("authMembers", { organizationId: clientWorkspaceId }))[0]?.userId, USER);
+    assert.equal((await db.collection("organization").findOne({ _id: clientWorkspaceId as never }))?.name, input.name);
+    assert.equal((await db.collection("member").findOne({}))?.organizationId, clientWorkspaceId);
+    assert.equal((await WorkspaceMember.findOne({ workspaceId: clientWorkspaceId }).lean())?.role, "owner");
+    assert.equal((await WorkspaceSettingsModel.findOne({ workspaceId: clientWorkspaceId }).lean())?.currency, "EUR");
+    assert.equal((await StorageUsage.findById(clientWorkspaceId).lean())?.bytes, 8192);
+    const before = await counts();
+    await assert.rejects(createTeamWorkspace(dependencies(), person, { ...input, name: "Must not replace", clientWorkspaceId }), (error: unknown) => error instanceof Error && "code" in error && error.code === "CONFLICT");
+    assert.deepEqual(await counts(), before);
+    assert.equal((await store.find("authOrganizations", { id: clientWorkspaceId }))[0]?.name, input.name);
+    assert.equal(published.length, 1);
   });
 
   it("leaves no auth, settings or accounting rows after repeated full-quota refusals", async () => {

@@ -1,3 +1,6 @@
+vi.mock("./private-workspace-list", () => ({ readWorkspaceList: (read: () => Promise<unknown>) => read() }));
+vi.mock("./private-workspace-creation", () => ({ preparePrivateWorkspaceCreation: async () => null }));
+vi.mock("./private-request-scope", () => ({ privateRequestScopeHeaders: () => ({}), capturePrivateRequestScope: () => ({}), checkPrivateRequestScope: () => {} }));
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // These tests isolate legacy queue mechanics; private routing has separate end-to-end coverage.

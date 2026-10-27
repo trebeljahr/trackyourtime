@@ -152,6 +152,15 @@ export async function createPrivateAccountInventorySync(options: Scope & {
     const saved = page.versions.length ? await save(state, access) : loaded;
     return { revision: after, root: state.confirmed.checkpoint.root, through: page.through, next: page.next, pending: saved.state.pending.length };
   }
+  const updateInventory = async (value: Awaited<ReturnType<typeof required>>, workspaces: readonly PrivateAccountWorkspace[], access: Access) => {
+    if (value.state.conflict) throw new PrivateInventoryConflictError();
+    if (value.state.pending.length >= 8) throw new Error("Account inventory queue is full. Pending versions were kept; connect or review them first.");
+    const signed = await signPrivateAccountInventory({ ...scope, workspaces, previous: value.profile, signingPrivateKey: access.signingPrivateKey, current: access.alive });
+    const next = await verifyPrivateAccountInventoryUpdate(signed, value.profile, scope, access.signingPublicKey, access.alive);
+    const version = await encryptPrivateInventoryVersion({ inventory: next, previous: value.tail, operationId: crypto.randomUUID(), master: access.master, signingPrivateKey: access.signingPrivateKey, current: access.alive });
+    const saved = await save({ ...value.state, local: next.signed, pending: [...value.state.pending, version.signed] }, access);
+    return { inventory: saved.profile, pending: saved.state.pending.length };
+  };
   return {
     read: () => use(async (access) => { const value = await required(access); if (value.state.conflict) throw new PrivateInventoryConflictError(); return { inventory: value.profile, checkpoint: value.state.confirmed.checkpoint, pending: value.state.pending.length }; }),
     status: () => use(async (access) => { const value = await required(access); return { checkpoint: value.state.confirmed.checkpoint, pending: value.state.pending.length, conflict: value.state.conflict !== null }; }),
@@ -168,16 +177,20 @@ export async function createPrivateAccountInventorySync(options: Scope & {
     }),
     update: (input: readonly PrivateAccountWorkspace[]) => {
       const workspaces = structuredClone([...input]);
-      return use(async (access) => {
-        const value = await required(access); if (value.state.conflict) throw new PrivateInventoryConflictError();
-        if (value.state.pending.length >= 8) throw new Error("Account inventory queue is full. Pending versions were kept; connect or review them first.");
-        const signed = await signPrivateAccountInventory({ ...scope, workspaces, previous: value.profile, signingPrivateKey: access.signingPrivateKey, current: access.alive });
-        const next = await verifyPrivateAccountInventoryUpdate(signed, value.profile, scope, access.signingPublicKey, access.alive);
-        const version = await encryptPrivateInventoryVersion({ inventory: next, previous: value.tail, operationId: crypto.randomUUID(), master: access.master, signingPrivateKey: access.signingPrivateKey, current: access.alive });
-        const saved = await save({ ...value.state, local: next.signed, pending: [...value.state.pending, version.signed] }, access);
-        return { inventory: saved.profile, pending: saved.state.pending.length };
-      });
+      return use(async (access) => updateInventory(await required(access), workspaces, access));
     },
+    /** User-initiated standard creation only. Reserve a new, client-generated
+     * UUID under the account lock; a server response never chooses its mode.
+     * Private-account creation needs its own encrypted initialization flow. */
+    prepareStandardWorkspace: () => use(async (access) => {
+      const value = await required(access);
+      if (value.state.conflict) throw new PrivateInventoryConflictError();
+      if (value.profile.signed.inventory.workspaces.some((row) => row.mode !== "standard")) throw new Error("Private account workspace creation needs encrypted initialization");
+      const workspaceId = z.uuid().parse(crypto.randomUUID());
+      if (value.profile.signed.inventory.workspaces.some((row) => row.workspaceId === workspaceId)) throw new Error("New workspace identity already exists; retry this request");
+      const saved = await updateInventory(value, [...value.profile.signed.inventory.workspaces, { workspaceId, mode: "standard" }], access);
+      return { ...saved, workspaceId };
+    }),
     restore: (input: unknown, expected: { inventory: PrivateAccountInventoryCheckpoint; transport: PrivateInventoryTransportCheckpoint }) => {
       const version = signedPrivateInventoryVersionSchema.parse(input), anchor = structuredClone(expected);
       return use(async (access) => {

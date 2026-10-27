@@ -71,6 +71,8 @@ const listeners = new Set<Listener>();
 let token: string | null = null;
 // A delayed storage read must not undo a newer sign-in or sign-out.
 let tokenRevision = 0;
+/** A monotonic credential generation, never the credential itself. */
+export const getNativeTokenRevision = () => tokenRevision;
 let ready = false;
 // Rebuilt only when something changes, so `useSyncExternalStore` sees a
 // stable reference and does not re-render on every check.
@@ -223,11 +225,14 @@ const readStoredToken = async (): Promise<void> => {
     if (!store) return;
     await enforceFreshInstall(store);
     const stored = await store.get();
-    if (revision === tokenRevision) token = stored && stored.length > 0 ? stored : null;
+    if (revision === tokenRevision) {
+      const next = stored && stored.length > 0 ? stored : null;
+      if (next !== token) { tokenRevision++; token = next; }
+    }
   } catch {
     // An unreadable Keychain (locked device, a corrupted item) is "signed
     // out", never a crash on the launch path.
-    if (revision === tokenRevision) token = null;
+    if (revision === tokenRevision && token !== null) { tokenRevision++; token = null; }
   }
 };
 

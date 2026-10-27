@@ -311,6 +311,18 @@ describe("workspaces.create", () => {
     assert.equal(createWorkspaceSchema.safeParse({ name: "   ", currency: "EUR", weekStartsOn: 1 }).success, false);
     assert.equal(createWorkspaceSchema.safeParse({ name: "x", currency: "EURO", weekStartsOn: 1 }).success, false);
     assert.equal(createWorkspaceSchema.safeParse({ name: "x", currency: "EUR", weekStartsOn: 3 }).success, false);
+    assert.equal(createWorkspaceSchema.safeParse({ name: "x", currency: "EUR", weekStartsOn: 1, clientWorkspaceId: "existing-workspace" }).success, false);
+  });
+  it("creates exactly the new client UUID and refuses collisions without changing another workspace", async () => {
+    const clientWorkspaceId = "34c1aef0-689e-4c04-b22e-daf0f010b26c";
+    const input = { name: "New client intent", currency: "USD", weekStartsOn: 1 as const, clientWorkspaceId };
+    const created = await createTeamWorkspace(creationDeps(), PEOPLE.mia, input);
+    assert.equal(created.workspaceId, clientWorkspaceId); assert.equal(store.rows.authOrganizations.find((r) => r.id === clientWorkspaceId)?.name, input.name);
+    const before = structuredClone(store.rows), beforeWrites = writes.length;
+    await assert.rejects(createTeamWorkspace(creationDeps(), PEOPLE.ben, input), (error: unknown) => error instanceof TRPCError && error.code === "CONFLICT");
+    assert.deepEqual(store.rows, before); assert.equal(writes.length, beforeWrites);
+    await assert.rejects(createTeamWorkspace(creationDeps(), PEOPLE.mia, { ...input, clientWorkspaceId: "ws-a" }), (error: unknown) => error instanceof TRPCError && error.code === "BAD_REQUEST");
+    assert.deepEqual(store.rows, before);
   });
 
   it("slugs any name into something short and safe", () => {

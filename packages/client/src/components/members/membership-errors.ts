@@ -1,6 +1,7 @@
 import { isMembershipRefusal, type MembershipRefusal } from "@starter/shared";
 
 import { translate } from "@/i18n/translate";
+import { privateWorkspaceCreationFailure } from "@/lib/private-workspace-creation-error";
 
 /**
  * The stable FORBIDDEN codes from `@starter/shared` as the sentence a person
@@ -69,6 +70,8 @@ export const membershipRefusalOf = (error: unknown): MembershipRefusal | null =>
  * are identifiers, and anything else could be a stack-trace-shaped string.
  */
 export const membershipErrorMessage = (error: unknown): string => {
+  const creation = privateWorkspaceCreationFailure(error);
+  if (creation) return translate("members")(`errors.privateCreation.${creation}`);
   const refusal = membershipRefusalOf(error);
   if (refusal !== null) return refusalCopy(refusal);
   // A row outside the caller's workspace answers NOT_FOUND by design — which,

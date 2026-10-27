@@ -99,6 +99,20 @@ it("publishes encrypted intent before sending and reopens exact pending versions
   assert.ok(f.released.length && f.released.every((key) => key.every((byte) => byte === 0)));
   assert.ok(f.master.some((byte) => byte !== 0));
 });
+it("reserves independent new standard workspace ids atomically and preserves them across reopening", async () => {
+  const f = await fixture(); await f.enroll();
+  const [first, second] = await Promise.all([f.sync.prepareStandardWorkspace(), f.sync.prepareStandardWorkspace()]);
+  assert.match(first.workspaceId, /^[0-9a-f-]{36}$/); assert.notEqual(first.workspaceId, second.workspaceId);
+  const reopened = await f.create(), profile = await reopened.read();
+  assert.equal(profile.pending, 3); assert.equal(profile.inventory.signed.inventory.revision, 3);
+  for (const id of ["secret-workspace", first.workspaceId, second.workspaceId]) assert.equal(accountWorkspacePolicy(profile.inventory, scope, id).mode, "standard");
+  assert.equal(f.requests.length, 0);
+});
+it("does not acknowledge a new standard workspace when its durable inventory write fails", async () => {
+  const f = await fixture(); await f.enroll(); const before = await f.sync.exportRecovery(); f.state.writeFault = "drop";
+  await assert.rejects(f.sync.prepareStandardWorkspace()); f.state.writeFault = "";
+  assert.deepEqual(await f.sync.exportRecovery(), before); assert.equal(f.requests.length, 0);
+});
 it("retries the same envelope after a lost commit response without duplicating a revision", async () => {
   const f = await fixture(); await f.enroll();
   await assert.rejects(f.sync.flushOne({ ...f.transport, commit: async (signed) => { await f.transport.commit(signed); throw new Error("Reply lost"); } }), /Reply lost/);

@@ -3,10 +3,12 @@ import {
   asWorkspaceKind,
   permissionsFor,
   WORKSPACE_NAME_MAX,
+  createWorkspaceSchema,
   type SyncEvent,
   type WorkspaceKind,
   type WorkspaceSummary,
 } from "@starter/shared";
+import { TRPCError } from "@trpc/server";
 import { membershipNotFound, membershipRefused } from "./errors.js";
 import { initialFlags } from "./lifecycle.js";
 import { asRole } from "./records.js";
@@ -179,9 +181,13 @@ export type WorkspaceCreationDeps = {
 export async function createTeamWorkspace(
   deps: WorkspaceCreationDeps,
   user: { id: string; name?: string | null; email?: string | null },
-  input: { name: string; currency: string; weekStartsOn: 0 | 1 },
+  input: { name: string; currency: string; weekStartsOn: 0 | 1; clientWorkspaceId?: string },
 ): Promise<{ workspaceId: string }> {
+  if (!createWorkspaceSchema.shape.clientWorkspaceId.safeParse(input.clientWorkspaceId).success) throw new TRPCError({ code: "BAD_REQUEST" });
   const result = await deps.transaction(user.id, async (store) => {
+    // No collision may reuse or alter a workspace, regardless of its owner,
+    // mode or name. The transaction/unique id also fences concurrent retries.
+    if (input.clientWorkspaceId && (await store.find("authOrganizations", { id: input.clientWorkspaceId })).length) throw new TRPCError({ code: "CONFLICT", message: "Workspace creation id is already in use" });
     const owned = (await store.find("workspaceMembers", { userId: user.id })).filter(
       (row) => row.role === "owner",
     );
@@ -190,6 +196,7 @@ export async function createTeamWorkspace(
     const now = deps.now();
     const name = input.name.trim().slice(0, WORKSPACE_NAME_MAX);
     const org = await store.insertOne("authOrganizations", {
+      ...(input.clientWorkspaceId ? { id: input.clientWorkspaceId } : {}),
       name,
       slug: teamWorkspaceSlug(name, deps.slugTail()),
       kind: "team",

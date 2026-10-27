@@ -1182,3 +1182,39 @@ future verified controller cannot enable these old paths accidentally. Existing
 complete-archive and unverified retirement routes retain their independent
 refusals. Internal staging remains available only for bounded synthetic checks
 and the transitional source engine; it is not a new network API.
+
+## Client-generated standard workspace creation (API 35)
+
+An enrolled all-standard account reserves a cryptographically random UUID in
+its signed, encrypted account inventory before the workspace name can enter
+standard HTTP. Reservation appends under the account-wide lock and requires
+confirmed durable storage. Existing pending inventory versions are delivered
+and independently read back first. The new reservation remains pending for
+normal encrypted delivery; an API failure never deletes it automatically.
+Unknown/older server support refuses before preparing the reservation.
+
+`workspaces.create.clientWorkspaceId` is additive. The official auth adapter
+preserves the supplied UUID, and workspace settings, membership and storage
+accounting use that same ID. Any existing organization with the ID refuses,
+including one owned by the caller; this endpoint does not overwrite or reuse
+existing workspaces. Old callers retain server-generated IDs. The client
+accepts only its reserved response ID and discards extra response fields.
+An account containing a private workspace refuses this plaintext creation flow;
+it needs a separate encrypted initialization protocol. Joining workspaces and
+retrying a lost creation reply remain separate workflows. Failed attempts can
+leave unused standard reservations; they grant no server membership or access.
+
+Content-bearing tRPC operations freeze their input and capture account, origin,
+key-session generation and native credential generation before readiness waits.
+Batch-local provenance travels only within the client's transport machinery;
+the final fetch boundary removes it and verifies every content-bearing batch
+member against both its original scope and current signed routing policy.
+A missing, stale or malformed scope refuses the whole batch. Native credential
+hydration also advances its generation when the stored token changes. No draft
+may follow an app-visible account/server/credential switch while waiting for
+native readiness. This does not prove the identity behind an HttpOnly cookie
+that changes independently of the app's session provider.
+
+These adapters do not open conversion, private writes or retirement. Actual
+MongoDB replica-set tests cover the official adapter, unique IDs, quota races
+and rollback; local fixtures contain synthetic accounts only.

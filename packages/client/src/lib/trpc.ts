@@ -19,6 +19,8 @@ import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
 import { readWorkspaceList } from "./private-workspace-list";
+import { capturePrivateRequestScope, checkPrivateRequestScope, privateRequestScopeHeaders } from "./private-request-scope";
+import { preparePrivateWorkspaceCreation } from "./private-workspace-creation";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -87,6 +89,37 @@ export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => 
   return next(input === op.input ? op : { ...op, input });
 };
 
+export const privateWorkspaceCreationLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  if (op.path !== "workspaces.create" || op.type !== "mutation") return next(op);
+  return observable((observer) => {
+    const abort = new AbortController(); let subscription: { unsubscribe: () => void } | undefined;
+    let prepared: Awaited<ReturnType<typeof preparePrivateWorkspaceCreation>> = null;
+    void (async () => {
+      const originalScope = capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
+      if (abort.signal.aborted) return;
+      checkPrivateRequestScope(originalScope);
+      prepared = await preparePrivateWorkspaceCreation(originalInput, abort.signal);
+      checkPrivateRequestScope(originalScope);
+      if (abort.signal.aborted) return;
+      if (!prepared) { subscription = next({ ...op, input: originalInput, context: { ...op.context, privateCreationScope: originalScope } }).subscribe(observer); return; }
+      const result = await new Promise<Parameters<typeof observer.next>[0]>((resolve, reject) => {
+        const cancel = () => reject(new Error("Workspace creation canceled"));
+        abort.signal.addEventListener("abort", cancel, { once: true });
+        subscription = next({ ...op, input: prepared!.input, context: { ...op.context, privateCreationScope: originalScope } }).subscribe({
+          next: (value) => { abort.signal.removeEventListener("abort", cancel); resolve(value); },
+          error: (error) => { abort.signal.removeEventListener("abort", cancel); reject(error); },
+          complete: () => { abort.signal.removeEventListener("abort", cancel); reject(new Error("Workspace creation returned no data")); },
+        });
+      });
+      const accepted = await prepared.accept("data" in result.result ? result.result.data : undefined);
+      checkPrivateRequestScope(originalScope);
+      if (!abort.signal.aborted) { observer.next({ result: { data: accepted } }); observer.complete(); }
+    })().catch((error) => { if (!abort.signal.aborted) observer.error(TRPCClientError.from(error)); }).finally(() => prepared?.close());
+    return () => { abort.abort(); subscription?.unsubscribe(); prepared?.close(); };
+  });
+};
+
 /** Account-wide private navigation resolves before any standard list request. */
 export const privateWorkspaceListLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
   if (op.path !== "workspaces.list" || op.type !== "query") return next(op);
@@ -118,19 +151,22 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
     let cancelled = false, subscription: { unsubscribe: () => void } | undefined;
     const abort = new AbortController();
     void (async () => {
+      const originalScope = capturePrivateRequestScope(), originalInput = structuredClone(op.input);
       await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
       if (cancelled) return;
-      const input = op.input !== null && typeof op.input === "object" && !Array.isArray(op.input) ? op.input as Record<string, unknown> : null;
+      checkPrivateRequestScope(originalScope);
+      const input = originalInput !== null && typeof originalInput === "object" && !Array.isArray(originalInput) ? originalInput as Record<string, unknown> : null;
       const workspaceId = input && typeof input.workspaceId === "string" && input.workspaceId !== PENDING_WORKSPACE ? input.workspaceId : getActiveWorkspaceId();
-      const addressed = input?.workspaceId === PENDING_WORKSPACE ? (workspaceId === null ? Object.fromEntries(Object.entries(input).filter(([key]) => key !== "workspaceId")) : { ...input, workspaceId }) : op.input;
+      const addressed = input?.workspaceId === PENDING_WORKSPACE ? (workspaceId === null ? Object.fromEntries(Object.entries(input).filter(([key]) => key !== "workspaceId")) : { ...input, workspaceId }) : originalInput;
       const route = await currentWorkspaceContentRoute(workspaceId, abort.signal);
       if (cancelled) return;
+      checkPrivateRequestScope(originalScope);
       if (route.mode === "encrypted") {
         const value = await readPrivateWorkspaceQuery(route, op.path, addressed, op.type); route.check();
         if (!cancelled) { observer.next({ result: { data: value } } as never); observer.complete(); }
       } else {
-        route.check(); subscription = next({ ...op, input: addressed }).subscribe({
-          next: (value) => { try { route.check(); observer.next(value); } catch (error) { observer.error(TRPCClientError.from(error instanceof Error ? error : new Error("Workspace data changed"))); } },
+        route.check(); subscription = next({ ...op, input: addressed, context: { ...op.context, privateContentScope: originalScope } }).subscribe({
+          next: (value) => { try { checkPrivateRequestScope(originalScope); route.check(); observer.next(value); } catch (error) { observer.error(TRPCClientError.from(error instanceof Error ? error : new Error("Workspace data changed"))); } },
           error: (error) => observer.error(error), complete: () => observer.complete(),
         });
       }
@@ -333,7 +369,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
         });
       });
     },
-    headers: () => {
+    headers: (batch?: { opList: readonly { context: Record<string, unknown> }[] }) => {
       const token = getNativeToken();
       return {
         "x-trackyourtime-client": clientId(),
@@ -341,6 +377,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
         // client kind above is unchanged, because it decides the device
         // label and the session window.
         ...versionHeaders(APP_VERSION),
+        ...privateRequestScopeHeaders(batch?.opList),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       };
     },
@@ -348,6 +385,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
   return trpc.createClient({
     links: [
       workspaceLink(),
+      privateWorkspaceCreationLink(),
       privateWorkspaceListLink(),
       privateContentLink(),
       durableEntryLink(),

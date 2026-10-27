@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: n
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; }, whenApiOriginReady: async () => {} }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => 32 }));
-vi.mock("./native-session", () => ({ getNativeToken: () => null }));
+vi.mock("./native-session", () => ({ getNativeToken: () => null, getNativeTokenRevision: () => 0 }));
 vi.mock("./shell", () => ({ clientId: () => "web", isCapacitor: () => false }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
@@ -73,4 +73,22 @@ it("rechecks complete HTTP batches and GET filters, including unsupported future
 it("cancels a pending account lookup instead of sending anonymous workspace requests", async () => {
   state.changed?.(); const abort = new AbortController(), pending = currentWorkspaceContentRoute("workspace", abort.signal); abort.abort(new Error("Canceled lookup"));
   await expect(pending).rejects.toThrow("Canceled lookup"); session.privateAccountChanged(null); await expect(currentWorkspaceContentRoute("workspace")).rejects.toThrow("Sign in");
+});
+
+it("requires original request provenance for standard content and strips local metadata before dispatch", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
+  const { capturePrivateRequestScope, privateRequestScopeHeaders } = await import("./private-request-scope");
+  const url = `${state.origin}/api/trpc/tags.list?batch=1`, body = JSON.stringify({ "0": { workspaceId: "workspace" } });
+  await expect(assertStandardContentRequest(url, { body })).rejects.toThrow("original workspace request");
+  const scope = capturePrivateRequestScope(), init = { body, headers: privateRequestScopeHeaders([{ context: { privateContentScope: scope } }]) } as RequestInit;
+  const check = await assertStandardContentRequest(url, init); check(); expect(new Headers(init.headers).has("x-trackyourtime-local-scope")).toBe(false);
+  session.privateAccountChanged("other"); expect(check).toThrow();
+});
+it("refuses an entire mixed standard batch if one member belongs to an earlier account", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "other" }, () => true);
+  const { capturePrivateRequestScope, privateRequestScopeHeaders } = await import("./private-request-scope");
+  const old = capturePrivateRequestScope(); session.privateAccountChanged("other"); const current = capturePrivateRequestScope();
+  const init = { body: JSON.stringify({ "0": { workspaceId: "workspace" }, "1": { workspaceId: "workspace" } }), headers: privateRequestScopeHeaders([{ context: { privateContentScope: current } }, { context: { privateContentScope: old } }]) } as RequestInit;
+  await expect(assertStandardContentRequest(`${state.origin}/api/trpc/tags.create,tasks.create?batch=1`, init)).rejects.toThrow("account or server changed"); expect(new Headers(init.headers).has("x-trackyourtime-local-scope")).toBe(false);
 });

@@ -1,4 +1,7 @@
-import { accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery } from "@starter/core";
+import { assertEntryClientSupported, accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery } from "@starter/core";
+import { currentServerApiLevel } from "./server-level";
+import { PrivateWorkspaceCreationError } from "./private-workspace-creation-error";
+import { checkPrivateRequestScope, consumePrivateRequestScopes } from "./private-request-scope";
 import { privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateAccountId, privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion, whenPrivateAccountReady } from "./private-session";
@@ -106,6 +109,7 @@ export async function assertStandardContentRequest(url: string, init?: RequestIn
   const target = new URL(url, privateDataOrigin()), prefix = "/api/trpc/";
   if (!target.pathname.startsWith(prefix)) throw new PrivateContentUnavailableError("Unexpected workspace request URL");
   const paths = decodeURIComponent(target.pathname.slice(prefix.length)).split(",");
+  const originalScopes = consumePrivateRequestScopes(init, paths.length);
   if (!paths.some(isWorkspaceContentProcedure)) return () => {};
   let raw;
   try { raw = typeof init?.body === "string" ? JSON.parse(init.body) : target.searchParams.has("input") ? JSON.parse(target.searchParams.get("input")!) : undefined; }
@@ -117,7 +121,15 @@ export async function assertStandardContentRequest(url: string, init?: RequestIn
     const workspaceId = input !== null && typeof input === "object" && typeof input.workspaceId === "string" ? input.workspaceId : null;
     const route = await currentWorkspaceContentRoute(workspaceId, init?.signal ?? undefined);
     if (target.origin !== route.scope.server || route.mode !== "standard") throw new PrivateContentUnavailableError("Private workspace content cannot use the standard HTTP transport");
-    checks.push(route.check);
+    const scopes = originalScopes?.[index];
+    checks.push(() => {
+      route.check(); checkPrivateRequestScope(scopes?.[0]);
+      if (scopes?.[1] != null) checkPrivateRequestScope(scopes[1]);
+      if (path === "workspaces.create" && input?.clientWorkspaceId !== undefined) {
+        try { assertEntryClientSupported(path, input, currentServerApiLevel()); } catch { throw new PrivateWorkspaceCreationError("server"); }
+        if (input.clientWorkspaceId !== workspaceId || scopes?.[1] == null) throw new PrivateWorkspaceCreationError("response");
+      }
+    });
   }
   const check = () => { for (const guard of checks) guard(); }; check(); return check;
 }
