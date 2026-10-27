@@ -96,3 +96,5 @@ export * from "./privacy/workspace-view.js";
 
 export * from "./privacy/favorite-edit.js";
 export * from "./privacy/catalog-edit.js";
+
+export * from "./privacy/entry-edit.js";

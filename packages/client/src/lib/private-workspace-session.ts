@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, type PrivateEntryEditPath } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -93,6 +93,12 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
           assertPolicy(); return privateCatalogEdit({ scope, directory, records, current, path, input: frozen });
         }); assertPolicy(); return result;
       },
+      editEntry: async (path: PrivateEntryEditPath, input: unknown) => {
+        const frozen = structuredClone(input); assertPolicy();
+        const result = await replica.transact(PRIVATE_ENTRY_EDIT_KINDS, ({ records, directory }) => {
+          assertPolicy(); return privateEntryEdit({ scope, directory, records, current, path, input: frozen });
+        }); assertPolicy(); return result;
+      },
       pull: async (transport: PrivateReplicaTransport, through?: number) => { assertPolicy(); const result = await replica.pull(transport, through); assertPolicy(); return result; },
       flushOne: async (transport: PrivateReplicaTransport) => { assertPolicy(); const result = await replica.flushOne(transport); assertPolicy(); return result; },
     };
@@ -123,7 +129,7 @@ export async function openPrivateWorkspaceSyncSession(userId: string, workspaceI
   try {
     const transport = privateWorkspaceJournalTransport(userId, workspaceId);
     return { scope: copy.scope, current: copy.current, close: copy.close, checkpoint: copy.checkpoint, status: copy.status,
-      editFavorite: copy.editFavorite, editCatalog: copy.editCatalog,
+      editFavorite: copy.editFavorite, editCatalog: copy.editCatalog, editEntry: copy.editEntry,
       pull: (through?: number) => copy.pull(transport, through), flushOne: () => copy.flushOne(transport),
     };
   } catch (error) { copy.close(); throw error; }

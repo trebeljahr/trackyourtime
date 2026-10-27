@@ -42,3 +42,15 @@ export async function seedPrivateWorkspaceClient(f: Awaited<ReturnType<typeof pr
     await host.exclusive(() => storage.setItem(`replica:${f.archive.replica.activationRoot}`, JSON.stringify(f.archive.replica)));
   } finally { host.close(); }
 }
+
+/** Completed-entry fixtures include original author and workspace billing facts. */
+export async function privateManualEntryFixture() {
+  const f = await privateRecoveryFixture();
+  await f.replica.enqueue({ records: [
+    { kind: "settings", id: "settings", authorId: null, value: { _id: "settings", workspaceId: "workspace", currency: "EUR", weekStartsOn: 1 } },
+    { kind: "settingsMoney", id: "settings", authorId: null, value: { _id: "settings", defaultHourlyRate: 80 } },
+    { kind: "members", id: "member", authorId: "owner", value: { _id: "member", workspaceId: "workspace", userId: "owner" } },
+    { kind: "memberMoney", id: "member", authorId: "owner", value: { _id: "member", hourlyRate: 60 } },
+  ] });
+  f.archive = await f.capture(); return f;
+}

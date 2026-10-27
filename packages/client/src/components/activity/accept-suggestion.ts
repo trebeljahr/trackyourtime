@@ -1,3 +1,4 @@
+import { capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 import type { DesktopActivity, DesktopActivityInterval } from "@starter/shared";
 
 import { entryMutationScope, sameEntryMutationScope, type EntryMutationResult } from "@/lib/entry-mutation-result";
@@ -43,7 +44,7 @@ export type AcceptRequest = DesktopActivityInterval & {
 };
 
 export type AcceptOutcome =
-  | { ok: true; start: number; end: number; saved: "server" | "offline" }
+  | { ok: true; start: number; end: number; saved: Extract<EntryMutationResult, { ok: true }>["saved"] }
   | {
       ok: false;
       reason: "already-tracked" | "no-scope" | "bad-range" | "workspace-changed";
@@ -103,6 +104,7 @@ export const acceptSuggestion = async (
   // person was looking at when they pressed Add, never in one switched to
   // while the check was in flight.
   const workspaceId = deps.workspaceId();
+  const action = capturePrivateMutationAction();
   const scope = entryMutationScope();
   const now = deps.now();
   const range = {
@@ -117,7 +119,7 @@ export const acceptSuggestion = async (
     tracked,
   });
   if (!check.ok) return check;
-  if (deps.workspaceId() !== workspaceId || !sameEntryMutationScope(scope)) return { ok: false, reason: "workspace-changed" };
+  if (!action.current() || deps.workspaceId() !== workspaceId || !sameEntryMutationScope(scope)) return { ok: false, reason: "workspace-changed" };
 
   const fields = withKnownCatalog(request.fields, deps.catalog());
   const saved = await deps.createManualEntry({
@@ -126,7 +128,7 @@ export const acceptSuggestion = async (
     end: new Date(check.end).toISOString(),
   });
   if (!saved.ok) return { ok: false, reason: "save-failed", message: saved.message };
-  if (deps.workspaceId() !== workspaceId || !sameEntryMutationScope(scope)) return { ok: false, reason: "workspace-changed" };
+  if (!action.current() || deps.workspaceId() !== workspaceId || !sameEntryMutationScope(scope)) return { ok: false, reason: "workspace-changed" };
   await deps.activity.markAccepted({ start: check.start, end: check.end }).catch(() => undefined);
   return { ok: true, start: check.start, end: check.end, saved: saved.saved };
 };

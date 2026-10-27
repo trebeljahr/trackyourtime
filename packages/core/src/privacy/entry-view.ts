@@ -28,7 +28,7 @@ export function privateEntryReader(source: ReturnType<typeof privateViewSource>)
   };
   return { quick, detailed };
 }
-/** Scoped reads only. The account-wide current timer and writes need a
+/** Scoped reads only. The account-wide current timer and timer writes need a
  * separate cross-workspace coordinator, so they cannot silently use this view. */
 export function privateEntryQuery(options: PrivateViewOptions & { path: PrivateEntryQueryPath; input: unknown; now?: number }) {
   const { scope, path } = options, source = privateViewSource(options), { check, visibility } = source;

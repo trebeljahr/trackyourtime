@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { getUntypedClient } from "@trpc/client";
 import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, privateWorkspaceChainRoot, OFFLINE_QUEUE_STORAGE_KEY, createTempId } from "@starter/core";
-import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
+import { privateRecoveryFixture, privateManualEntryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, tokenRevision: 0, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: () => state.ready(), rebaseApiUrl: (url: string) => url }));
 vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => "workspace", subscribeActiveWorkspace: () => () => {}, isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), getKnownWorkspacesOwner: () => "owner", getActiveWorkspaceSnapshot: () => ({ activeId: "workspace", workspaces: null }), workspaceNameFor: () => "Synthetic workspace" }));
@@ -358,4 +358,27 @@ it("refuses generated timer metadata for another account or workspace before the
   const { createAppQueryClient } = await import("./query-client"), { assignPrivateMutationMetadata } = await import("./private-mutation-guard"), queryClient = createAppQueryClient(), fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
   const mutation = queryClient.getMutationCache().build(queryClient, { mutationKey: [["entries", "start"]], networkMode: "always", onMutate: async (raw: { description: string }) => { assignPrivateMutationMetadata(raw, { __durableScope: { owner: "other", server: state.origin, workspaceId: "workspace" } }); }, mutationFn: (input: { description: string }) => client().mutation("entries.start", input) });
   await expect(mutation.execute({ description: "Must stay in the original account" })).rejects.toThrow("another account or workspace"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); queryClient.clear();
+});
+
+it("saves, edits and removes completed private time through the real client without standard HTTP or outbox", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); const fetcher = vi.fn(() => { throw new Error("Private entry must stay local"); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), { isPrivateLocalResult } = await import("./private-local-result");
+  const created = await api.mutation("entries.create", { description: "Confidential manual time", start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", billable: true, tagIds: ["tag"], __durableScope: { owner: "owner", server: state.origin, workspaceId: "workspace" }, __durableTempId: createTempId() }) as { id: string; hourlyRate: number; description: string };
+  expect(created).toMatchObject({ description: "Confidential manual time", hourlyRate: 60, durationSec: 3600 }); expect(isPrivateLocalResult(created)).toBe(true);
+  const [renamed, retagged] = await Promise.all([api.mutation("entries.update", { id: created.id, description: "Renamed confidential time" }), api.mutation("entries.update", { id: created.id, tagIds: [] })]);
+  expect(renamed).toMatchObject({ id: created.id }); expect(retagged).toMatchObject({ id: created.id });
+  expect(await api.query("entries.get", { id: created.id })).toMatchObject({ description: "Renamed confidential time", tagIds: [], hourlyRate: 60 });
+  expect(await api.mutation("entries.remove", { id: created.id })).toEqual({ success: true, id: created.id });
+  await expect(api.query("entries.get", { id: created.id })).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); expect(localStorage.getItem(OFFLINE_QUEUE_STORAGE_KEY)).toBeNull();
+});
+it("refuses foreign private entry provenance and standard queued identities before appending local work", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  const { openPrivateWorkspaceSyncSession } = await import("./private-workspace-session"), copy = await openPrivateWorkspaceSyncSession("owner", "workspace");
+  try {
+    const before = await copy.checkpoint(), input = { description: "Keep this original intent", start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", billable: false };
+    await expect(client().mutation("entries.create", { ...input, __durableScope: { owner: "other", server: state.origin, workspaceId: "workspace" } })).rejects.toThrow("scope changed");
+    await expect(client().mutation("entries.create", { ...input, operationId: crypto.randomUUID() })).rejects.toThrow();
+    expect(await copy.checkpoint()).toEqual(before); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+  } finally { copy.close(); }
 });

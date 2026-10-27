@@ -1,6 +1,9 @@
 "use client";
 
-import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { entrySaveLocation, type EntrySaveLocation } from "@/lib/entry-mutation-result";
+
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent, capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 import { useProjectOptions } from "@/hooks/use-catalog-options";
 
 import * as React from "react";
@@ -147,7 +150,7 @@ export type CalendarActions = {
 export const useCalendarActions = (
   input: CalendarQueryInput
 ): CalendarActions => {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const { currency } = useFormatSettings();
   // Stamped on the optimistic block so the own-entries filter keeps it on
   // screen until the server's answer replaces it.
@@ -194,6 +197,7 @@ export const useCalendarActions = (
   }, [utils]);
 
   const updateMutation = trpc.entries.update.useMutation({
+    ...privateOptions,
     onMutate: async (variables) => {
       assertPrivateMutationStillCurrent(variables);
       const scope = entryMutationScope();
@@ -258,6 +262,7 @@ export const useCalendarActions = (
   });
 
   const createMutation = trpc.entries.create.useMutation({
+    ...privateOptions,
     onMutate: async (variables) => {
       assertPrivateMutationStillCurrent(variables);
       const scope = createScopes.current.get(variables) ?? entryMutationScope();
@@ -313,6 +318,7 @@ export const useCalendarActions = (
   });
 
   const removeMutation = trpc.entries.remove.useMutation({
+    ...privateOptions,
     onMutate: async (variables) => {
       assertPrivateMutationStillCurrent(variables);
       const scope = entryMutationScope();
@@ -356,13 +362,13 @@ export const useCalendarActions = (
   );
 
   const applyCreate = React.useCallback(
-    (draft: EntryDraft): Promise<{ id: string; ok: true } | { id: null; ok: false; message: string }> => {
+    (draft: EntryDraft): Promise<{ id: string; ok: true; saved: EntrySaveLocation } | { id: null; ok: false; message: string }> => {
       const scope = entryMutationScope();
       const variables = { ...draft, originId: ORIGIN_ID, ...(scope.workspaceId === null ? {} : { workspaceId: scope.workspaceId }) };
       createScopes.current.set(variables, scope);
       return createMutation
         .mutateAsync(variables)
-        .then((created) => ({ id: created.id, ok: true as const }))
+        .then((created) => ({ id: created.id, ok: true as const, saved: entrySaveLocation(created) }))
         .catch((error: unknown) => ({ id: null, ok: false as const, message: userErrorMessage(error, translate("tracker")("mutations.addFailed")) }))
         .finally(() => { createScopes.current.delete(variables); });
     },
@@ -425,7 +431,9 @@ export const useCalendarActions = (
   const createTracked = React.useCallback(
     async (draft: EntryDraft, stepId: number, replacing: string | null): Promise<EntryMutationResult> => {
       const scope = entryMutationScope();
+      const action = capturePrivateMutationAction();
       const result = await applyCreate(draft);
+      if (!action.current()) return { ok: false, message: translate("tracker")("mutations.scopeChanged") };
       const id = result.id;
       if (sameEntryMutationScope(scope)) {
         writeHistory((current) => {
@@ -437,7 +445,7 @@ export const useCalendarActions = (
           return remapEntryId(rebased, stepId, id);
         });
       }
-      return result.ok ? { ok: true, saved: "server" } : { ok: false, message: result.message };
+      return result.ok ? { ok: true, saved: result.saved } : { ok: false, message: result.message };
     },
     [applyCreate, writeHistory]
   );

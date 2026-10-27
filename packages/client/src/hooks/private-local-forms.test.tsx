@@ -7,16 +7,16 @@ import { QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { signPrivateAccountInventory } from "@starter/core";
 import { API_LEVEL } from "@starter/shared";
-import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
+import { privateRecoveryFixture, privateManualEntryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", active: { activeId: "workspace", workspaces: null }, listeners: new Set<() => void>(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: async () => {}, rebaseApiUrl: (url: string) => url }));
 vi.mock("@/lib/active-workspace", () => ({ getActiveWorkspaceId: () => state.active.activeId, getActiveWorkspaceSnapshot: () => state.active, getServerActiveWorkspaceSnapshot: () => state.active, subscribeActiveWorkspace: (fn: () => void) => { state.listeners.add(fn); return () => state.listeners.delete(fn); }, isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), getKnownWorkspacesOwner: () => "owner", noteNotFound: () => {} }));
 vi.mock("@/lib/desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("@/lib/server-level", () => ({ currentServerApiLevel: () => API_LEVEL, noteClientTooOld: () => {} }));
 vi.mock("@/lib/native-session", () => ({ getNativeToken: () => null, getNativeTokenRevision: () => 0 }));
-vi.mock("@/lib/shell", () => ({ clientId: () => "web", isCapacitor: () => false, isTokenShell: () => false }));
+vi.mock("@/lib/shell", () => ({ clientId: () => "web", entrySource: () => "web", isCapacitor: () => false, isTokenShell: () => false }));
 vi.mock("@/lib/app-version", () => ({ APP_VERSION: "test" }));
-vi.mock("@/hooks/use-sync", () => ({ ORIGIN_ID: "test-form" }));
+vi.mock("@/hooks/use-sync", () => ({ ORIGIN_ID: "test-form", timerStore: { getState: () => ({ running: null }), setState: () => {} } }));
 vi.mock("@/components/ui/sonner", () => ({ toast: { success: state.success, error: state.error } }));
 vi.mock("@/lib/app-query-persistence", () => ({ getQueryPersistence: () => ({ forget: async () => {}, protectPrivateAccount: async () => {} }) }));
 vi.mock("@/lib/catalog-cache", () => ({ bindCatalogCaches: () => {} }));
@@ -125,4 +125,26 @@ it("remounts private filters before a standard workspace can send them", async (
   for (const [url] of fetcher.mock.calls as unknown as [RequestInfo | URL][]) expect(decodeURIComponent(String(url))).not.toContain("Private account secret search");
   expect(app.queryClient.getQueryDefaults([["entries", "descriptions"]]).networkMode).toBe("online");
   view.unmount(); app.queryClient.clear();
+});
+
+it("keeps the actual manual-entry form save offline and reports encrypted local ownership honestly", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); await readPrivateDeviceAccessState("owner");
+  const fetcher = vi.fn(() => { throw new Error("Private manual form must not use HTTP"); }); vi.stubGlobal("fetch", fetcher);
+  const { useEntryMutations } = await import("@/components/tracker/use-entry-mutations"), app = wrapper(); onlineManager.setOnline(false);
+  const view = renderHook(() => useEntryMutations(), { wrapper: app.render });
+  let saved!: Awaited<ReturnType<typeof view.result.current.createManualEntry>>;
+  await act(async () => { saved = await view.result.current.createManualEntry({ description: "Private form hour", projectId: null, billable: true, start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z" }); });
+  expect(saved).toMatchObject({ ok: true, saved: "private", entry: { description: "Private form hour", hourlyRate: 60, durationSec: 3600 } });
+  expect(fetcher).not.toHaveBeenCalled(); expect(state.error).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
+});
+
+it("does not return decrypted manual time after locking during the terminal mutation callback", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); await readPrivateDeviceAccessState("owner");
+  vi.stubGlobal("fetch", vi.fn(() => { throw new Error("Private form must stay local"); }));
+  const { useEntryMutations } = await import("@/components/tracker/use-entry-mutations"), app = wrapper();
+  const unsubscribe = app.queryClient.getMutationCache().subscribe((event) => { if (event.type === "updated" && event.action.type === "success") session.lockPrivateData(); });
+  const view = renderHook(() => useEntryMutations(), { wrapper: app.render }); let saved!: Awaited<ReturnType<typeof view.result.current.createManualEntry>>;
+  await act(async () => { saved = await view.result.current.createManualEntry({ description: "Do not return while locked", projectId: null, billable: false, start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z" }); });
+  expect(saved.ok).toBe(false); expect(JSON.stringify(saved)).not.toContain("Do not return while locked");
+  unsubscribe(); view.unmount(); app.queryClient.clear();
 });

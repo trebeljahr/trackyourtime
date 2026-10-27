@@ -1,14 +1,15 @@
+import { isPrivateLocalResult } from "./private-local-result";
 import type { DetailedEntry } from "@starter/shared";
 import { getActiveWorkspaceId, getKnownWorkspacesOwner } from "@/lib/active-workspace";
 import { getAbsoluteApiOrigin } from "@/lib/api-origin";
 import { getOfflineQueueOwner, getOfflineQueueStampOwner } from "@/lib/offline";
 
 /**
- * A draft is disposable only after the server or durable queue owns it.
+ * A draft is disposable only after the server, encrypted local replica or durable queue owns it.
  * Creates always return their exact entry; updates include it when known.
  */
 export type EntryMutationResult =
-  | { ok: true; saved: "server" | "offline"; entry?: DetailedEntry }
+  | { ok: true; saved: EntrySaveLocation; entry?: DetailedEntry }
   | { ok: false; message: string };
 
 export type EntryMutationScope = {
@@ -27,3 +28,6 @@ export const sameEntryMutationScope = (scope: EntryMutationScope): boolean => {
   const current = entryMutationScope();
   return scope.workspaceId === current.workspaceId && scope.owner === current.owner && scope.server === current.server;
 };
+
+export type EntrySaveLocation = "server" | "offline" | "private";
+export const entrySaveLocation = (result: unknown): "server" | "private" => isPrivateLocalResult(result) ? "private" : "server";

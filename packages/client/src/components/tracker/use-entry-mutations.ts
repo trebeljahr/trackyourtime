@@ -1,6 +1,6 @@
 "use client";
 
-import { assignPrivateMutationMetadata, assertPrivateMutationStillCurrent, privateMutationStillCurrent, capturePrivateMutationGuard } from "@/lib/private-mutation-guard";
+import { assignPrivateMutationMetadata, assertPrivateMutationStillCurrent, privateMutationStillCurrent, capturePrivateMutationGuard, capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
 
 import * as React from "react";
@@ -50,7 +50,7 @@ import {
 } from "@/lib/offline";
 import { entrySource } from "@/lib/shell";
 import { userErrorMessage } from "@/lib/error-message";
-import { entryMutationScope, sameEntryMutationScope, type EntryMutationResult, type EntryMutationScope } from "@/lib/entry-mutation-result";
+import { entryMutationScope, sameEntryMutationScope, entrySaveLocation, type EntryMutationResult, type EntryMutationScope } from "@/lib/entry-mutation-result";
 
 /**
  * The entry list covers all of history and is paged with the server cursor, so
@@ -1085,6 +1085,7 @@ export const useEntryMutations = (): EntryMutations => {
 
   const createManualEntry = React.useCallback(
     async (args: ManualEntryArgs): Promise<EntryMutationResult> => {
+      const action = capturePrivateMutationAction();
       const input: CreateInput = {
         description: args.description,
         clientId: args.clientId,
@@ -1103,8 +1104,8 @@ export const useEntryMutations = (): EntryMutations => {
       saveScopes.current.set(input, scope);
       const catalog = shapeContext();
       try {
-        const saved = await createMutation.mutateAsync(input);
-        return { ok: true, saved: "server", entry: decorateEntry(catalog, saved) };
+        const saved = await createMutation.mutateAsync(input); action.check();
+        return { ok: true, saved: entrySaveLocation(saved), entry: decorateEntry(catalog, saved) };
       } catch (error) {
         return saveFailures.current.get(input) ?? { ok: false, message: userErrorMessage(error, translate("tracker")("mutations.addFailed")) };
       } finally {
@@ -1117,6 +1118,7 @@ export const useEntryMutations = (): EntryMutations => {
 
   const updateEntry = React.useCallback(
     async (args: UpdateEntryArgs): Promise<EntryMutationResult> => {
+      const action = capturePrivateMutationAction();
       if (isTempId(args.id)) {
         const cached = utils.entries.current.getData();
         const running = cached === undefined ? timerStore.getState().running : cached;
@@ -1181,8 +1183,8 @@ export const useEntryMutations = (): EntryMutations => {
       saveScopes.current.set(input, scope);
       const catalog = shapeContext();
       try {
-        const saved = await updateMutation.mutateAsync(input);
-        return { ok: true, saved: "server", entry: decorateEntry(catalog, saved) };
+        const saved = await updateMutation.mutateAsync(input); action.check();
+        return { ok: true, saved: entrySaveLocation(saved), entry: decorateEntry(catalog, saved) };
       } catch (error) {
         return saveFailures.current.get(input) ?? { ok: false, message: userErrorMessage(error, translate("tracker")("mutations.saveFailed")) };
       } finally {
