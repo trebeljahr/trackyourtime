@@ -13,6 +13,8 @@ vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => API_LEVEL, noteClientTooOld: () => {} }));
 vi.mock("./native-session", () => ({ getNativeToken: () => null, getNativeTokenRevision: () => state.tokenRevision }));
 vi.mock("./shell", () => ({ clientId: () => "web", isCapacitor: () => false, isTokenShell: () => state.native }));
+vi.mock("./app-query-persistence", () => ({ getQueryPersistence: () => ({ forget: async () => {}, protectPrivateAccount: async () => {} }) }));
+vi.mock("./catalog-cache", () => ({ bindCatalogCaches: () => {} }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
 const offline = await import("./offline");
@@ -52,7 +54,7 @@ it("serves real app catalog queries from the private replica without standard HT
   const fetcher = vi.fn(() => { throw new Error("Unexpected standard transport"); }); vi.stubGlobal("fetch", fetcher);
   const api = client(), rows = await api.query("tags.list", {}) as { name: string }[];
   expect(rows.map((row) => row.name)).toEqual(["Another unsent private tag", "Unsent private rename"]);
-  await expect(api.mutation("tags.create", { name: "Never send this private draft" })).rejects.toThrow("not available");
+  expect(await api.mutation("tags.create", { name: "Never send this private draft" })).toMatchObject({ name: "Never send this private draft", createdBy: "owner" });
   await expect(api.mutation("entries.start", { description: "Never queue this private draft" })).rejects.toThrow("not available");
   expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); expect(localStorage.getItem(OFFLINE_QUEUE_STORAGE_KEY)).toBeNull();
 });
@@ -297,4 +299,46 @@ it("wakes other windows using public scope only and ignores malformed or foreign
   opened!.onmessage!({ data: { ...scope, description: "Unexpected private value" } }); expect(listener).toHaveBeenCalledTimes(1);
   opened!.onmessage!({ data: { ...scope, server: "file:///private" } }); expect(listener).toHaveBeenCalledTimes(1);
   opened!.onmessage!({ data: scope }); expect(listener).toHaveBeenCalledTimes(2); unsubscribe(); expect(opened!.close).toHaveBeenCalledOnce();
+});
+
+it("edits private shared catalogs atomically with paired money records and no standard requests", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); const fetcher = vi.fn(() => { throw new Error("Private catalog must not use standard HTTP"); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), clientRow = await api.mutation("clients.create", { name: "Private client", billing: { legalName: "Private billing name" } }) as { id: string };
+  const project = await api.mutation("projects.create", { name: "Private project", clientId: clientRow.id, hourlyRate: 120, budgetAmount: 1000, budgetCurrency: "EUR" }) as { id: string };
+  expect(await api.mutation("projects.update", { id: project.id, name: "Renamed project", hourlyRate: 0, applyToEntries: false })).toMatchObject({ name: "Renamed project", billableDefault: false, entriesRewritten: null });
+  const task = await api.mutation("tasks.create", { name: "Private task" }) as { id: string };
+  expect(await api.mutation("tasks.archive", { id: task.id })).toMatchObject({ archived: true });
+  const results = await Promise.allSettled([api.mutation("tags.create", { name: "Atomic name" }), api.mutation("tags.create", { name: "atomic name" })]); expect(results.filter((row) => row.status === "fulfilled")).toHaveLength(1);
+  expect(await api.query("clients.options", { includeArchived: true })).toMatchObject([{ id: clientRow.id, billing: { legalName: "Private billing name" } }]);
+  await expect(api.mutation("projects.update", { id: project.id, clientId: null })).rejects.toThrow("could not be confirmed");
+  await expect(api.mutation("tags.remove", { id: "tag" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+
+it("never runs an earlier form draft under a new account after React Query's optimistic hook was awaiting", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); await client().query("tags.list", {});
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "other" }, () => true);
+  const { createAppQueryClient } = await import("./query-client"), queryClient = createAppQueryClient();
+  let enter!: () => void, resume!: () => void; const waiting = new Promise<void>((resolve) => { enter = resolve; });
+  const mutation = queryClient.getMutationCache().build(queryClient, { mutationKey: [["tags", "create"]], networkMode: "always", onMutate: async () => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); }, mutationFn: (input: { name: string }) => client().mutation("tags.create", input) });
+  const fetcher = vi.fn(async () => new Response(JSON.stringify([{ result: { data: { id: "foreign", name: "Earlier private draft" } } }]), { headers: { "content-type": "application/json" } })); vi.stubGlobal("fetch", fetcher);
+  const pending = mutation.execute({ name: "Earlier private draft" }); await waiting; session.privateAccountChanged("other"); resume();
+  await expect(pending).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled(); queryClient.clear();
+});
+
+it("freezes form intent before an optimistic hook and retains it when React Query options are replaced", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); const { createAppQueryClient } = await import("./query-client"), queryClient = createAppQueryClient();
+  let enter!: () => void, resume!: () => void; const waiting = new Promise<void>((resolve) => { enter = resolve; });
+  const mutationFn = (input: { name: string }) => client().mutation("tags.create", input);
+  const mutation = queryClient.getMutationCache().build(queryClient, { mutationKey: [["tags", "create"]], networkMode: "always", onMutate: async () => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); }, mutationFn });
+  const variables = { name: "Original private form" }, pending = mutation.execute(variables); await waiting; variables.name = "Changed while waiting";
+  mutation.setOptions({ ...mutation.options, mutationFn }); resume(); expect(await pending).toMatchObject({ name: "Original private form" }); queryClient.clear();
+});
+it("does not let concurrent reuse of one variables object overwrite an earlier form's identity binding", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); const { createAppQueryClient } = await import("./query-client"), queryClient = createAppQueryClient();
+  let enter!: () => void, resume!: () => void; const waiting = new Promise<void>((resolve) => { enter = resolve; }), variables = { name: "Earlier guarded form" };
+  const first = queryClient.getMutationCache().build(queryClient, { mutationKey: [["tags", "create"]], networkMode: "always", onMutate: async () => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); }, mutationFn: (input: { name: string }) => client().mutation("tags.create", input) });
+  const pending = first.execute(variables); await waiting;
+  const duplicate = queryClient.getMutationCache().build(queryClient, { mutationKey: [["tags", "create"]], networkMode: "always", mutationFn: (input: { name: string }) => client().mutation("tags.create", input) }); await expect(duplicate.execute(variables)).rejects.toThrow("already being saved");
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "other" }, () => true); session.privateAccountChanged("other"); resume();
+  const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher); await expect(pending).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled(); queryClient.clear();
 });

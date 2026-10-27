@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import mongoose from "mongoose";
 import {
   pickCatalogColor,
+  TAG_COLOR_OFFSET,
   rollupVisibility,
   type CreateTagInput,
   type Tag as TagWire,
@@ -30,7 +31,7 @@ import { scopeRollupMatch } from "./rollup.js";
  * look alike, and a list of tags stays visually distinct from a list of
  * clients (offset 0) or projects (offset 6) created in lockstep.
  */
-export const TAG_COLOR_OFFSET = 10;
+export { TAG_COLOR_OFFSET } from "@starter/shared";
 
 /** A tag plus how much time carries it — what the tag manager lists. */
 export type TagWithStats = TagWire & {

@@ -2,6 +2,7 @@
 
 import {
   QueryCache,
+  MutationCache,
   QueryClient,
   onlineManager,
 } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/offline";
 import { isCapacitor } from "@/lib/shell";
 import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
+import { beginPrivateMutationIntent, finishPrivateMutationIntent } from "./private-mutation-intent";
 import { subscribePrivateView, subscribePrivateViewEpoch } from "./private-view-lifecycle";
 
 /**
@@ -67,7 +69,9 @@ export const createAppQueryClient = (): QueryClient => {
   // Bounded, backed-off retries are a battery rule: the phone only.
   const native = isCapacitor();
 
+  const mutationCache = new MutationCache({ onMutate: (variables, mutation) => beginPrivateMutationIntent(mutation.options.mutationKey, variables, mutation) });
   appQueryClient = new QueryClient({
+    mutationCache,
     queryCache: new QueryCache({
       onError: (error) => {
         if (isNotFoundError(error)) noteNotFound();
@@ -97,6 +101,14 @@ export const createAppQueryClient = (): QueryClient => {
     appQueryClient.setQueryDefaults([[router, "options"]], { staleTime: 60_000 });
   }
   appQueryClient.setQueryDefaults([["tasks", "projectLinks"]], { staleTime: 60_000 });
+  mutationCache.subscribe((event) => {
+    if (event.type !== "updated" || (event.action.type !== "success" && event.action.type !== "error")) return;
+    if (finishPrivateMutationIntent(event.mutation)?.stale) {
+      // A late optimistic/error callback may have repopulated a cleared cache.
+      // Forget its disposable projection before any new-account persistence.
+      void getQueryPersistence(client).forget().catch(() => undefined); client.clear();
+    }
+  });
   bindCatalogCaches(appQueryClient);
   const client = appQueryClient, persistence = getQueryPersistence(client);
   unbindPrivateViews();

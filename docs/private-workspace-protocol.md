@@ -1260,3 +1260,38 @@ saved-copy backup controls in Settings. Sync failures expose fixed local copy
 text rather than raw decoder/server values. Review/repair of conflicts and
 remaining domain transitions are still required for full rollout. Public
 conversion, chained writes and retirement remain disabled on the server.
+
+## Private catalog metadata and form intent
+
+The atomic domain adapter now handles create/update/archive for clients,
+projects and tasks, plus tag create/update. Owner/admin authority comes from
+the verified directory. Input schemas, palette offsets, billing normalization
+and pure budget-write rules are shared with standard storage. Names are checked
+literally with English case-insensitive collation against the current locked
+view, including archived rows. Client billing and project rates/budgets remain
+separate encrypted records. Metadata-only edits keep financial counterparts
+unchanged; selected updates preserve unknown original top-level fields.
+Budget currency is snapshotted and retained when the workspace currency changes.
+
+These operations do not rewrite existing time. Project reassignment to another
+client refuses because original client snapshots may be needed by colleagues'
+entries and personal favorites. `applyToEntries: true`, cascading removal and
+other unimplemented transitions also refuse without appending. Project updates
+return `entriesRewritten: null`; zero rates/budgets retain their distinct meaning.
+Remaining billing-prompt/UI and offline mutation-mode integration must reflect
+these restrictions rather than fabricate impact counts or silently repricing.
+
+A regression reproduced React Query's async optimistic hook resuming an old
+private draft after an account change, before tRPC's own link could capture
+its scope. The app mutation cache now captures the original variables, account,
+server/key/credential generation and explicit workspace before that hook or a
+network pause. A weakly owned intent survives mutation-option replacement; the
+tRPC link retrieves its frozen input and original scope before any dispatch.
+Concurrent reuse of one variables object refuses instead of replacing another
+operation's identity. Removing a pending cache entry on lock keeps the guard
+until the actual operation terminates. Late terminal callbacks also purge their
+disposable cache projection after a scope change. This does not replace the
+remaining per-hook audit of optimistic writes, rollbacks and callback ordering.
+
+Public conversion, private server writes and retirement remain closed. No new
+network API or minimum supported standard-client level is introduced here.

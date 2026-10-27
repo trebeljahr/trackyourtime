@@ -64,3 +64,6 @@ export const catalogColorName = (hex: string): string | null =>
   CATALOG_COLORS.find(
     (color) => color.hex.toLowerCase() === hex.trim().toLowerCase(),
   )?.name ?? null;
+
+/** Tags start at violet, matching the default persisted tag color. */
+export const TAG_COLOR_OFFSET = 10;

@@ -20,6 +20,7 @@ import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
 import { readWorkspaceList } from "./private-workspace-list";
 import { capturePrivateRequestScope, checkPrivateRequestScope, privateRequestScopeHeaders } from "./private-request-scope";
+import { privateMutationIntent } from "./private-mutation-intent";
 import { mutatePrivateWorkspace } from "./private-workspace-mutation";
 import { preparePrivateWorkspaceCreation } from "./private-workspace-creation";
 
@@ -83,6 +84,8 @@ export const PENDING_WORKSPACE = "trackyourtime:pending-workspace";
  * reset the cache (`resetWorkspaceCaches`) rather than rely on new keys.
  */
 export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  const intent = op.type === "mutation" ? privateMutationIntent(op.path, op.input) : null;
+  if (intent) op = { ...op, input: intent.input, context: { ...op.context, privateMutationIntentScope: intent.scope } };
   assertEntryClientSupported(op.path, op.input, currentServerApiLevel());
   const input = isActiveWorkspaceReady()
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
@@ -96,7 +99,8 @@ export const privateWorkspaceCreationLink = (): TRPCLink<AppRouter> => () => ({ 
     const abort = new AbortController(); let subscription: { unsubscribe: () => void } | undefined;
     let prepared: Awaited<ReturnType<typeof preparePrivateWorkspaceCreation>> = null;
     void (async () => {
-      const originalScope = capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      const originalScope = op.context.privateMutationIntentScope ?? capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      checkPrivateRequestScope(originalScope);
       await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
       if (abort.signal.aborted) return;
       checkPrivateRequestScope(originalScope);
@@ -152,7 +156,8 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
     let cancelled = false, subscription: { unsubscribe: () => void } | undefined;
     const abort = new AbortController();
     void (async () => {
-      const originalScope = capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      const originalScope = op.context.privateMutationIntentScope ?? capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      checkPrivateRequestScope(originalScope);
       await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
       if (cancelled) return;
       checkPrivateRequestScope(originalScope);
