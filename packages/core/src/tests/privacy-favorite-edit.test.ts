@@ -130,3 +130,16 @@ it("signs an atomic favorite into a chained personal edit and clears it only aft
   assert.deepEqual((await f.read()).map((row) => row.description), ["Personal encrypted job"]);
   assert.equal((await f.replica.checkpoint()).activationRoot, before.activationRoot);
 });
+
+it("holds the replica lock across async domain validation and checks the captured key epoch afterward", async () => {
+  const f = await fixture(); let entered!: () => void, resume!: () => void;
+  const waiting = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { resume = resolve; });
+  const first = f.replica.transact(PRIVATE_FAVORITE_EDIT_KINDS, async ({ records, directory }) => {
+    entered(); await gate; return privateFavoriteEdit({ scope, directory, records, current: f.current, path: "favorites.create", input: { description: "Async private pin" } });
+  });
+  await waiting; const second = f.edit("favorites.create", { description: "Async private pin" }); resume();
+  const [a, b] = await Promise.all([first, second]); assert.equal((a.result as DetailedFavorite).id, (b.result as DetailedFavorite).id); assert.equal(b.operationId, null); assert.equal((await f.replica.checkpoint()).pending, 1);
+  let finish!: () => void, reached!: () => void; const ready = new Promise<void>(resolve => { reached = resolve; });
+  const stale = f.replica.transact(["favorites"], async () => { reached(); await new Promise<void>(resolve => { finish = resolve; }); return { records: [], result: "Must not return" }; });
+  await ready; f.lock(); f.unlock(); finish(); await assert.rejects(stale, PrivateStorageLockedError); assert.equal((await f.replica.checkpoint()).pending, 1);
+});

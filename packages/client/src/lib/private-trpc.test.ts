@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { getUntypedClient } from "@trpc/client";
-import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
+import { API_LEVEL, BUSINESS_LOGO_REFUSALS, normalizeDisplayPreferences } from "@starter/shared";
 import { privateWorkspaceManifest, privateWorkspaceManifestForReader, privateWorkspaceChainRoot, OFFLINE_QUEUE_STORAGE_KEY, createTempId } from "@starter/core";
 import { privateRecoveryFixture, privateManualEntryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, tokenRevision: 0, ready: async () => {} }));
@@ -168,14 +169,24 @@ it("joins private settings with a separate account-metadata request and reuses i
   return new Response(JSON.stringify({ result: { data: normalizeDisplayPreferences("owner", { theme: "dark", timeFormat: "12h" }) } }), { headers: { "content-type": "application/json" } });
  }); vi.stubGlobal("fetch", fetcher);
  const api = client(); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", weekStartsOn: 0, defaultHourlyRate: 125, memberHourlyRate: 0, theme: "dark", timeFormat: "12h" }); expect(fetcher).toHaveBeenCalledOnce();
- fetcher.mockRejectedValue(new TypeError("Failed to fetch")); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", defaultHourlyRate: 125, theme: "dark" }); expect(await offline.getOfflineQueue().list()).toEqual([]);
+ fetcher.mockRejectedValue(new TypeError("Failed to fetch")); expect(await api.query("settings.get", {})).toMatchObject({ currency: "AUD", defaultHourlyRate: 125, theme: "dark" });
+ expect(await api.mutation("settings.update", { currency: "USD", defaultHourlyRate: 0, weekStartsOn: 1 })).toMatchObject({ currency: "USD", defaultHourlyRate: 0, weekStartsOn: 1, memberHourlyRate: 0, theme: "dark" });
+ await expect(api.mutation("settings.update", { currency: "GBP", theme: "light" })).rejects.toThrow("could not be confirmed");
+ expect(await api.query("settings.get", {})).toMatchObject({ currency: "USD", defaultHourlyRate: 0, theme: "dark" }); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
 
 it("reads the private business profile locally and keeps logo/profile writes out of the standard transport", async () => {
  const f = await privateRecoveryFixture(); f.archive.replica.pending[1]!.records.push({ kind: "businessProfile", id: "profile", authorId: null, value: { _id: "profile", workspaceId: "workspace", legalName: "Private studio", paymentDetails: "Private bank details" } });
  await seedPrivateWorkspaceClient(f); const fetcher = vi.fn(() => { throw new Error("Private business identity must stay local"); }); vi.stubGlobal("fetch", fetcher);
  expect(await client().query("settings.businessProfile", {})).toMatchObject({ legalName: "Private studio", paymentDetails: "Private bank details", logo: null, updatedAt: null });
- await expect(client().mutation("settings.updateBusinessProfile", { legalName: "Do not send" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+ expect(await client().mutation("settings.updateBusinessProfile", { legalName: "Encrypted saved issuer" })).toMatchObject({ legalName: "Encrypted saved issuer", paymentDetails: "Private bank details" });
+ const png = readFileSync("../server/src/tests/fixtures/logo/rgba.png"), saved = await client().mutation("settings.setBusinessLogo", { mime: "image/png", base64: png.toString("base64") }) as { updatedAt: string; logo: unknown };
+ expect(saved.logo).not.toBeNull();
+ await expect(client().mutation("settings.setBusinessLogo", { mime: "image/jpeg", base64: png.toString("base64") })).rejects.toThrow(BUSINESS_LOGO_REFUSALS.unsupportedFormat);
+ const { capturePrivateWorkspaceRecovery } = await import("./private-workspace-session"), archive = await capturePrivateWorkspaceRecovery("owner", "workspace", f.identity);
+ expect(archive.replica.pending.some(operation => operation.records.some(row => row.kind === "businessProfile" && JSON.stringify(row.value).includes(png.toString("base64"))))).toBe(true);
+ expect(await client().mutation("settings.clearBusinessLogo", {})).toMatchObject({ legalName: "Encrypted saved issuer", updatedAt: saved.updatedAt, logo: null });
+ expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
 
 it("calculates private all-time bounds locally without finance fields or standard report filters leaving the device", async () => {

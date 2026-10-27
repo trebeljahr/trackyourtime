@@ -7,10 +7,11 @@
 // statement of identity saved with one button, and 300 KB of image re-sent
 // on every Save is the wrong shape for it. A saved logo is merged into the
 // cached profile without touching `updatedAt`, so the form beside it keeps
-// whatever is half typed. The byte checks proper are the server's; what is
-// checked here is what a browser knows before reading the file — its type
-// and its size — with the same cap.
+// whatever is half typed. The server or private domain adapter checks bytes;
+// this control checks type and size before reading the file, with the same cap.
 import * as React from "react";
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { capturePrivateMutationAction, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import { ImageIcon, Loader2, Trash2, Upload } from "lucide-react";
 import {
   BUSINESS_LOGO_MAX_BYTES,
@@ -66,6 +67,9 @@ export function BusinessLogoControl({ profile }: { profile: BusinessProfile }): 
   const t = useT("settings");
   const utils = trpc.useUtils();
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const lifetime = React.useRef({ active: true });
+  React.useEffect(() => { const mounted = { active: true }; lifetime.current = mounted; return () => { mounted.active = false; }; }, []);
+  const privateOptions = usePrivateMutationOptions();
   const [error, setError] = React.useState<string | null>(null);
   const [reading, setReading] = React.useState(false);
 
@@ -89,12 +93,15 @@ export function BusinessLogoControl({ profile }: { profile: BusinessProfile }): 
     );
 
   const set = trpc.settings.setBusinessLogo.useMutation({
-    onSuccess: (saved) => {
+    ...privateOptions,
+    onSuccess: (saved, input) => {
+      if (!lifetime.current.active || !privateMutationStillCurrent(input)) return;
       merge(saved);
       setError(null);
       toast.success(t("businessProfile.logo.saved"));
     },
-    onError: (failure) => {
+    onError: (failure, input) => {
+      if (!lifetime.current.active || !privateMutationStillCurrent(input)) return;
       const refusal = businessLogoRefusalOf(failure.message);
       if (refusal) {
         setError(refusalMessage(refusal));
@@ -108,12 +115,15 @@ export function BusinessLogoControl({ profile }: { profile: BusinessProfile }): 
     },
   });
   const clear = trpc.settings.clearBusinessLogo.useMutation({
-    onSuccess: (saved) => {
+    ...privateOptions,
+    onSuccess: (saved, input) => {
+      if (!lifetime.current.active || !privateMutationStillCurrent(input)) return;
       merge(saved);
       setError(null);
       toast.success(t("businessProfile.logo.removed"));
     },
-    onError: (failure) => {
+    onError: (failure, input) => {
+      if (!lifetime.current.active || !privateMutationStillCurrent(input)) return;
       toast.error(
         errorCode(failure) === "FORBIDDEN"
           ? t("businessProfile.forbidden")
@@ -134,9 +144,12 @@ export function BusinessLogoControl({ profile }: { profile: BusinessProfile }): 
       setError(refusalMessage(refusal));
       return;
     }
+    const action = capturePrivateMutationAction(), mounted = lifetime.current;
     setReading(true);
     const upload = await readLogoFile(file);
+    if (!mounted.active) return;
     setReading(false);
+    if (!action.current()) return;
     if (!upload) {
       setError(t("businessProfile.logo.readFailed"));
       return;

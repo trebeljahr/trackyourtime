@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { registerPrivateMutationGuard } from "@/lib/private-mutation-guard";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { emptyBusinessProfile, type BusinessProfile } from "@starter/shared";
 
 /**
@@ -17,15 +18,16 @@ type QueryState = {
 };
 
 const query: { current: QueryState } = { current: { isError: false } };
-const mutate = vi.fn();
+const mutate = vi.fn(), setData = vi.fn(), toast = { success: vi.fn(), error: vi.fn() };
+const captured: { onSuccess?: (saved: BusinessProfile, input?: object) => void; onError?: (error: object, input?: object) => void } = {};
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ settings: { businessProfile: { setData: vi.fn() } } }),
+    useUtils: () => ({ settings: { businessProfile: { setData } } }),
     settings: {
       businessProfile: { useQuery: () => query.current },
       updateBusinessProfile: {
-        useMutation: () => ({ mutate, isPending: false }),
+        useMutation: (options: typeof captured) => { Object.assign(captured, options); return { mutate, isPending: false }; },
       },
       // The logo control above the form has its own mutations (business-logo.test.tsx).
       setBusinessLogo: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
@@ -33,6 +35,7 @@ vi.mock("@/lib/trpc", () => ({
     },
   },
 }));
+vi.mock("@/hooks/use-private-mutation-options", () => ({ usePrivateMutationOptions: () => ({}) }));
 vi.mock("@/hooks/use-sync", () => ({ ORIGIN_ID: "tab-test" }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -51,9 +54,7 @@ vi.stubGlobal(
     disconnect(): void {}
   },
 );
-vi.mock("@/components/ui/sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
+vi.mock("@/components/ui/sonner", () => ({ toast }));
 
 const {
   BusinessProfileCard,
@@ -75,7 +76,7 @@ const saved = (): BusinessProfile => ({
 });
 
 beforeEach(() => {
-  mutate.mockReset();
+  mutate.mockReset(); setData.mockReset(); toast.success.mockReset(); toast.error.mockReset();
   query.current = { isError: false };
   window.history.replaceState({}, "", "/app/settings");
 });
@@ -258,4 +259,10 @@ describe("draft rules", () => {
     expect(draft.defaultTax).toEqual({ kind: "S19" });
     expect(inputFromDraft(draft)).toMatchObject({ defaultTaxCategory: "S", defaultTaxRate: 19 });
   });
+});
+
+it("ignores profile completion after original scope change or form teardown", () => {
+  query.current = { data: saved(), isError: false }; const view = render(<BusinessProfileCard />), input = {}; registerPrivateMutationGuard(input, () => false);
+  act(() => { captured.onSuccess?.(saved(), input); captured.onError?.({}, input); }); expect(setData).not.toHaveBeenCalled(); expect(toast.success).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
+  view.unmount(); act(() => { captured.onSuccess?.(saved()); captured.onError?.({}); }); expect(setData).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
 });

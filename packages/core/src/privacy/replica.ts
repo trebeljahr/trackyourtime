@@ -17,6 +17,7 @@ const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonne
 export const privateReplicaRecoveryStateSchema = stateSchema;
 export type PrivateReplicaRecoveryState = z.infer<typeof stateSchema>;
 type State = PrivateReplicaRecoveryState;
+type PrivateMutationPlan<T> = { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[]; result: T };
 const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
 export class PrivateReplicaConflictError extends Error {
   constructor() { super("The workspace changed while this edit was offline. The queued edit was kept for review."); this.name = "PrivateReplicaConflictError"; }
@@ -191,15 +192,16 @@ export async function createPrivateWorkspaceReplica(options: {
     },
     /** Validate domain intent against the latest confirmed + optimistic view
      * and save it under the same cross-window lock. A separate read/enqueue
-     * would lose order/uniqueness checks when two tabs edit simultaneously. */
-    transact: <T>(kinds: readonly PrivateKind[], build: (view: { records: PlainPrivateRecord[]; directory: VerifiedPrivateDirectory }) => { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[]; result: T }) => {
+     * would lose order/uniqueness checks when two tabs edit simultaneously. Async
+     * validation retains that lock; its original key epoch is checked afterward. */
+    transact: <T>(kinds: readonly PrivateKind[], build: (view: { records: PlainPrivateRecord[]; directory: VerifiedPrivateDirectory }) => PrivateMutationPlan<T> | Promise<PrivateMutationPlan<T>>) => {
       const selected = new Set(z.array(privateKindSchema).min(1).max(PRIVATE_KINDS.length).parse(kinds));
       return withAccess(async (access) => {
         const state = await load(); access.check();
         if (!state.activationRoot || !state.head || !access.directory) throw new Error("Atomic private edits require a verified activation and directory");
         const view = await materialize(state, access, selected); access.check();
         if (view.conflict) throw new PrivateReplicaConflictError();
-        const plan = build({ records: view.records, directory: access.directory }); access.check();
+        const plan = await build({ records: view.records, directory: access.directory }); access.check();
         const frozen = structuredClone(plan);
         if ([...frozen.records, ...(frozen.remove ?? [])].some((row) => !selected.has(row.kind))) throw new Error("Private edit exceeds its validated domain view");
         const operationId = !frozen.records.length && !frozen.remove?.length ? null : await append(state, access, frozen);

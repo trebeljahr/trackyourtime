@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registerPrivateMutationActionCapture, registerPrivateMutationGuard } from "@/lib/private-mutation-guard";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   BUSINESS_LOGO_MAX_BYTES,
@@ -17,8 +18,8 @@ import {
  */
 
 type MutationOptions = {
-  onSuccess?: (saved: BusinessProfile) => void;
-  onError?: (error: { message: string; data?: { code: string } }) => void;
+  onSuccess?: (saved: BusinessProfile, input?: object) => void;
+  onError?: (error: { message: string; data?: { code: string } }, input?: object) => void;
 };
 
 const setMutate = vi.fn();
@@ -45,6 +46,7 @@ vi.mock("@/lib/trpc", () => ({
     },
   },
 }));
+vi.mock("@/hooks/use-private-mutation-options", () => ({ usePrivateMutationOptions: () => ({}) }));
 vi.mock("@/hooks/use-sync", () => ({ ORIGIN_ID: "tab-test" }));
 const toast = { success: vi.fn(), error: vi.fn() };
 vi.mock("@/components/ui/sonner", () => ({ toast }));
@@ -76,7 +78,7 @@ beforeEach(() => {
   toast.success.mockReset();
   toast.error.mockReset();
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("checkLogoFile and readLogoFile", () => {
   it("refuses the wrong type and a file over the cap before reading anything", () => {
@@ -168,4 +170,22 @@ describe("BusinessLogoControl", () => {
     const cleared = setData.mock.calls[1]?.[1] as (current: BusinessProfile | undefined) => BusinessProfile;
     expect(cleared(cached).logo).toBeNull();
   });
+});
+
+it("does not publish stale logo callbacks into the next account or after unmount", () => {
+  const input = {}, view = render(<BusinessLogoControl profile={emptyBusinessProfile("ws")} />); registerPrivateMutationGuard(input, () => false);
+  act(() => { captured.set?.onSuccess?.(withLogo(), input); captured.clear?.onSuccess?.(withLogo(), input); captured.set?.onError?.({ message: "Old failure" }, input); captured.clear?.onError?.({ message: "Old failure" }, input); });
+  expect(setData).not.toHaveBeenCalled(); expect(toast.success).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
+  view.unmount(); act(() => captured.set?.onSuccess?.(withLogo())); expect(setData).not.toHaveBeenCalled();
+});
+it.each(["scope", "unmount"] as const)("does not send a logo after %s changes while FileReader is pending", async mode => {
+  let finish!: () => void; class WaitingReader { result: string | null = null; onload?: () => void; readAsDataURL() { finish = () => { this.result = `data:image/png;base64,${PNG_BASE64}`; this.onload?.(); }; } }
+  vi.stubGlobal("FileReader", WaitingReader); let current = true;
+  const release = registerPrivateMutationActionCapture(() => ({ current: () => current, check: () => {} }));
+  try {
+    const view = render(<BusinessLogoControl profile={emptyBusinessProfile("ws")} />); pick(pngFile());
+    if (mode === "scope") current = false; else view.unmount();
+    await act(async () => { finish(); });
+    expect(setMutate).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
+  } finally { release(); }
 });

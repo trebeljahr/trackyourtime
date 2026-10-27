@@ -6,7 +6,7 @@ import { act, renderHook, waitFor, cleanup } from "@testing-library/react";
 import { QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { signPrivateAccountInventory } from "@starter/core";
-import { API_LEVEL } from "@starter/shared";
+import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
 import { privateRecoveryFixture, privateManualEntryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", active: { activeId: "workspace", workspaces: null }, listeners: new Set<() => void>(), success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: async () => {}, rebaseApiUrl: (url: string) => url }));
@@ -27,6 +27,7 @@ const { readPrivateDeviceAccessState } = await import("@/lib/private-device-acce
 const { observedWorkspaceMode, rememberVerifiedWorkspaceModes } = await import("@/lib/private-workspace-mode-cache");
 const { useQuickStarts } = await import("./use-favorites");
 const { useClientMutations, useProjectMutations, useTaskMutations } = await import("@/components/catalog/use-catalog-mutations");
+const { useWorkspaceSettings } = await import("@/components/settings/use-workspace-settings");
 const { useTagMutations } = await import("@/components/tags/use-tags");
 const { notePrivateView, privateViewEpoch, subscribePrivateViewEpoch } = await import("@/lib/private-view-lifecycle");
 const { confirmStandardDeviceAccess } = await import("@/lib/private-device-access");
@@ -196,4 +197,16 @@ it.each(["reply", "storage"] as const)("retries a retained private draft after a
   act(() => view.result.current.submission.submit(() => view.result.current.entry.createManualEntry(input))); await waitFor(() => expect(done).toHaveBeenCalledOnce());
   expect(view.result.current.submission.privateIntentId).toBe(identity); expect(duplicateWrites).toEqual([]); expect((await getTRPCClient({ streamQueries: false }).entries.list.query({ from: "2026-10-27T00:00:00.000Z", to: "2026-10-28T00:00:00.000Z" })).entries).toHaveLength(1);
   view.unmount(); app.queryClient.clear();
+});
+
+it("saves shared private settings through the actual form hook offline using independently cached display metadata", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture());
+  const fetcher = vi.fn(async (url: RequestInfo | URL) => {
+    expect(String(url)).toContain("profile.displayPreferences"); return new Response(JSON.stringify({ result: { data: normalizeDisplayPreferences("owner") } }), { headers: { "content-type": "application/json" } });
+  }); vi.stubGlobal("fetch", fetcher);
+  const app = wrapper(), view = renderHook(() => useWorkspaceSettings(), { wrapper: app.render }); await waitFor(() => expect(view.result.current.isLoaded).toBe(true));
+  fetcher.mockRejectedValue(new TypeError("Failed to fetch")); onlineManager.setOnline(false);
+  act(() => view.result.current.save({ currency: "NZD", defaultHourlyRate: 0 })); await waitFor(() => expect(view.result.current.saveState).toBe("saved"));
+  expect(view.result.current.settings).toMatchObject({ currency: "NZD", defaultHourlyRate: 0, memberHourlyRate: 60 });
+  expect(app.queryClient.getMutationCache().getAll().some(m => m.state.isPaused)).toBe(false); expect(state.error).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
 });

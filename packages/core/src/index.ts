@@ -98,3 +98,6 @@ export * from "./privacy/favorite-edit.js";
 export * from "./privacy/catalog-edit.js";
 
 export * from "./privacy/entry-edit.js";
+
+export * from "./privacy/settings-edit.js";
+export * from "./privacy/business-profile-edit.js";

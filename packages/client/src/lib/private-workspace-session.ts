@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, preparePrivateEntryIntent, type PrivateEntryEditPath } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, preparePrivateEntryIntent, privateSettingsEdit, PRIVATE_SETTINGS_EDIT_KINDS, privateBusinessProfileEdit, PRIVATE_BUSINESS_PROFILE_EDIT_KINDS, type PrivateBusinessProfileEditPath, type PrivateEntryEditPath } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -93,6 +93,18 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
           assertPolicy(); return privateCatalogEdit({ scope, directory, records, current, path, input: frozen });
         }); assertPolicy(); return result;
       },
+      editSettings: async (input: unknown, preferences: unknown) => {
+        const frozen = structuredClone(input), rendering = structuredClone(preferences); assertPolicy();
+        const result = await replica.transact(PRIVATE_SETTINGS_EDIT_KINDS, ({ records, directory }) => {
+          assertPolicy(); return privateSettingsEdit({ scope, directory, records, current, input: frozen, preferences: rendering });
+        }); assertPolicy(); return result;
+      },
+      editBusinessProfile: async (path: PrivateBusinessProfileEditPath, input: unknown) => {
+        const frozen = structuredClone(input); assertPolicy();
+        const result = await replica.transact(PRIVATE_BUSINESS_PROFILE_EDIT_KINDS, ({ records, directory }) => {
+          assertPolicy(); return privateBusinessProfileEdit({ scope, directory, records, current, path, input: frozen });
+        }); assertPolicy(); return result;
+      },
       editEntry: async (path: PrivateEntryEditPath, input: unknown, intentId?: string) => {
         const frozen = structuredClone(input); assertPolicy();
         const intent = intentId === undefined ? undefined : await preparePrivateEntryIntent({ scope, path, input: frozen, intentId, current }); assertPolicy();
@@ -130,7 +142,7 @@ export async function openPrivateWorkspaceSyncSession(userId: string, workspaceI
   try {
     const transport = privateWorkspaceJournalTransport(userId, workspaceId);
     return { scope: copy.scope, current: copy.current, close: copy.close, checkpoint: copy.checkpoint, status: copy.status,
-      editFavorite: copy.editFavorite, editCatalog: copy.editCatalog, editEntry: copy.editEntry,
+      editFavorite: copy.editFavorite, editCatalog: copy.editCatalog, editEntry: copy.editEntry, editSettings: copy.editSettings, editBusinessProfile: copy.editBusinessProfile,
       pull: (through?: number) => copy.pull(transport, through), flushOne: () => copy.flushOne(transport),
     };
   } catch (error) { copy.close(); throw error; }

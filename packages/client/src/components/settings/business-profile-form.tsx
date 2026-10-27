@@ -6,6 +6,8 @@
 // typed address copied onto an invoice created in another tab is worse than a
 // button.
 import * as React from "react";
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import Link from "next/link";
 import { ArrowLeft, Loader2, ShieldAlert } from "lucide-react";
 import {
@@ -315,12 +317,18 @@ function BusinessProfileForm({
   const link = useDeepLink();
   useDeepLinkFocus(formRef, true, link.field);
 
+  const lifetime = React.useRef({ active: true });
+  React.useEffect(() => { const mounted = { active: true }; lifetime.current = mounted; return () => { mounted.active = false; }; }, []);
+  const privateOptions = usePrivateMutationOptions();
   const update = trpc.settings.updateBusinessProfile.useMutation({
-    onSuccess: (saved) => {
+    ...privateOptions,
+    onSuccess: (saved, input) => {
+      if (!lifetime.current.active || !privateMutationStillCurrent(input)) return;
       utils.settings.businessProfile.setData(undefined, saved);
       toast.success(t("businessProfile.saved"));
     },
-    onError: (error) => {
+    onError: (error, input) => {
+      if (!lifetime.current.active || !privateMutationStillCurrent(input)) return;
       toast.error(
         errorCode(error) === "FORBIDDEN"
           ? t("businessProfile.forbidden")
