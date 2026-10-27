@@ -1,3 +1,4 @@
+import { capturePrivateMutationAction } from "./private-mutation-guard";
 /**
  * Which workspace this device is pointed at.
  *
@@ -431,13 +432,16 @@ const isWorkspaceScoped = (queryKey: QueryKey): boolean => {
  *     would leave mounted screens holding A's data until they re-render.
  */
 export const resetWorkspaceCaches = async (
-  queryClient: QueryClient
+  queryClient: QueryClient,
+  current: () => boolean = () => true
 ): Promise<void> => {
   const filters = {
     predicate: (query: { queryKey: QueryKey }) =>
       isWorkspaceScoped(query.queryKey),
   };
+  if (!current()) return;
   await queryClient.cancelQueries(filters);
+  if (!current()) return;
   queryClient.removeQueries({ ...filters, type: "inactive" });
   await queryClient.resetQueries(filters);
 };
@@ -457,7 +461,8 @@ export const switchWorkspace = async (
     setActive?: (workspaceId: string) => Promise<unknown>;
   }
 ): Promise<void> => {
-  await whenActiveWorkspaceReady();
+  const action = capturePrivateMutationAction({ workspace: false });
+  await whenActiveWorkspaceReady(); if (!action.current()) return;
   const here = knownHere();
   // Only ever a membership: the switcher lists nothing else, and a stale
   // dialog must not be able to point requests at a workspace that is gone.
@@ -468,8 +473,15 @@ export const switchWorkspace = async (
 
   storedId = workspaceId;
   publish();
-  await getStorage().setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
-  await resetWorkspaceCaches(deps.queryClient);
+  // Choice writes share the directory lock with account cleanup. A delayed
+  // native write cannot overwrite the next selection after it has persisted.
+  await workspaceDirectoryExclusive(async () => {
+    if (!action.current() || snapshot.activeId !== workspaceId) return;
+    await getStorage().setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
+  });
+  if (!action.current() || snapshot.activeId !== workspaceId) return;
+  await resetWorkspaceCaches(deps.queryClient, () => action.current() && snapshot.activeId === workspaceId);
+  if (!action.current() || snapshot.activeId !== workspaceId) return;
   if (deps.setActive) {
     void deps.setActive(workspaceId).catch(() => undefined);
   }

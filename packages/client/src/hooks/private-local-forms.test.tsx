@@ -148,3 +148,16 @@ it("does not return decrypted manual time after locking during the terminal muta
   expect(saved.ok).toBe(false); expect(JSON.stringify(saved)).not.toContain("Do not return while locked");
   unsubscribe(); view.unmount(); app.queryClient.clear();
 });
+
+it("keeps an old optimistic draft out of cache when device policy changes without an account change", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); await readPrivateDeviceAccessState("owner");
+  const app = wrapper(), view = renderHook(() => useQuickStarts(), { wrapper: app.render }); await waitFor(() => expect(view.result.current.isLoading).toBe(false));
+  let enter!: () => void, resume!: () => void; const entered = new Promise<void>((resolve) => { enter = resolve; });
+  vi.spyOn(app.queryClient, "cancelQueries").mockImplementationOnce(async () => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); });
+  const writes: unknown[] = [], write = app.queryClient.setQueryData.bind(app.queryClient);
+  vi.spyOn(app.queryClient, "setQueryData").mockImplementation(((...args: Parameters<typeof write>) => { const result = write(...args); if (String(JSON.stringify(result)).includes("Old policy draft")) writes.push(result); return result; }) as typeof write);
+  act(() => view.result.current.pin({ description: "Old policy draft", projectId: null, taskId: null, billable: false })); await entered;
+  const mutation = app.queryClient.getMutationCache().getAll()[0]!, { requirePrivateRouting } = await import("@/lib/private-routing-requirement");
+  await act(async () => { await requirePrivateRouting({ server: state.origin, userId: "owner" }, () => true, true); resume(); });
+  await waitFor(() => expect(mutation.state.status).toBe("error")); expect(writes).toEqual([]); expect(state.error).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
+});

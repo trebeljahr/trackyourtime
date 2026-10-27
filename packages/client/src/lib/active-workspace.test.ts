@@ -189,3 +189,17 @@ describe("losing access", () => {
     unregister();
   });
 });
+
+it("does not send a delayed workspace choice or reset a new account's queries after an account switch", async () => {
+  const session = await import("./private-session"), { installPrivateMutationActionCapture } = await import("./private-mutation-intent");
+  session.privateAccountChanged("u1"); const restore = installPrivateMutationActionCapture();
+  const queryClient = new QueryClient(), setActive = vi.fn(), reset = vi.spyOn(queryClient, "resetQueries");
+  try {
+    await applyWorkspaceList([A, B], "u1");
+    let enter!: () => void, resume!: () => void; const entered = new Promise<void>((resolve) => { enter = resolve; });
+    vi.spyOn(queryClient, "cancelQueries").mockImplementationOnce(async () => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); });
+    const switching = switchWorkspace(B.id, { queryClient, setActive }); await entered;
+    session.privateAccountChanged("u2"); queryClient.setQueryData(entriesKey, { entries: ["New account work"] }); resume(); await switching;
+    expect(setActive).not.toHaveBeenCalled(); expect(reset).not.toHaveBeenCalled(); expect(queryClient.getQueryData(entriesKey)).toEqual({ entries: ["New account work"] });
+  } finally { restore(); session.privateAccountChanged(null); queryClient.clear(); }
+});

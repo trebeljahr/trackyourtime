@@ -382,3 +382,39 @@ it("refuses foreign private entry provenance and standard queued identities befo
     expect(await copy.checkpoint()).toEqual(before); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
   } finally { copy.close(); }
 });
+
+it("sends only scoped navigation metadata for a private workspace and strips extra server result fields", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture());
+  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(url)).toContain("workspaces.setActive"); expect(init?.method).toBe("POST"); expect(JSON.parse(String(init?.body))).toEqual({ "0": { workspaceId: "workspace" } });
+    expect(new Headers(init?.headers).has("x-trackyourtime-local-scope")).toBe(false);
+    return new Response(JSON.stringify([{ result: { data: { workspaceId: "workspace", name: "Untrusted server name", permissions: { invoices: true } } } }]), { headers: { "content-type": "application/json" } });
+  }); vi.stubGlobal("fetch", fetcher);
+  expect(await client().mutation("workspaces.setActive", { workspaceId: "workspace" })).toEqual({ workspaceId: "workspace" }); expect(fetcher).toHaveBeenCalledOnce();
+});
+it("refuses content smuggled into workspace selection, unknown inventory targets and different server acknowledgements", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  await expect(client().mutation("workspaces.setActive", { workspaceId: "workspace", name: "Private draft must stay here" })).rejects.toThrow("metadata");
+  await expect(client().mutation("workspaces.setActive", { workspaceId: "foreign" })).rejects.toThrow();
+  await expect(client().query("workspaces.setActive", { workspaceId: "workspace" })).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled();
+  fetcher.mockImplementation(async () => new Response(JSON.stringify([{ result: { data: { workspaceId: "foreign" } } }]), { headers: { "content-type": "application/json" } }));
+  await expect(client().mutation("workspaces.setActive", { workspaceId: "workspace" })).rejects.toThrow("different workspace");
+});
+it("does not let workspace-selection metadata open a private content batch at the final HTTP boundary", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture());
+  const { assertStandardContentRequest } = await import("./private-content-route"), { capturePrivateRequestScope, LOCAL_REQUEST_SCOPE_HEADER } = await import("./private-request-scope");
+  const original = capturePrivateRequestScope();
+  const init = { method: "POST", headers: { [LOCAL_REQUEST_SCOPE_HEADER]: JSON.stringify([[original, null], [original, null]]) }, body: JSON.stringify({ "0": { workspaceId: "workspace" }, "1": { workspaceId: "workspace", name: "Must never reach the server" } }) };
+  await expect(assertStandardContentRequest(state.origin + "/api/trpc/workspaces.setActive,tags.create?batch=1", init)).rejects.toThrow("cannot use");
+});
+
+it("does not revive an earlier private request after the device policy changes during native readiness", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture());
+  const { openPrivateWorkspaceSyncSession } = await import("./private-workspace-session"), copy = await openPrivateWorkspaceSyncSession("owner", "workspace"), before = await copy.checkpoint();
+  let enter!: () => void, resume!: () => void; const waiting = new Promise<void>((resolve) => { enter = resolve; });
+  state.ready = async () => { enter(); await new Promise<void>((resolve) => { resume = resolve; }); };
+  const pending = client().mutation("tags.create", { name: "Original private policy draft" }); await waiting;
+  const { requirePrivateRouting } = await import("./private-routing-requirement"); await requirePrivateRouting({ server: state.origin, userId: "owner" }, () => true, true);
+  const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher); resume(); await expect(pending).rejects.toThrow("changed");
+  expect(await copy.checkpoint()).toEqual(before); expect(fetcher).not.toHaveBeenCalled(); copy.close();
+});

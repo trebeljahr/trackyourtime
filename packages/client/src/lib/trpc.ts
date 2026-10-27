@@ -1,3 +1,7 @@
+import { PrivateContentUnavailableError } from "./private-content-error";
+import { privateRoutingRevision } from "./private-routing-requirement";
+import { privateDeviceAccessRevision } from "./private-device-access";
+import { workspaceSelectionInput, workspaceSelectionResult } from "./private-navigation";
 import { createTRPCReact } from "@trpc/react-query";
 import { TRPCClientError, httpBatchLink, httpBatchStreamLink, splitLink, type TRPCLink } from "@trpc/client";
 import { observable } from "@trpc/server/observable";
@@ -99,7 +103,7 @@ export const privateWorkspaceCreationLink = (): TRPCLink<AppRouter> => () => ({ 
     const abort = new AbortController(); let subscription: { unsubscribe: () => void } | undefined;
     let prepared: Awaited<ReturnType<typeof preparePrivateWorkspaceCreation>> = null;
     void (async () => {
-      const originalScope = op.context.privateMutationIntentScope ?? capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      const originalScope = op.context.privateMutationIntentScope ?? capturePrivateRequestScope({ policy: false }), originalInput = structuredClone(op.input);
       checkPrivateRequestScope(originalScope);
       await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
       if (abort.signal.aborted) return;
@@ -156,7 +160,11 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
     let cancelled = false, subscription: { unsubscribe: () => void } | undefined;
     const abort = new AbortController();
     void (async () => {
-      const originalScope = op.context.privateMutationIntentScope ?? capturePrivateRequestScope(), originalInput = structuredClone(op.input);
+      const captured = op.context.privateMutationIntentScope ?? capturePrivateRequestScope();
+      checkPrivateRequestScope(captured);
+      // A creation's reservation was verified by its dedicated preparer. Bind
+      // that resulting policy before content routing or any final HTTP wait.
+      const originalScope = Object.freeze({ ...captured, routingRevision: captured.routingRevision ?? privateRoutingRevision(), deviceRevision: captured.deviceRevision ?? privateDeviceAccessRevision() }), originalInput = structuredClone(op.input);
       checkPrivateRequestScope(originalScope);
       await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
       if (cancelled) return;
@@ -167,12 +175,20 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
       const route = await currentWorkspaceContentRoute(workspaceId, abort.signal);
       if (cancelled) return;
       checkPrivateRequestScope(originalScope);
-      if (route.mode === "encrypted") {
+      const selection = op.path === "workspaces.setActive";
+      if (selection && op.type !== "mutation") throw new PrivateContentUnavailableError();
+      const forwarded = selection ? workspaceSelectionInput(addressed) : addressed;
+      if (route.mode === "encrypted" && !selection) {
         const value = op.type === "mutation" ? await mutatePrivateWorkspace(route, op.path, addressed) : await readPrivateWorkspaceQuery(route, op.path, addressed, op.type); checkPrivateRequestScope(originalScope); route.check();
         if (!cancelled) { observer.next({ result: { data: value } } as never); observer.complete(); }
       } else {
-        route.check(); subscription = next({ ...op, input: addressed, context: { ...op.context, privateContentScope: originalScope } }).subscribe({
-          next: (value) => { try { checkPrivateRequestScope(originalScope); route.check(); observer.next(value); } catch (error) { observer.error(TRPCClientError.from(error instanceof Error ? error : new Error("Workspace data changed"))); } },
+        route.check(); subscription = next({ ...op, input: forwarded, context: { ...op.context, privateContentScope: originalScope } }).subscribe({
+          next: (value) => { try { checkPrivateRequestScope(originalScope); route.check();
+            if (selection) {
+              if (!("data" in value.result)) throw new PrivateContentUnavailableError("Workspace selection returned no data");
+              observer.next({ ...value, result: { data: workspaceSelectionResult(route.scope.workspaceId!, value.result.data) } });
+            } else observer.next(value);
+          } catch (error) { observer.error(TRPCClientError.from(error instanceof Error ? error : new Error("Workspace data changed"))); } },
           error: (error) => observer.error(error), complete: () => observer.complete(),
         });
       }

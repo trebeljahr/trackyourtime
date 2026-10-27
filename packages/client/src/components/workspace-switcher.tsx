@@ -1,5 +1,7 @@
 "use client";
 
+import { capturePrivateMutationAction } from "@/lib/private-mutation-guard";
+
 import * as React from "react";
 import { Building2, Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -75,13 +77,14 @@ export function WorkspaceSwitcher(): React.JSX.Element | null {
   const active = workspaces.find((workspace) => workspace.id === activeId) ?? null;
 
   const choose = async (workspace: WorkspaceSummary): Promise<void> => {
+    const action = capturePrivateMutationAction({ workspace: false });
     setOpen(false);
     if (workspace.id === activeId) return;
     await switchWorkspace(workspace.id, {
       queryClient,
       setActive: (workspaceId) => setActive.mutateAsync({ workspaceId }),
     });
-    toast.success(t("workspace.switched", { name: workspace.name }));
+    if (action.current() && getActiveWorkspaceSnapshot().activeId === workspace.id) toast.success(t("workspace.switched", { name: workspace.name }));
   };
 
   return (

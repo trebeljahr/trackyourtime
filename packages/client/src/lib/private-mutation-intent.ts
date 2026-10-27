@@ -17,7 +17,9 @@ export function beginPrivateMutationIntent(key: unknown, variables: unknown, own
   const path = pathOf(key); if (!path || !isWorkspaceContentProcedure(path)) return;
   if (!variables || typeof variables !== "object" || Array.isArray(variables)) throw new PrivateContentUnavailableError("Use an explicit input object before saving workspace data");
   if (inputs.has(variables)) throw new PrivateContentUnavailableError("This input is already being saved. Wait before reusing it");
-  const scope = capturePrivateRequestScope(), workspaceId = getActiveWorkspaceId();
+  // Standard workspace creation deliberately publishes a new signed inventory
+  // reservation. Its dedicated preparer validates that transition separately.
+  const scope = capturePrivateRequestScope({ policy: path !== "workspaces.create" }), workspaceId = getActiveWorkspaceId();
   const explicit = (variables as { workspaceId?: unknown }).workspaceId;
   if (path !== "workspaces.create" && workspaceId === null && typeof explicit !== "string") throw new PrivateContentUnavailableError("Choose a workspace before saving data");
   const input = withWorkspaceId(structuredClone(variables), workspaceId), intent = { owner, variables, scope, path, input, activeWorkspaceId: workspaceId };
@@ -57,9 +59,9 @@ function validateInternalFields(intent: Intent, fields: Record<string, unknown>)
 }
 
 export function installPrivateMutationActionCapture() {
-  registerPrivateMutationActionCapture(() => {
-    const scope = capturePrivateRequestScope(), workspaceId = getActiveWorkspaceId();
-    const check = () => { checkPrivateRequestScope(scope); if (getActiveWorkspaceId() !== workspaceId) throw new PrivateContentUnavailableError("The workspace changed before this action could finish"); };
+  return registerPrivateMutationActionCapture((options) => {
+    const scope = capturePrivateRequestScope(), workspaceId = getActiveWorkspaceId(), bindWorkspace = options?.workspace !== false;
+    const check = () => { checkPrivateRequestScope(scope); if (bindWorkspace && getActiveWorkspaceId() !== workspaceId) throw new PrivateContentUnavailableError("The workspace changed before this action could finish"); };
     const current = () => { try { check(); return true; } catch { return false; } };
     return { check, current };
   });

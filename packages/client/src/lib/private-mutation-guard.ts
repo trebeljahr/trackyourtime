@@ -20,9 +20,10 @@ export function assignPrivateMutationMetadata<T extends object>(variables: T, fi
 }
 
 export type PrivateMutationAction = { current: () => boolean; check: () => void };
-let captureAction: (() => PrivateMutationAction) | null = null;
-export const registerPrivateMutationActionCapture = (capture: () => PrivateMutationAction) => { captureAction = capture; };
+export type PrivateMutationActionOptions = { workspace?: boolean };
+let captureAction: ((options?: PrivateMutationActionOptions) => PrivateMutationAction) | null = null;
+export const registerPrivateMutationActionCapture = (capture: (options?: PrivateMutationActionOptions) => PrivateMutationAction) => { const previous = captureAction; captureAction = capture; return () => { if (captureAction === capture) captureAction = previous; }; };
 /** App-level actions that await before creating a React Query mutation can
  * capture the same primitive scope. Isolated legacy adapters remain usable. */
-export const capturePrivateMutationAction = (): PrivateMutationAction => captureAction?.() ?? { current: () => true, check: () => {} };
+export const capturePrivateMutationAction = (options?: PrivateMutationActionOptions): PrivateMutationAction => captureAction?.(options) ?? { current: () => true, check: () => {} };
 export const capturePrivateMutationGuard = (variables: unknown): (() => boolean) => variables && typeof variables === "object" ? guards.get(variables)?.current ?? (() => true) : () => true;

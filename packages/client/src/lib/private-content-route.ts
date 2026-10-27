@@ -1,3 +1,4 @@
+import { workspaceSelectionInput } from "./private-navigation";
 import { assertEntryClientSupported, accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery } from "@starter/core";
 import { currentServerApiLevel } from "./server-level";
 import { PrivateWorkspaceCreationError } from "./private-workspace-creation-error";
@@ -120,10 +121,17 @@ export async function assertStandardContentRequest(url: string, init?: RequestIn
     const input = target.searchParams.get("batch") === "1" ? raw?.[String(index)] : raw;
     const workspaceId = input !== null && typeof input === "object" && typeof input.workspaceId === "string" ? input.workspaceId : null;
     const route = await currentWorkspaceContentRoute(workspaceId, init?.signal ?? undefined);
-    if (target.origin !== route.scope.server || route.mode !== "standard") throw new PrivateContentUnavailableError("Private workspace content cannot use the standard HTTP transport");
+    const selection = path === "workspaces.setActive";
+    if (selection) {
+      if (init?.method !== "POST") throw new PrivateContentUnavailableError("Workspace selection requires a scoped mutation");
+      workspaceSelectionInput(input);
+    }
+    if (target.origin !== route.scope.server || (!selection && route.mode !== "standard")) throw new PrivateContentUnavailableError("Private workspace content cannot use the standard HTTP transport");
     const scopes = originalScopes?.[index];
     checks.push(() => {
       route.check(); checkPrivateRequestScope(scopes?.[0]);
+      const bound = scopes?.[0] as { routingRevision?: unknown; deviceRevision?: unknown } | undefined;
+      if (!Number.isSafeInteger(bound?.routingRevision) || !Number.isSafeInteger(bound?.deviceRevision)) throw new PrivateContentUnavailableError("The original workspace policy could not be verified");
       if (scopes?.[1] != null) checkPrivateRequestScope(scopes[1]);
       if (path === "workspaces.create" && input?.clientWorkspaceId !== undefined) {
         try { assertEntryClientSupported(path, input, currentServerApiLevel()); } catch { throw new PrivateWorkspaceCreationError("server"); }
