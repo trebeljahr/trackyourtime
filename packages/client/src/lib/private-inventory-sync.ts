@@ -1,9 +1,13 @@
 import { createPrivateAccountInventorySync, decodeSecret, type KeyValueStorage, type PrivateInventoryTransport, type QueueExclusive } from "@starter/core";
-import { privateSession } from "./private-session";
+import { privateSession, privateAccountId, subscribePrivateSession, subscribePrivateAccount } from "./private-session";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateClientScope as binding } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
-import { requirePrivateRouting } from "./private-routing-requirement";
+import { forgetVerifiedWorkspaceModes, rememberVerifiedWorkspaceModes } from "./private-workspace-mode-cache";
+import { requirePrivateRouting, privateRoutingRevision, subscribePrivateRoutingRequirement } from "./private-routing-requirement";
+subscribePrivateSession(forgetVerifiedWorkspaceModes);
+subscribePrivateAccount(forgetVerifiedWorkspaceModes);
+subscribePrivateRoutingRequirement(forgetVerifiedWorkspaceModes);
 /** Always use the account-wide host lock. This adapter does not enroll or
  * recover a missing profile automatically and never uses a plaintext queue. */
 export async function privateAccountWorkspaceInventorySync(userId: string, storage: KeyValueStorage, exclusive: QueueExclusive) {
@@ -19,7 +23,14 @@ export async function privateAccountWorkspaceInventorySync(userId: string, stora
       return { master, signingPrivateKey: root.signingPrivateKey, signingPublicKey: { kty, crv, x, y }, current, release: () => master.fill(0) };
     },
   });
-  check(); return sync;
+  check(); return { ...sync, read: async () => {
+    const value = await sync.read(); check();
+    if (privateAccountId() === userId) {
+      const revision = privateRoutingRevision();
+      rememberVerifiedWorkspaceModes(value.inventory, { server, userId }, () => current() && privateAccountId() === userId && privateRoutingRevision() === revision);
+    }
+    return value;
+  } };
 }
 /** Dedicated fixed-origin, non-batched POST transport. Check again at actual
  * dispatch, after native readiness, so a delayed request cannot follow a server

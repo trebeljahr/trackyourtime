@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import { createId } from "@starter/core";
 import {
   EMPTY_ROLLUP,
@@ -157,7 +159,7 @@ export type ProjectMutations = {
 export function useProjectMutations(
   handlers: CatalogErrorHandlers = {},
 ): ProjectMutations {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
 
   const findClient = (id: string | null | undefined): ClientRow | null => {
     if (!id) return null;
@@ -191,8 +193,11 @@ export function useProjectMutations(
   };
 
   const create = trpc.projects.create.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginProjectWrite();
+      assertPrivateMutationStillCurrent(vars);
       const now = new Date().toISOString();
       const client = findClient(vars.clientId);
       const budget: ProjectBudget = {
@@ -235,6 +240,7 @@ export function useProjectMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackProjects(context?.previous);
       reportError(error, translate("catalog")("errors.createProject"), handlers, {
         kind: "project",
@@ -245,8 +251,11 @@ export function useProjectMutations(
   });
 
   const update = trpc.projects.update.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginProjectWrite();
+      assertPrivateMutationStillCurrent(vars);
       const client =
         vars.clientId === undefined ? undefined : findClient(vars.clientId);
       writeProjects((rows) =>
@@ -299,6 +308,7 @@ export function useProjectMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackProjects(context?.previous);
       reportError(error, translate("catalog")("errors.saveProject"), handlers, {
         kind: "project",
@@ -319,8 +329,11 @@ export function useProjectMutations(
   });
 
   const archive = trpc.projects.archive.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginProjectWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeProjects((rows) =>
         rows.map((row) =>
           row.id === vars.id
@@ -331,6 +344,7 @@ export function useProjectMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackProjects(context?.previous);
       reportError(error, translate("catalog")("errors.archiveProject"), handlers);
     },
@@ -338,15 +352,20 @@ export function useProjectMutations(
   });
 
   const remove = trpc.projects.remove.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginProjectWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeProjects((rows) => rows.filter((row) => row.id !== vars.id));
       return context;
     },
-    onSuccess: (result) => {
+    onSuccess: (result, _vars) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       announceRemoval(result, "project");
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackProjects(context?.previous);
       reportError(error, translate("catalog")("errors.deleteProject"), handlers);
     },
@@ -388,7 +407,7 @@ export type ClientMutations = {
 export function useClientMutations(
   handlers: CatalogErrorHandlers = {},
 ): ClientMutations {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
 
   const writeClients = (update: (rows: ClientRow[]) => ClientRow[]): void => {
     utils.clients.list.setData(CLIENT_LIST_INPUT, (old) =>
@@ -416,8 +435,11 @@ export function useClientMutations(
   };
 
   const create = trpc.clients.create.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginClientWrite();
+      assertPrivateMutationStillCurrent(vars);
       const now = new Date().toISOString();
       const optimistic: ClientRow = {
         id: `optimistic-${createId()}`,
@@ -434,6 +456,7 @@ export function useClientMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackClients(context?.previous);
       reportError(error, translate("catalog")("errors.createClient"), handlers, {
         kind: "client",
@@ -444,8 +467,11 @@ export function useClientMutations(
   });
 
   const update = trpc.clients.update.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginClientWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeClients((rows) =>
         sortByName(
           rows.map((row) =>
@@ -470,6 +496,7 @@ export function useClientMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackClients(context?.previous);
       reportError(error, translate("catalog")("errors.saveClient"), handlers, {
         kind: "client",
@@ -480,8 +507,11 @@ export function useClientMutations(
   });
 
   const archive = trpc.clients.archive.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginClientWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeClients((rows) =>
         rows.map((row) =>
           row.id === vars.id ? { ...row, archived: vars.archived ?? true } : row,
@@ -490,6 +520,7 @@ export function useClientMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackClients(context?.previous);
       reportError(error, translate("catalog")("errors.archiveClient"), handlers);
     },
@@ -497,15 +528,20 @@ export function useClientMutations(
   });
 
   const remove = trpc.clients.remove.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginClientWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeClients((rows) => rows.filter((row) => row.id !== vars.id));
       return context;
     },
-    onSuccess: (result) => {
+    onSuccess: (result, _vars) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       announceRemoval(result, "client");
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackClients(context?.previous);
       reportError(error, translate("catalog")("errors.deleteClient"), handlers);
     },
@@ -544,7 +580,7 @@ export type TaskMutations = {
 export function useTaskMutations(
   handlers: CatalogErrorHandlers = {},
 ): TaskMutations {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const input = TASK_LIST_INPUT;
 
   const writeTasks = (update: (rows: TaskRow[]) => TaskRow[]): void => {
@@ -569,8 +605,11 @@ export function useTaskMutations(
   };
 
   const create = trpc.tasks.create.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginTaskWrite();
+      assertPrivateMutationStillCurrent(vars);
       const now = new Date().toISOString();
       const optimistic: TaskRow = {
         id: `optimistic-${createId()}`,
@@ -589,6 +628,7 @@ export function useTaskMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackTasks(context?.previous);
       reportError(error, translate("catalog")("errors.createTask"), handlers, {
         kind: "task",
@@ -599,8 +639,11 @@ export function useTaskMutations(
   });
 
   const update = trpc.tasks.update.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginTaskWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeTasks((rows) =>
         sortByName(
           rows.map((row) =>
@@ -622,6 +665,7 @@ export function useTaskMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackTasks(context?.previous);
       reportError(error, translate("catalog")("errors.saveTask"), handlers, {
         kind: "task",
@@ -632,8 +676,11 @@ export function useTaskMutations(
   });
 
   const archive = trpc.tasks.archive.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginTaskWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeTasks((rows) =>
         rows.map((row) =>
           row.id === vars.id ? { ...row, archived: vars.archived ?? true } : row,
@@ -642,6 +689,7 @@ export function useTaskMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackTasks(context?.previous);
       reportError(error, translate("catalog")("errors.archiveTask"), handlers);
     },
@@ -649,15 +697,20 @@ export function useTaskMutations(
   });
 
   const remove = trpc.tasks.remove.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await beginTaskWrite();
+      assertPrivateMutationStillCurrent(vars);
       writeTasks((rows) => rows.filter((row) => row.id !== vars.id));
       return context;
     },
-    onSuccess: (result) => {
+    onSuccess: (result, _vars) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       announceRemoval(result, "task");
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollbackTasks(context?.previous);
       reportError(error, translate("catalog")("errors.deleteTask"), handlers);
     },

@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import * as React from "react";
 import { Plus, Webhook } from "lucide-react";
 import type {
@@ -262,13 +264,16 @@ function DeleteWebhookDialog({
   subscription,
   onOpenChange,
 }: DeleteWebhookDialogProps): React.JSX.Element {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const t = useT("settings");
   const tc = useT("common");
 
   const remove = trpc.webhooks.remove.useMutation({
-    onMutate: async ({ id }) => {
+    ...privateOptions,
+    onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input); const { id } = input;
       await utils.webhooks.list.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.webhooks.list.getData();
       utils.webhooks.list.setData(undefined, (old) =>
         old?.filter((item) => item.id !== id),
@@ -276,6 +281,7 @@ function DeleteWebhookDialog({
       return { previous };
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       if (context?.previous) {
         utils.webhooks.list.setData(undefined, context.previous);
       }
@@ -283,7 +289,8 @@ function DeleteWebhookDialog({
         userErrorMessage(error, translate("settings")("webhooks.toasts.deleteFailed")),
       );
     },
-    onSuccess: () => {
+    onSuccess: (_result, _input) => {
+      if (!privateMutationStillCurrent(_input)) return;
       toast.success(translate("settings")("webhooks.toasts.deleted"));
     },
     onSettled: () => {
@@ -336,7 +343,7 @@ function DeleteWebhookDialog({
 /** Where this workspace pushes events, and how those pushes are going. */
 export function WebhooksPanel(): React.JSX.Element {
   const webhooksQuery = trpc.webhooks.list.useQuery();
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const t = useT("settings");
   const tc = useT("common");
   const f = useFormat();
@@ -349,8 +356,11 @@ export function WebhooksPanel(): React.JSX.Element {
   const subscriptions = webhooksQuery.data ?? [];
 
   const update = trpc.webhooks.update.useMutation({
-    onMutate: async ({ id, enabled }) => {
+    ...privateOptions,
+    onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input); const { id, enabled } = input;
       await utils.webhooks.list.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.webhooks.list.getData();
       utils.webhooks.list.setData(undefined, (old) =>
         old?.map((item) => item.id === id ? { ...item, enabled: enabled ?? item.enabled } : item),
@@ -358,12 +368,14 @@ export function WebhooksPanel(): React.JSX.Element {
       return { previous };
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       utils.webhooks.list.setData(undefined, context?.previous);
       toast.error(
         userErrorMessage(error, translate("settings")("webhooks.toasts.updateFailed")),
       );
     },
-    onSuccess: (subscription) => {
+    onSuccess: (subscription, _input) => {
+      if (!privateMutationStillCurrent(_input)) return;
       utils.webhooks.list.setData(undefined, (old) =>
         old?.map((item) => item.id === subscription.id ? subscription : item),
       );

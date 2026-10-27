@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import * as React from "react";
 import { createId } from "@starter/core";
 import type { CreateTagInput, Tag, UpdateTagInput } from "@starter/shared";
@@ -125,7 +127,7 @@ export type TagMutations = {
 export function useTagMutations(
   handlers: TagErrorHandlers = {},
 ): TagMutations {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
 
   const report = React.useCallback(
     (error: unknown, fallback: string, name?: string): void => {
@@ -169,8 +171,11 @@ export function useTagMutations(
   };
 
   const create = trpc.tags.create.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await begin();
+      assertPrivateMutationStillCurrent(vars);
       const now = new Date().toISOString();
       const optimistic: TagRow = {
         id: `optimistic-${createId()}`,
@@ -188,6 +193,7 @@ export function useTagMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollback(context?.previous);
       report(error, translate("catalog")("errors.createTag"), _vars.name);
     },
@@ -195,8 +201,11 @@ export function useTagMutations(
   });
 
   const update = trpc.tags.update.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await begin();
+      assertPrivateMutationStillCurrent(vars);
       write((rows) =>
         sortByName(
           rows.map((row) =>
@@ -216,6 +225,7 @@ export function useTagMutations(
       return context;
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollback(context?.previous);
       report(error, translate("catalog")("errors.saveTag"), _vars.name);
     },
@@ -223,12 +233,16 @@ export function useTagMutations(
   });
 
   const remove = trpc.tags.remove.useMutation({
+    ...privateOptions,
     onMutate: async (vars) => {
+      assertPrivateMutationStillCurrent(vars);
       const context = await begin();
+      assertPrivateMutationStillCurrent(vars);
       write((rows) => rows.filter((row) => row.id !== vars.id));
       return context;
     },
-    onSuccess: (result: TagRemoveResult) => {
+    onSuccess: (result: TagRemoveResult, _vars) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       // The server decides between the two — an archive announced as a delete
       // is a lie the user finds out about the next time they open the picker.
       // `result.message` is the server's English sentence for the same fact,
@@ -241,6 +255,7 @@ export function useTagMutations(
       toast.warning(t("tags.archivedInstead"));
     },
     onError: (error, _vars, context) => {
+      if (!privateMutationStillCurrent(_vars)) return;
       rollback(context?.previous);
       report(error, translate("catalog")("errors.deleteTag"));
     },

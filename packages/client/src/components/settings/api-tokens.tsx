@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import * as React from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { apiTokenDisplayId, type ApiTokenSummary } from "@starter/shared";
@@ -89,13 +91,16 @@ function RevokeApiTokenDialog({
   token,
   onOpenChange,
 }: RevokeApiTokenDialogProps): React.JSX.Element {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const t = useT("settings");
   const tc = useT("common");
 
   const revoke = trpc.apiTokens.revoke.useMutation({
-    onMutate: async ({ id }) => {
+    ...privateOptions,
+    onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input); const { id } = input;
       await utils.apiTokens.list.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.apiTokens.list.getData();
       // Revoked rather than removed — the row stays so the list can still say
       // this token existed and when it was turned off.
@@ -109,6 +114,7 @@ function RevokeApiTokenDialog({
       return { previous };
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       if (context?.previous) {
         utils.apiTokens.list.setData(undefined, context.previous);
       }
@@ -116,7 +122,8 @@ function RevokeApiTokenDialog({
         userErrorMessage(error, translate("settings")("apiTokens.toasts.revokeFailed")),
       );
     },
-    onSuccess: () => {
+    onSuccess: (_result, _input) => {
+      if (!privateMutationStillCurrent(_input)) return;
       toast.success(translate("settings")("apiTokens.toasts.revoked"));
     },
     onSettled: () => {

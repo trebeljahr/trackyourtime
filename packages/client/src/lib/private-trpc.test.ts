@@ -4,11 +4,11 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { getUntypedClient } from "@trpc/client";
 import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
-import { privateWorkspaceManifest, privateWorkspaceManifestForReader, privateWorkspaceChainRoot, OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
+import { privateWorkspaceManifest, privateWorkspaceManifestForReader, privateWorkspaceChainRoot, OFFLINE_QUEUE_STORAGE_KEY, createTempId } from "@starter/core";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, tokenRevision: 0, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: () => state.ready(), rebaseApiUrl: (url: string) => url }));
-vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => "workspace", isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), getKnownWorkspacesOwner: () => "owner", getActiveWorkspaceSnapshot: () => ({ activeId: "workspace", workspaces: null }), workspaceNameFor: () => "Synthetic workspace" }));
+vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => "workspace", subscribeActiveWorkspace: () => () => {}, isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), getKnownWorkspacesOwner: () => "owner", getActiveWorkspaceSnapshot: () => ({ activeId: "workspace", workspaces: null }), workspaceNameFor: () => "Synthetic workspace" }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => API_LEVEL, noteClientTooOld: () => {} }));
 vi.mock("./native-session", () => ({ getNativeToken: () => null, getNativeTokenRevision: () => state.tokenRevision }));
@@ -341,4 +341,21 @@ it("does not let concurrent reuse of one variables object overwrite an earlier f
   const duplicate = queryClient.getMutationCache().build(queryClient, { mutationKey: [["tags", "create"]], networkMode: "always", mutationFn: (input: { name: string }) => client().mutation("tags.create", input) }); await expect(duplicate.execute(variables)).rejects.toThrow("already being saved");
   await confirmStandardDeviceAccess({ server: state.origin, userId: "other" }, () => true); session.privateAccountChanged("other"); resume();
   const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher); await expect(pending).rejects.toThrow(); expect(fetcher).not.toHaveBeenCalled(); queryClient.clear();
+});
+
+it("preserves timer metadata attached by an optimistic hook while freezing the original business input", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
+  const { createAppQueryClient } = await import("./query-client"), { assignPrivateMutationMetadata } = await import("./private-mutation-guard"), queryClient = createAppQueryClient(), tempId = createTempId();
+  const variables = { description: "Original timer intent", start: "2026-10-27T00:00:00.000Z", end: "2026-10-27T01:00:00.000Z", billable: false };
+  const mutation = queryClient.getMutationCache().build(queryClient, { mutationKey: [["entries", "create"]], networkMode: "always", onMutate: async (raw: typeof variables) => {
+    assignPrivateMutationMetadata(raw, { __durableScope: { owner: "owner", server: state.origin, workspaceId: "workspace" }, __durableTempId: tempId }); raw.description = "Changed by an optimistic hook";
+  }, mutationFn: (input: typeof variables) => client().mutation("entries.create", input) });
+  vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Synthetic connection lost"); })); await expect(mutation.execute(variables)).rejects.toThrow();
+  const rows = await offline.getOfflineQueue().list(); expect(rows).toHaveLength(1); expect(rows[0]!.payload).toMatchObject({ tempId, input: { description: "Original timer intent" } }); queryClient.clear();
+});
+it("refuses generated timer metadata for another account or workspace before the standard queue can store it", async () => {
+  await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);
+  const { createAppQueryClient } = await import("./query-client"), { assignPrivateMutationMetadata } = await import("./private-mutation-guard"), queryClient = createAppQueryClient(), fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  const mutation = queryClient.getMutationCache().build(queryClient, { mutationKey: [["entries", "start"]], networkMode: "always", onMutate: async (raw: { description: string }) => { assignPrivateMutationMetadata(raw, { __durableScope: { owner: "other", server: state.origin, workspaceId: "workspace" } }); }, mutationFn: (input: { description: string }) => client().mutation("entries.start", input) });
+  await expect(mutation.execute({ description: "Must stay in the original account" })).rejects.toThrow("another account or workspace"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); queryClient.clear();
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import { useProjectOptions } from "@/hooks/use-catalog-options";
 
 import * as React from "react";
@@ -194,8 +195,10 @@ export const useCalendarActions = (
 
   const updateMutation = trpc.entries.update.useMutation({
     onMutate: async (variables) => {
+      assertPrivateMutationStillCurrent(variables);
       const scope = entryMutationScope();
       const previous = await snapshot();
+      assertPrivateMutationStillCurrent(variables);
       if (!sameEntryMutationScope(scope)) throw new Error(translate("tracker")("mutations.scopeChanged"));
       utils.entries.list.setData(input, (current) => {
         if (!current) return current;
@@ -246,6 +249,7 @@ export const useCalendarActions = (
       return { previous, scope };
     },
     onError: (error, _variables, context) => {
+      if (!privateMutationStillCurrent(_variables)) return;
       if (context && !sameEntryMutationScope(context.scope)) return;
       rollback(context?.previous);
       toast.error(userErrorMessage(error));
@@ -255,8 +259,10 @@ export const useCalendarActions = (
 
   const createMutation = trpc.entries.create.useMutation({
     onMutate: async (variables) => {
+      assertPrivateMutationStillCurrent(variables);
       const scope = createScopes.current.get(variables) ?? entryMutationScope();
       const previous = await snapshot();
+      assertPrivateMutationStillCurrent(variables);
       if (!sameEntryMutationScope(scope)) throw new Error(translate("tracker")("mutations.scopeChanged"));
       const now = new Date().toISOString();
       const projectId = variables.projectId ?? null;
@@ -298,6 +304,7 @@ export const useCalendarActions = (
       return { previous, scope };
     },
     onError: (error, _variables, context) => {
+      if (!privateMutationStillCurrent(_variables)) return;
       if (context && !sameEntryMutationScope(context.scope)) return;
       rollback(context?.previous);
       toast.error(userErrorMessage(error));
@@ -307,8 +314,10 @@ export const useCalendarActions = (
 
   const removeMutation = trpc.entries.remove.useMutation({
     onMutate: async (variables) => {
+      assertPrivateMutationStillCurrent(variables);
       const scope = entryMutationScope();
       const previous = await snapshot();
+      assertPrivateMutationStillCurrent(variables);
       if (!sameEntryMutationScope(scope)) throw new Error(translate("tracker")("mutations.scopeChanged"));
       utils.entries.list.setData(input, (current) =>
         current
@@ -323,6 +332,7 @@ export const useCalendarActions = (
       return { previous, scope };
     },
     onError: (error, _variables, context) => {
+      if (!privateMutationStillCurrent(_variables)) return;
       if (context && !sameEntryMutationScope(context.scope)) return;
       rollback(context?.previous);
       toast.error(userErrorMessage(error));

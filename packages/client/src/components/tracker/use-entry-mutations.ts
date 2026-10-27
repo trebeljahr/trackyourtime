@@ -1,5 +1,6 @@
 "use client";
 
+import { assignPrivateMutationMetadata, assertPrivateMutationStillCurrent, privateMutationStillCurrent, capturePrivateMutationGuard } from "@/lib/private-mutation-guard";
 import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
 
 import * as React from "react";
@@ -66,6 +67,7 @@ type Utils = ReturnType<typeof trpc.useUtils>;
 type ListSnapshot = ReturnType<Utils["entries"]["list"]["getInfiniteData"]>;
 
 type MutationContext = {
+  privateCurrent?: () => boolean;
   scope?: EntryMutationScope;
   errorMessage?: string;
   /** Exact optimistic entry retained for callers with no tracker list loaded. */
@@ -137,9 +139,9 @@ const isRefetchingWrite = (
 /** False once the user has switched away from the workspace this write began in. */
 const stillInWorkspace = (context: MutationContext | undefined): boolean =>
   context === undefined ||
-  (context.scope !== undefined
+  (context.privateCurrent?.() !== false && (context.scope !== undefined
     ? sameEntryMutationScope(context.scope)
-    : context.workspaceId === undefined || context.workspaceId === getActiveWorkspaceId());
+    : context.workspaceId === undefined || context.workspaceId === getActiveWorkspaceId()));
 
 /**
  * The toast for a start that ended a timer in another workspace. One running
@@ -481,10 +483,12 @@ export const useEntryMutations = (): EntryMutations => {
       context: MutationContext | undefined,
       fallbackMessage: string
     ): Promise<void> => {
+      if (context?.privateCurrent?.() === false) return;
       if (await retainDurableEntry(error, context?.tempId)) {
         if (context) context.queued = true;
         return;
       }
+      if (context?.privateCurrent?.() === false) return;
       rollback(context);
       const message =
         userErrorMessage(error, fallbackMessage);
@@ -520,7 +524,7 @@ export const useEntryMutations = (): EntryMutations => {
         if (context?.runningAtStop?.id !== tempId) continue;
         context.runningAtStop = entry;
         context.tempId = undefined;
-        Object.assign(mutation.state.variables as object, { id: entry.id, __durableTempId: undefined });
+        assignPrivateMutationMetadata(mutation.state.variables as object, { id: entry.id, __durableTempId: undefined });
       }
     },
     [queryClient]
@@ -531,11 +535,13 @@ export const useEntryMutations = (): EntryMutations => {
     meta: TRACKER_WRITE_META,
     scope: TIMER_SCOPE,
     onMutate: async (raw): Promise<MutationContext> => {
+      assertPrivateMutationStillCurrent(raw);
       const input = raw as StartInput;
       const context = await snapshot();
-      Object.assign(raw, { __durableScope: context.scope });
+      assertPrivateMutationStillCurrent(raw); context.privateCurrent = capturePrivateMutationGuard(raw);
+      assignPrivateMutationMetadata(raw, { __durableScope: context.scope });
       context.tempId = createTempId();
-      Object.assign(raw, { __durableTempId: context.tempId, ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}) });
+      assignPrivateMutationMetadata(raw, { __durableTempId: context.tempId, ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}) });
 
       const running = context.previousCurrent ?? null;
       if (running) replaceEntry(running.id, stopShape(running, input.start));
@@ -560,6 +566,7 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: async (entry, _raw, context) => {
+      if (!privateMutationStillCurrent(_raw)) return;
       // Before anything can put the server's entry on screen, so the tracker
       // bar reads the rename as the same timer rather than a new one.
       if (context?.tempId) noteResolvedTempId(context.tempId, entry.id);
@@ -634,6 +641,7 @@ export const useEntryMutations = (): EntryMutations => {
       if (context?.tempId) idleWatcher.noteServerId(context.tempId, entry.id);
     },
     onError: async (error, raw, context) => {
+      if (!privateMutationStillCurrent(raw)) return;
       await handleError(error, context, translate("tracker")("mutations.startFailed"));
       // The first start may already have committed. Keep its exact input and
       // save an edit as a separate dependent operation, resolved after replay.
@@ -656,9 +664,11 @@ export const useEntryMutations = (): EntryMutations => {
     meta: TRACKER_WRITE_META,
     scope: TIMER_SCOPE,
     onMutate: async (raw): Promise<MutationContext> => {
+      assertPrivateMutationStillCurrent(raw);
       const input = raw as OfflineStopInput;
       const context = await snapshot();
-      Object.assign(raw, { __durableScope: context.scope });
+      assertPrivateMutationStillCurrent(raw); context.privateCurrent = capturePrivateMutationGuard(raw);
+      assignPrivateMutationMetadata(raw, { __durableScope: context.scope });
       /*
        * What is running — from the query cache when it has an answer, and from
        * the timer store when it does not.
@@ -683,7 +693,7 @@ export const useEntryMutations = (): EntryMutations => {
           ? context.previousCurrent
           : timerStore.getState().running;
       context.runningAtStop = running;
-      Object.assign(raw, {
+      assignPrivateMutationMetadata(raw, {
         ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}),
         ...(running && !isTempId(running.id) ? { id: running.id } : {}),
         ...(running && isTempId(running.id) ? { __durableTempId: running.id } : {}),
@@ -699,6 +709,7 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: (entry, _raw, context) => {
+      if (!privateMutationStillCurrent(_raw)) return;
       if (!stillInWorkspace(context)) return;
       if (context?.tempId) dropEntry(context.tempId);
       const detailed = toDetailed(entry);
@@ -742,12 +753,14 @@ export const useEntryMutations = (): EntryMutations => {
     ...OFFLINE_QUEUED_MUTATION,
     meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
+      assertPrivateMutationStillCurrent(raw);
       const input = raw as CreateInput;
       const context = await snapshot(saveScopes.current.get(raw));
-      Object.assign(raw, { __durableScope: context.scope });
+      assertPrivateMutationStillCurrent(raw); context.privateCurrent = capturePrivateMutationGuard(raw);
+      assignPrivateMutationMetadata(raw, { __durableScope: context.scope });
       if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       context.tempId = createTempId();
-      Object.assign(raw, { __durableTempId: context.tempId, ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}) });
+      assignPrivateMutationMetadata(raw, { __durableTempId: context.tempId, ...(context.workspaceId ? { workspaceId: context.workspaceId } : {}) });
       const optimistic = buildEntry({
         id: context.tempId,
         description: input.description,
@@ -770,10 +783,12 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: (entry, _raw, context) => {
+      if (!privateMutationStillCurrent(_raw)) return;
       if (!stillInWorkspace(context)) return;
       if (context?.tempId) replaceEntry(context.tempId, toDetailed(entry));
     },
     onError: async (error, raw, context) => {
+      if (!privateMutationStillCurrent(raw)) return;
       if (context === undefined || error instanceof EntryScopeChangedError) {
         // onMutate failed before transport. No optimistic context means no
         // request to recover, and queueing would turn a failed save into a
@@ -802,9 +817,11 @@ export const useEntryMutations = (): EntryMutations => {
     ...OFFLINE_QUEUED_MUTATION,
     meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
+      assertPrivateMutationStillCurrent(raw);
       const input = raw as UpdateInput;
       const context = await snapshot(saveScopes.current.get(raw));
-      Object.assign(raw, { __durableScope: context.scope });
+      assertPrivateMutationStillCurrent(raw); context.privateCurrent = capturePrivateMutationGuard(raw);
+      assignPrivateMutationMetadata(raw, { __durableScope: context.scope });
       if (!stillInWorkspace(context)) throw new EntryScopeChangedError(translate("tracker")("mutations.scopeChanged"));
       const settings = utils.settings.get.getData();
 
@@ -886,11 +903,13 @@ export const useEntryMutations = (): EntryMutations => {
       return context;
     },
     onSuccess: (entry, _raw, context) => {
+      if (!privateMutationStillCurrent(_raw)) return;
       if (!stillInWorkspace(context)) return;
       replaceEntry(entry.id, toDetailed(entry));
       if (entry.end === null) utils.entries.current.setData(undefined, entry);
     },
     onError: async (error, raw, context) => {
+      if (!privateMutationStillCurrent(raw)) return;
       if (context === undefined || error instanceof EntryScopeChangedError) {
         // onMutate failed before transport. No optimistic context means no
         // request to recover, and queueing would turn a failed save into a
@@ -919,9 +938,11 @@ export const useEntryMutations = (): EntryMutations => {
     ...OFFLINE_QUEUED_MUTATION,
     meta: TRACKER_WRITE_META,
     onMutate: async (raw): Promise<MutationContext> => {
+      assertPrivateMutationStillCurrent(raw);
       const input = raw as OfflineIdInput;
       const context = await snapshot();
-      Object.assign(raw, { __durableScope: context.scope });
+      assertPrivateMutationStillCurrent(raw); context.privateCurrent = capturePrivateMutationGuard(raw);
+      assignPrivateMutationMetadata(raw, { __durableScope: context.scope });
       dropEntry(input.id);
       if (context.previousCurrent?.id === input.id) {
         utils.entries.current.setData(undefined, null);
@@ -1216,11 +1237,13 @@ export const useEntryMutations = (): EntryMutations => {
    */
   const resolveRunawayMutation = trpc.entries.resolveRunaway.useMutation({
     meta: TRACKER_WRITE_META,
-    onSuccess: (entry) => {
+    onSuccess: (entry, _raw) => {
+      if (!privateMutationStillCurrent(_raw)) return;
       replaceEntry(entry.id, toDetailed(entry));
       utils.entries.current.setData(undefined, entry.end === null ? entry : null);
     },
-    onError: (error) => {
+    onError: (error, _raw) => {
+      if (!privateMutationStillCurrent(_raw)) return;
       toast.error(
         userErrorMessage(error, translate("tracker")("mutations.updateFailed"))
       );

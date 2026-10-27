@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import * as React from "react";
 import {
   createId,
@@ -46,7 +48,7 @@ export type QuickStarts = {
  * refresh.
  */
 export const useQuickStarts = (): QuickStarts => {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const favorites = trpc.favorites.list.useQuery(undefined, {
     staleTime: 60_000,
   });
@@ -69,8 +71,11 @@ export const useQuickStarts = (): QuickStarts => {
   );
 
   const createMutation = trpc.favorites.create.useMutation({
+    ...privateOptions,
     onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input);
       await utils.favorites.list.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.favorites.list.getData();
       const quick: QuickStart = {
         description: input.description ?? "",
@@ -108,6 +113,7 @@ export const useQuickStarts = (): QuickStarts => {
       return { previous, tempId };
     },
     onSuccess: (favorite, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       utils.favorites.list.setData(undefined, (current) =>
         current?.map((row) => row.id === context?.tempId ? favorite : row),
       );
@@ -115,14 +121,18 @@ export const useQuickStarts = (): QuickStarts => {
       invalidate();
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       utils.favorites.list.setData(undefined, context?.previous);
       onError(error, translate("tracker")("favorites.pinFailed"));
     },
   });
 
   const removeMutation = trpc.favorites.remove.useMutation({
+    ...privateOptions,
     onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input);
       await utils.favorites.list.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.favorites.list.getData();
       utils.favorites.list.setData(undefined, (current) =>
         current?.filter((favorite) => favorite.id !== input.id)
@@ -130,6 +140,7 @@ export const useQuickStarts = (): QuickStarts => {
       return { previous };
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       if (context?.previous) {
         utils.favorites.list.setData(undefined, context.previous);
       }
@@ -139,8 +150,11 @@ export const useQuickStarts = (): QuickStarts => {
   });
 
   const reorderMutation = trpc.favorites.reorder.useMutation({
+    ...privateOptions,
     onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input);
       await utils.favorites.list.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.favorites.list.getData();
       // Reorder the cache to the requested order so the chip moves under the
       // cursor rather than a round trip later. The server answers with the
@@ -156,10 +170,12 @@ export const useQuickStarts = (): QuickStarts => {
       });
       return { previous };
     },
-    onSuccess: (list) => {
+    onSuccess: (list, _input) => {
+      if (!privateMutationStillCurrent(_input)) return;
       utils.favorites.list.setData(undefined, list);
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       if (context?.previous) {
         utils.favorites.list.setData(undefined, context.previous);
       }

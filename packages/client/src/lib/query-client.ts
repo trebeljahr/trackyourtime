@@ -9,7 +9,7 @@ import {
 
 import { getQueryPersistence } from "@/lib/app-query-persistence";
 import { bindCatalogCaches } from "@/lib/catalog-cache";
-import { noteNotFound } from "@/lib/active-workspace";
+import { getActiveWorkspaceId, subscribeActiveWorkspace, noteNotFound } from "@/lib/active-workspace";
 import {
   isAuthError,
   isForbiddenError,
@@ -17,8 +17,10 @@ import {
 } from "@/lib/offline";
 import { isCapacitor } from "@/lib/shell";
 import { getNetworkOnline, subscribeNetwork } from "@/mobile/network";
-import { beginPrivateMutationIntent, finishPrivateMutationIntent } from "./private-mutation-intent";
-import { subscribePrivateView, subscribePrivateViewEpoch } from "./private-view-lifecycle";
+import { beginPrivateMutationIntent, finishPrivateMutationIntent, installPrivateMutationActionCapture } from "./private-mutation-intent";
+import { setPrivateViewWorkspaceContext, subscribePrivateView, subscribePrivateViewEpoch } from "./private-view-lifecycle";
+
+import { hasVerifiedWorkspaceModes, observedWorkspaceMode, subscribeVerifiedWorkspaceModes } from "./private-workspace-mode-cache";
 
 /**
  * React Query, configured for the host it is running on.
@@ -68,6 +70,7 @@ export const clearAppQueryCache = async (): Promise<void> => {
 export const createAppQueryClient = (): QueryClient => {
   // Bounded, backed-off retries are a battery rule: the phone only.
   const native = isCapacitor();
+  installPrivateMutationActionCapture();
 
   const mutationCache = new MutationCache({ onMutate: (variables, mutation) => beginPrivateMutationIntent(mutation.options.mutationKey, variables, mutation) });
   appQueryClient = new QueryClient({
@@ -114,7 +117,31 @@ export const createAppQueryClient = (): QueryClient => {
   unbindPrivateViews();
   const protect = subscribePrivateView((scope) => { void persistence.protectPrivateAccount(scope); });
   const clear = subscribePrivateViewEpoch(() => { void client.cancelQueries(); client.clear(); });
-  unbindPrivateViews = () => { protect(); clear(); };
+  // Scheduling hints never authorize routing. The SDK still verifies inventory,
+  // scope and grants for every read. Standard queries keep radio pausing.
+  const localPaths = [
+    "clients.list", "clients.options", "projects.list", "projects.options",
+    "tasks.list", "tasks.options", "tasks.projectLinks", "tags.list",
+    "entries.list", "entries.get", "entries.recent", "entries.descriptions",
+    "favorites.list", "settings.get", "settings.businessProfile", "members.list",
+    "reports.rows", "reports.totals", "reports.detailed", "reports.summary",
+    "reports.weekly", "reports.trackedSpan",
+  ];
+  const schedule = () => {
+    const activeId = getActiveWorkspaceId();
+    const networkMode = observedWorkspaceMode(activeId) === "encrypted" ? "always" : "online";
+    for (const path of localPaths) {
+      const key = [path.split(".")];
+      client.setQueryDefaults(key, { ...client.getQueryDefaults(key), networkMode });
+    }
+    const key = [["workspaces", "list"]];
+    client.setQueryDefaults(key, { ...client.getQueryDefaults(key), networkMode: hasVerifiedWorkspaceModes() ? "always" : "online" });
+    // Set defaults before the synchronous cache clear / form remount.
+    setPrivateViewWorkspaceContext(activeId);
+  };
+  const modes = subscribeVerifiedWorkspaceModes(schedule), workspace = subscribeActiveWorkspace(schedule);
+  schedule();
+  unbindPrivateViews = () => { protect(); clear(); modes(); workspace(); };
   return appQueryClient;
 };
 

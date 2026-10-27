@@ -1,5 +1,6 @@
 "use client";
 
+import { assignPrivateMutationMetadata, capturePrivateMutationAction } from "@/lib/private-mutation-guard";
 import { CATALOG_OPTIONS_INPUT } from "@/hooks/use-catalog-options";
 
 import { entryMutationScope } from "@/lib/entry-mutation-result";
@@ -197,18 +198,21 @@ export const useTimesheetMutations = (
        * stamped with it too, not with wherever the device points when the
        * network error finally arrives.
        */
-      Object.assign(args.input, { __durableScope: entryMutationScope() });
+      const action = capturePrivateMutationAction();
+      assignPrivateMutationMetadata(args.input, { __durableScope: entryMutationScope() });
       const workspaceId = getActiveWorkspaceId();
-      const stillHere = (): boolean => getActiveWorkspaceId() === workspaceId;
+      const stillHere = (): boolean => action.current() && getActiveWorkspaceId() === workspaceId;
       const previous = await snapshot();
+      if (!action.current()) return;
       if (stillHere()) patchList(args.optimistic);
       setPending((count) => count + 1);
 
       try {
         await args.perform(stillHere);
-        invalidate();
+        if (action.current()) invalidate();
       } catch (error) {
         if (await retainDurableEntry(error)) return;
+        if (!action.current()) return;
         if (stillHere()) restore(previous);
         toast.error(
           userErrorMessage(error, args.failure)
@@ -258,7 +262,7 @@ export const useTimesheetMutations = (
         input,
         optimistic: (entries) => [optimistic, ...entries],
         perform: async (stillHere) => {
-          const created = await createEntry.mutateAsync(Object.assign(input, { __durableTempId: tempId }));
+          const created = await createEntry.mutateAsync(assignPrivateMutationMetadata(input, { __durableTempId: tempId }));
           serverId = created.id;
           if (!stillHere()) return;
           patchList((entries) =>

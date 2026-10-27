@@ -1,5 +1,7 @@
 "use client";
 
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { assertPrivateMutationStillCurrent, privateMutationStillCurrent } from "@/lib/private-mutation-guard";
 import * as React from "react";
 import type { UpdateSettingsInput, ResolvedSettings } from "@starter/shared";
 
@@ -84,7 +86,7 @@ export type WorkspaceSettingsController = {
  * identically no matter which control the user touched.
  */
 export const useWorkspaceSettings = (): WorkspaceSettingsController => {
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
   const query = trpc.settings.get.useQuery();
   const [saveState, setSaveState] = React.useState<SaveState>("idle");
 
@@ -98,8 +100,11 @@ export const useWorkspaceSettings = (): WorkspaceSettingsController => {
   );
 
   const mutation = trpc.settings.update.useMutation({
+    ...privateOptions,
     onMutate: async (input) => {
+      assertPrivateMutationStillCurrent(input);
       await utils.settings.get.cancel();
+      assertPrivateMutationStillCurrent(input);
       const previous = utils.settings.get.getData();
       if (previous) {
         utils.settings.get.setData(
@@ -110,13 +115,15 @@ export const useWorkspaceSettings = (): WorkspaceSettingsController => {
       return { previous };
     },
     onError: (error, _input, context) => {
+      if (!privateMutationStillCurrent(_input)) return;
       if (context?.previous) {
         utils.settings.get.setData(undefined, context.previous);
       }
       setSaveState("error");
       toast.error(userErrorMessage(error, translate("settings")("toasts.saveFailed")));
     },
-    onSuccess: (updated) => {
+    onSuccess: (updated, _input) => {
+      if (!privateMutationStillCurrent(_input)) return;
       utils.settings.get.setData(undefined, updated);
       setSaveState("saved");
       if (flashTimer.current !== null) clearTimeout(flashTimer.current);

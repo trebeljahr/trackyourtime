@@ -23,3 +23,10 @@ it("invalidates current private views on policy changes without retaining or pub
  const before = lifecycle.privateViewEpoch(); state.routing++; for (const f of state.routingListeners) f(); expect(lifecycle.privateViewEpoch()).not.toBe(before); expect(changed).toHaveBeenCalledTimes(2);
  for (const f of state.routingListeners) f(); expect(changed).toHaveBeenCalledTimes(2);
 });
+
+it("discards private form state across workspace switches while leaving standard-only accounts unchanged", async () => {
+ const lifecycle = await import("./private-view-lifecycle");
+ lifecycle.setPrivateViewWorkspaceContext("standard-one"); expect(lifecycle.privateViewEpoch()).toBe("0");
+ lifecycle.setPrivateViewWorkspaceContext("private-one"); lifecycle.notePrivateView({ server: state.server, userId: state.user! });
+ const privateEpoch = lifecycle.privateViewEpoch(); lifecycle.setPrivateViewWorkspaceContext("standard-two"); expect(lifecycle.privateViewEpoch()).not.toBe(privateEpoch);
+});

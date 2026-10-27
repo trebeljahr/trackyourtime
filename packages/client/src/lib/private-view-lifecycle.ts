@@ -5,13 +5,14 @@ const views = new Set<(scope: PrivateViewScope) => void>(), listeners = new Set<
 /** Only primitive epochs/public scope survive a lock. No decrypted view, root
  * key or workspace data is retained by this lifecycle channel. */
 const seen = new Set<string>();
+let workspaceContext: string | null = null;
 const scopeKey = ({ server, userId }: PrivateViewScope) => JSON.stringify([server, userId]);
 const currentScope = () => { const userId = privateAccountId(); return userId ? { server: privateDataOrigin(), userId } : null; };
 /** Standard accounts keep their forms when optional key setup changes a root.
  * Only an account that displayed private content uses a private view epoch. */
 export const privateViewEpoch = () => {
   const scope = currentScope();
-  return scope && seen.has(scopeKey(scope)) ? JSON.stringify([scope.server, scope.userId, privateSessionVersion(), privateRoutingRevision()]) : "0";
+  return scope && seen.has(scopeKey(scope)) ? JSON.stringify([scope.server, scope.userId, privateSessionVersion(), privateRoutingRevision(), workspaceContext]) : "0";
 };
 let lastEpoch = "0";
 const changed = () => { const next = privateViewEpoch(); if (next === lastEpoch) return; lastEpoch = next; for (const listener of listeners) listener(); };
@@ -26,3 +27,7 @@ export function notePrivateView(scope: PrivateViewScope) {
 }
 export function subscribePrivateView(listener: (scope: PrivateViewScope) => void) { views.add(listener); return () => { views.delete(listener); }; }
 export function subscribePrivateViewEpoch(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+
+/** Public selection only. Seen-private accounts remount forms and discard
+ * local filters before another workspace can issue requests. */
+export function setPrivateViewWorkspaceContext(workspaceId: string | null) { workspaceContext = workspaceId; changed(); }

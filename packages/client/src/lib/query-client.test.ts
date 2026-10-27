@@ -147,16 +147,17 @@ const withoutComments = (source: string): string =>
   source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
 describe("networkMode across the client", () => {
-  it("is written down in exactly one place", () => {
+  it("is restricted to queue owners and the verified private scheduling adapter", () => {
     const offenders = sourceFiles(srcDir).filter(
       (path) =>
         !path.endsWith(join("lib", "query-client.ts")) &&
+        !path.endsWith(join("hooks", "use-private-mutation-options.ts")) &&
         /networkMode\s*:/.test(withoutComments(readFileSync(path, "utf8"))),
     );
 
-    // Anything else spells it out ad hoc, which is how it went global the
-    // first time. Spread `OFFLINE_QUEUED_MUTATION` instead — and only into a
-    // mutation whose failure something actually catches.
+    // Standard writes still need a queue owner. The private hook permits only
+    // independently verified local replicas; its standard pause/resume and
+    // cold offline reads are exercised by private-local-forms.test.tsx.
     expect(offenders).toEqual([]);
   });
 
