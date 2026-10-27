@@ -27,6 +27,7 @@ const { readPrivateDeviceAccessState } = await import("@/lib/private-device-acce
 const { observedWorkspaceMode, rememberVerifiedWorkspaceModes } = await import("@/lib/private-workspace-mode-cache");
 const { useQuickStarts } = await import("./use-favorites");
 const { useClientMutations, useProjectMutations, useTaskMutations } = await import("@/components/catalog/use-catalog-mutations");
+const { usePrivateMutationOptions } = await import("@/hooks/use-private-mutation-options");
 const { useWorkspaceSettings } = await import("@/components/settings/use-workspace-settings");
 const { useTagMutations } = await import("@/components/tags/use-tags");
 const { notePrivateView, privateViewEpoch, subscribePrivateViewEpoch } = await import("@/lib/private-view-lifecycle");
@@ -209,4 +210,12 @@ it("saves shared private settings through the actual form hook offline using ind
   act(() => view.result.current.save({ currency: "NZD", defaultHourlyRate: 0 })); await waitFor(() => expect(view.result.current.saveState).toBe("saved"));
   expect(view.result.current.settings).toMatchObject({ currency: "NZD", defaultHourlyRate: 0, memberHourlyRate: 60 });
   expect(app.queryClient.getMutationCache().getAll().some(m => m.state.isPaused)).toBe(false); expect(state.error).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
+});
+
+it("executes the real private member-rate mutation offline without pausing or standard HTTP", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); await readPrivateDeviceAccessState("owner"); expect(observedWorkspaceMode("workspace")).toBe("encrypted"); const fetcher = vi.fn(() => { throw new Error("Private rate must stay local"); }); vi.stubGlobal("fetch", fetcher);
+  const app = wrapper(); onlineManager.setOnline(false);
+  const view = renderHook(() => trpc.members.updateRate.useMutation(usePrivateMutationOptions()), { wrapper: app.render });
+  await act(async () => { expect(await view.result.current.mutateAsync({ memberId: "member", hourlyRate: 0 })).toMatchObject({ memberId: "member", hourlyRate: 0 }); });
+  expect(view.result.current.isPaused).toBe(false); expect(fetcher).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
 });

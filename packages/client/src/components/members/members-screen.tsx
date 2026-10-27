@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { usePrivateMutationOptions } from "@/hooks/use-private-mutation-options";
+import { capturePrivateMutationAction, type PrivateMutationAction } from "@/lib/private-mutation-guard";
+import { PrivateContentUnavailableError } from "@/lib/private-content-error";
 import { Users } from "lucide-react";
 import type {
   InvitableRole,
@@ -40,8 +43,8 @@ import { trpc } from "@/lib/trpc";
 /** Which confirmation is open, and for whom. One slot, so two never stack. */
 type Pending =
   | null
-  | { kind: "remove"; row: WorkspaceMemberRow }
-  | { kind: "transfer"; row: WorkspaceMemberRow };
+  | { kind: "remove"; row: WorkspaceMemberRow; guard: PrivateMutationAction }
+  | { kind: "transfer"; row: WorkspaceMemberRow; guard: PrivateMutationAction };
 
 export type MembersScreenProps = {
   /** Injected by tests; a full page load in the app. */
@@ -67,7 +70,9 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
   const ta = useT("approvals");
   const ratesSupported = useServerSupports("members.rates");
   const tc = useT("common");
-  const utils = trpc.useUtils();
+  const utils = trpc.useUtils(), privateOptions = usePrivateMutationOptions();
+  const lifetime = React.useRef({ active: true });
+  React.useEffect(() => { const mounted = { active: true }; lifetime.current = mounted; return () => { mounted.active = false; }; }, []);
   const { workspace, isLoading: workspaceLoading } = useActiveWorkspace();
   const permissions = workspace?.permissions ?? null;
   // A personal workspace takes no invitations (the server refuses them), so
@@ -108,7 +113,7 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
     [refresh],
   );
 
-  const updateRate = trpc.members.updateRate.useMutation();
+  const updateRate = trpc.members.updateRate.useMutation(privateOptions);
   const updateRole = trpc.members.updateRole.useMutation();
   const updateVisibility = trpc.members.updateVisibility.useMutation();
   const removeMember = trpc.members.remove.useMutation();
@@ -118,16 +123,19 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
   const cancelInvitation = trpc.invitations.cancel.useMutation();
 
   const run = React.useCallback(
-    async (row: WorkspaceMemberRow, action: () => Promise<unknown>, success: string) => {
+    async (row: WorkspaceMemberRow, action: () => Promise<unknown>, success: string, guard = capturePrivateMutationAction()) => {
+      const mounted = lifetime.current, current = () => mounted.active && guard.current();
+      if (!current()) return;
       setBusyMemberId(row.memberId);
       try {
         await action();
+        if (!current()) return;
         toast.success(success);
         refresh();
       } catch (failure) {
-        fail(failure);
+        if (current()) fail(failure);
       } finally {
-        setBusyMemberId(null);
+        if (current()) setBusyMemberId(null);
       }
     },
     [fail, refresh],
@@ -151,37 +159,43 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
 
   const handleConfirmed = (): void => {
     if (confirm === null) return;
+    if (!confirm.guard.current()) { setConfirm(null); return; }
     const { row } = confirm;
     if (confirm.kind === "remove") {
       void run(
         row,
         () => removeMember.mutateAsync({ memberId: row.memberId }),
-        t("toasts.removed", { name: row.name }),
+        t("toasts.removed", { name: row.name }), confirm.guard,
       );
     } else {
       void run(
         row,
         () => transferOwnership.mutateAsync({ memberId: row.memberId }),
-        t("toasts.transferred", { name: row.name }),
+        t("toasts.transferred", { name: row.name }), confirm.guard,
       );
     }
   };
 
   const handleCancelInvitation = async (invitation: PendingInvitation): Promise<void> => {
+    const guard = capturePrivateMutationAction(), mounted = lifetime.current, current = () => mounted.active && guard.current();
     setBusyInvitationId(invitation.id);
     try {
       await cancelInvitation.mutateAsync({ invitationId: invitation.id });
+      if (!current()) return;
       toast.success(t("pending.canceled", { email: invitation.email }));
       refresh();
     } catch (failure) {
-      fail(failure);
+      if (current()) fail(failure);
     } finally {
-      setBusyInvitationId(null);
+      if (current()) setBusyInvitationId(null);
     }
   };
 
   const handleInvite = async (input: { email: string; role: InvitableRole }) => {
+    const guard = capturePrivateMutationAction(), mounted = lifetime.current;
     const result = await createInvitation.mutateAsync(input);
+    if (!mounted.active) throw new PrivateContentUnavailableError();
+    guard.check();
     void utils.invitations.list.invalidate();
     return result;
   };
@@ -231,8 +245,8 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
         onRateChange={(row, hourlyRate) => { void run(row, () => updateRate.mutateAsync({ memberId: row.memberId, hourlyRate }), ta("rateSaved")); }}
         onRoleChange={handleRoleChange}
         onVisibilityChange={handleVisibility}
-        onRemove={(row) => setConfirm({ kind: "remove", row })}
-        onTransfer={(row) => setConfirm({ kind: "transfer", row })}
+        onRemove={(row) => setConfirm({ kind: "remove", row, guard: capturePrivateMutationAction() })}
+        onTransfer={(row) => setConfirm({ kind: "transfer", row, guard: capturePrivateMutationAction() })}
       />
 
       {manages ? (

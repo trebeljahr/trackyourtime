@@ -11,7 +11,7 @@ import { notePrivateView } from "./private-view-lifecycle";
  * The shell reports pending delivery separately from this local result. */
 export async function mutatePrivateWorkspace(route: WorkspaceContentRoute, path: string, input: unknown) {
   const frozen = structuredClone(input); route.check();
-  if (route.mode !== "encrypted" || !route.scope.workspaceId || (!isPrivateFavoriteEdit(path) && !isPrivateCatalogEdit(path) && !isPrivateEntryEdit(path) && !isPrivateBusinessProfileEdit(path) && path !== "settings.update")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
+  if (route.mode !== "encrypted" || !route.scope.workspaceId || (!isPrivateFavoriteEdit(path) && !isPrivateCatalogEdit(path) && !isPrivateEntryEdit(path) && !isPrivateBusinessProfileEdit(path) && path !== "settings.update" && path !== "members.updateRate")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
   let copy: Awaited<ReturnType<typeof openPrivateWorkspaceSyncSession>> | null = null;
   try {
     copy = await openPrivateWorkspaceSyncSession(route.scope.userId, route.scope.workspaceId); route.check();
@@ -20,6 +20,7 @@ export async function mutatePrivateWorkspace(route: WorkspaceContentRoute, path:
     if (isPrivateFavoriteEdit(path)) saved = await copy.editFavorite(path, frozen);
     else if (isPrivateCatalogEdit(path)) saved = await copy.editCatalog(path, frozen);
     else if (isPrivateBusinessProfileEdit(path)) saved = await copy.editBusinessProfile(path, frozen);
+    else if (path === "members.updateRate") saved = await copy.editMemberRate(frozen);
     else if (path === "settings.update") {
       const preferences = await privateDisplayPreferences(route.scope.userId); route.check();
       saved = await copy.editSettings(frozen, preferences);

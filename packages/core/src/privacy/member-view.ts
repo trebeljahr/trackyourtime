@@ -13,7 +13,8 @@ export function privateMemberDisplayMetadata(options: Pick<PrivateViewOptions, "
   source.check(); return new Map(metadata?.members.map((row) => [row.userId, row]) ?? []);
 }
 /** Shared roster facts and financial counterparts remain in the private
- * replica. Live auth names/email/ids are optional display facts only. */
+ * replica. Live auth names/email are optional display facts only. Private
+ * mutation identity always stays bound to the original encrypted row. */
 export function privateMemberQuery(options: PrivateViewOptions & { input: unknown; metadata?: unknown }): WorkspaceMemberRow[] {
   const source = privateViewSource(options);
   const input = z.object({ workspaceId: id.optional() }).strict().parse(options.input ?? {});
@@ -29,7 +30,7 @@ export function privateMemberQuery(options: PrivateViewOptions & { input: unknow
     const display = metadata.get(member.userId), owner = trusted.role === "owner";
     const visible = canSeeMoneyFor(source.visibility, member.userId);
     const rate = visible ? z.number().finite().nonnegative().nullish().transform((value) => value ?? null).parse(source.paired(row, "memberMoney").hourlyRate) : undefined;
-    rows.set(member.userId, { memberId: display?.memberId ?? row.id, userId: member.userId,
+    rows.set(member.userId, { memberId: row.id, userId: member.userId,
       name: display?.name.trim() || member.name.trim(), email: display?.email ?? "",
       role: trusted.role, canViewOthersTime: owner || trusted.canViewOthersTime,
       canViewOthersMoney: owner || trusted.canViewOthersMoney,

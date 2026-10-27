@@ -9,8 +9,10 @@
  * at the workspace the server picked and reloads into it.
  */
 import "@testing-library/jest-dom/vitest";
+import { registerPrivateMutationActionCapture } from "@/lib/private-mutation-guard";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -108,9 +110,9 @@ vi.mock("@/lib/trpc", () => ({
   },
 }));
 
-vi.mock("@/components/ui/sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
+const toast = { success: vi.fn(), error: vi.fn() };
+vi.mock("@/components/ui/sonner", () => ({ toast }));
+vi.mock("@/hooks/use-private-mutation-options", () => ({ usePrivateMutationOptions: () => ({}) }));
 
 const { MembersScreen } = await import("./members-screen");
 
@@ -134,7 +136,7 @@ const everyInput = (): unknown[] =>
 
 beforeEach(() => {
   for (const fn of Object.values(calls)) fn.mockClear();
-  invitationsListQuery.mockClear();
+  invitationsListQuery.mockClear(); invalidate.mockClear(); toast.success.mockClear(); toast.error.mockClear();
   window.localStorage.clear();
 });
 
@@ -313,4 +315,21 @@ describe("MembersScreen as owner", () => {
       expect(JSON.stringify(input ?? {})).not.toContain("workspaceId");
     }
   });
+});
+
+it("refuses an earlier member-removal confirmation after its original scope changes", async () => {
+  let current = true; const release = registerPrivateMutationActionCapture(() => ({ current: () => current, check: () => {} }));
+  try {
+    as("owner"); render(<MembersScreen navigate={vi.fn()} />); fireEvent.click(screen.getByTestId("member-remove-member")); await screen.findByTestId("member-remove-dialog");
+    current = false; fireEvent.click(screen.getByTestId("confirm-accept")); expect(calls.remove).not.toHaveBeenCalled(); expect(toast.success).not.toHaveBeenCalled();
+  } finally { release(); }
+});
+it.each(["scope", "unmount"] as const)("ignores late member action completion after %s changes", async mode => {
+  let current = true, finish!: (value: object) => void; const release = registerPrivateMutationActionCapture(() => ({ current: () => current, check: () => {} }));
+  calls.updateVisibility.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  try {
+    as("owner"); const view = render(<MembersScreen navigate={vi.fn()} />); fireEvent.click(screen.getByTestId("member-money-toggle-member")); expect(calls.updateVisibility).toHaveBeenCalledOnce();
+    if (mode === "scope") current = false; else view.unmount(); await act(async () => { finish({}); });
+    expect(toast.success).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled(); expect(invalidate).not.toHaveBeenCalled();
+  } finally { release(); }
 });

@@ -239,7 +239,7 @@ it("joins private members and member report labels with separate account metadat
   const target = new URL(String(url)); expect(target.origin).toBe(state.origin); expect(target.pathname).toBe("/api/trpc/profile.workspaceMemberMetadata"); expect(JSON.parse(target.searchParams.get("input")!)).toEqual({ workspaceId: "workspace" });
   return Response.json({ result: { data: { workspaceId: "workspace", userId: "owner", members: [{ userId: "owner", memberId: "auth-owner", name: "Current account name", email: "owner@example.test" }] } } });
  }); vi.stubGlobal("fetch", fetcher);
- const api = client(); expect(await api.query("members.list", {})).toMatchObject([{ userId: "owner", memberId: "auth-owner", name: "Current account name", role: "owner", canViewOthersMoney: true, hourlyRate: 0 }]);
+ const api = client(); expect(await api.query("members.list", {})).toMatchObject([{ userId: "owner", memberId: "member", name: "Current account name", role: "owner", canViewOthersMoney: true, hourlyRate: 0 }]);
  expect(await api.query("reports.summary", { from: "2026-10-01", to: "2026-10-01", groupBy: "member", search: "Private member report filter", timeZone: "UTC" })).toMatchObject({ groups: [{ label: "Current account name", seconds: 3600 }] });
  expect(fetcher).toHaveBeenCalledTimes(2); await expect(api.mutation("members.updateVisibility", { memberId: "auth-owner", canViewOthersMoney: true })).rejects.toThrow("not available"); expect(fetcher).toHaveBeenCalledTimes(2); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
@@ -459,4 +459,19 @@ it("keeps private-only entry identities out of both standard HTTP and the direct
   const input = { description: "Private intent cannot downgrade", start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", __privateIntentId: crypto.randomUUID() };
   await expect(client().mutation("entries.create", input)).rejects.toThrow("standard storage"); await expect(offline.submitDurableEntry("entries.create", input, fetcher)).rejects.toThrow("standard queue");
   expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+
+it("changes member rates using private original IDs and snapshots only future entries without a standard write", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture());
+  const fetcher = vi.fn(async (url: RequestInfo | URL) => { expect(new URL(String(url)).pathname).toBe("/api/trpc/profile.workspaceMemberMetadata"); return Response.json({ result: { data: { workspaceId: "workspace", userId: "owner", members: [{ userId: "owner", memberId: "auth-owner", name: "Account display name", email: "owner@example.test" }] } } }); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), input = { description: "Private member rate hour", billable: true, start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z" };
+  expect(await api.query("members.list", {})).toMatchObject([{ memberId: "member", userId: "owner", hourlyRate: 60 }]);
+  const original = await api.mutation("entries.create", input) as { id: string; hourlyRate: number }; expect(original.hourlyRate).toBe(60);
+  await expect(api.mutation("members.updateRate", { memberId: "auth-owner", hourlyRate: 999 })).rejects.toThrow("could not be confirmed");
+  expect(await api.mutation("members.updateRate", { memberId: "member", hourlyRate: 0 })).toMatchObject({ memberId: "member", userId: "owner", hourlyRate: 0 });
+  const zero = await api.mutation("entries.create", input) as { id: string; hourlyRate: number }; expect(zero.hourlyRate).toBe(0);
+  expect(await api.mutation("members.updateRate", { memberId: "member", hourlyRate: null })).toMatchObject({ hourlyRate: null });
+  expect(await api.mutation("entries.create", input)).toMatchObject({ hourlyRate: 80 });
+  expect(await api.query("entries.get", { id: original.id })).toMatchObject({ hourlyRate: 60 }); expect(await api.query("entries.get", { id: zero.id })).toMatchObject({ hourlyRate: 0 });
+  expect(fetcher).toHaveBeenCalledOnce(); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });
