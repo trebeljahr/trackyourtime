@@ -7,6 +7,7 @@ import type { ReportExportFormat } from "@starter/shared";
 import type { WorkspaceContentRoute } from "./private-content-route";
 import { PrivateContentUnavailableError } from "./private-content-error";
 import type { ExportedFile, ReportExportRequest } from "./report-export";
+import { privateWorkspaceMemberMetadata } from "./private-member-metadata";
 import { openPrivateWorkspaceSession } from "./private-workspace-session";
 
 /** Explicit user export only. The downloaded file is plaintext by intent;
@@ -21,7 +22,8 @@ export async function exportPrivateReportFile(route: WorkspaceContentRoute, form
     const check = () => { route.check(); if (!opened.current()) throw new PrivateContentUnavailableError("Private data changed before export finished"); };
     check(); const view = await opened.read(); check();
     const now = Date.now(), timeZone = resolveTimeZone(input.timeZone);
-    const data = privateReportExportData({ input: { ...input, format }, scope: opened.scope, directory: opened.directory, policy: opened.policy, records: view.records, now, current: () => { try { check(); return true; } catch { return false; } } });
+    const metadata = input.report === "summary" && input.groupBy === "member" ? await privateWorkspaceMemberMetadata(opened) : undefined; check();
+    const data = privateReportExportData({ metadata, input: { ...input, format }, scope: opened.scope, directory: opened.directory, policy: opened.policy, records: view.records, now, current: () => { try { check(); return true; } catch { return false; } } });
     const filename = csvFilename(data.report, data.filenameRange.from, data.filenameRange.to).replace(/\.csv$/, `.${format}`);
     if (format === "csv") {
       const csv = data.report === "summary" ? toCsv(summaryCsvRows(data.result), summaryCsvColumns(data.result.moneyVisible))

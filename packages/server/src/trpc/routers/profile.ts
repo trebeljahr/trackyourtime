@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { readWorkspaceMemberMetadata } from "../../services/membership/display-metadata.js";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc.js";
 import { setAvatarSchema, updateProfileSchema, normalizeDisplayPreferences } from "@starter/shared";
@@ -6,6 +8,10 @@ import { Profile } from "../../models/Profile.js";
 import { removeAvatar, storeAvatar } from "../../services/avatar/index.js";
 
 export const profileRouter = router({
+  workspaceMemberMetadata: protectedProcedure.input(z.object({ workspaceId: z.string().min(1).max(100) }).strict()).query(async ({ ctx, input }) => {
+    ctx.res?.setHeader("Cache-Control", "no-store");
+    return readWorkspaceMemberMetadata(ctx.user.id, input.workspaceId);
+  }),
   /** Existing account preferences only. Never read WorkspaceSettings/member
    * rates or create a row while a private workspace is rendering. */
   displayPreferences: protectedProcedure.query(async ({ ctx }) => {

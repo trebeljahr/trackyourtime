@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery } from "@starter/core";
+import { accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery } from "@starter/core";
 import { privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
 import { privateAccountInventoryStorageHost } from "./private-replica";
 import { privateAccountId, privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion, whenPrivateAccountReady } from "./private-session";
@@ -7,6 +7,7 @@ import { openPrivateWorkspaceSession } from "./private-workspace-session";
 import { PrivateContentUnavailableError } from "./private-content-error";
 export { PrivateContentUnavailableError } from "./private-content-error";
 import { privateDisplayPreferences } from "./private-display-preferences";
+import { privateWorkspaceMemberMetadata } from "./private-member-metadata";
 import { notePrivateView } from "./private-view-lifecycle";
 /** All content-bearing app routers, including queries whose filters contain
  * descriptions, client names, or other private values. Unsupported private
@@ -71,7 +72,7 @@ export async function assertStandardWorkspaceContent(userId: string, workspaceId
 export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, path: string, input: unknown, type: string) {
   route.check();
   if (route.mode !== "encrypted" || !route.scope.workspaceId) throw new PrivateContentUnavailableError();
-  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list" && path !== "settings.get" && path !== "settings.businessProfile" && path !== "reports.trackedSpan" && !isPrivateReportQuery(path))) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
+  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list" && path !== "settings.get" && path !== "settings.businessProfile" && path !== "reports.trackedSpan" && !isPrivateReportQuery(path) && path !== "members.list")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
   let session: Awaited<ReturnType<typeof openPrivateWorkspaceSession>> | null = null;
   try {
     session = await openPrivateWorkspaceSession(route.scope.userId, route.scope.workspaceId);
@@ -80,7 +81,11 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     route.check(); const view = await session.read(); route.check();
     const opened = session;
     const options = { input, scope: opened.scope, directory: opened.directory, records: view.records, current: () => { try { route.check(); return opened.current(); } catch { return false; } } };
-    if (isPrivateReportQuery(path)) return privateReportQuery({ ...options, path, policy: opened.policy });
+    if (path === "members.list") { const metadata = await privateWorkspaceMemberMetadata(options); route.check(); return privateMemberQuery({ ...options, metadata }); }
+    if (isPrivateReportQuery(path)) {
+      const metadata = path === "reports.summary" && input !== null && typeof input === "object" && "groupBy" in input && input.groupBy === "member" ? await privateWorkspaceMemberMetadata(options) : undefined;
+      route.check(); return privateReportQuery({ ...options, path, metadata, policy: opened.policy });
+    }
     if (path === "reports.trackedSpan") return privateReportTrackedSpan(options);
     if (path === "settings.businessProfile") return await privateBusinessProfileQuery(options);
     if (path === "settings.get") { const preferences = await privateDisplayPreferences(route.scope.userId); route.check(); return privateSettingsQuery({ ...options, preferences }); }

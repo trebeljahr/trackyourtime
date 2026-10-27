@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, it, mock } from "node:test";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -203,4 +203,16 @@ it("local CSV bytes and browser PDF text match actual standard export plans", as
       }
     }
   } finally { clock.mock.restore(); }
+});
+
+it("uses current account names for member summaries without using metadata as a permission source", async () => {
+ const clock = mock.method(Date, "now", () => NOW), connection = mongoose.connection as unknown as { db: unknown }, prior = connection.db;
+ try {
+  const f = await fixture(), members = store.members.rows.map((row) => ({ userId: String(row.userId), memberId: String(row._id), name: `Renamed ${row.userId}`, email: `${row.userId}@example.test` }));
+  connection.db = { collection: () => ({ find: () => ({ toArray: async () => members.map((member) => ({ _id: new Types.ObjectId(member.userId), name: member.name })) }) }) };
+  const metadata = { workspaceId: WORKSPACE, userId: OWNER, members };
+  const local = privateReportQuery({ ...f, path: "reports.summary", input: { ...range, groupBy: "member" }, metadata, now: NOW });
+  assert.deepEqual(local, await buildSummary(f.standardScope, range, "member"));
+  assert.throws(() => privateReportQuery({ ...f, path: "reports.summary", input: { ...range, groupBy: "member" }, metadata: { ...metadata, members: [{ ...members[0]!, role: "owner", hourlyRate: 999 }] }, now: NOW }));
+ } finally { connection.db = prior; clock.mock.restore(); }
 });

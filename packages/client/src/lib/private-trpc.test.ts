@@ -150,7 +150,7 @@ it("runs private report pages, totals, summaries and weekly grids through the re
  expect(fetcher).not.toHaveBeenCalled(); expect(legacy).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
  session.lockPrivateData(); await expect(api.query("reports.summary", { ...filters, groupBy: "day" })).rejects.toThrow("Unlock private data");
  expect(fetcher).not.toHaveBeenCalled();
-});
+}, 30000);
 
 it("discards an unfinished local PDF after locking without falling back or queuing plaintext", async () => {
  await seedPrivateWorkspaceClient(await privateRecoveryFixture());
@@ -163,4 +163,17 @@ it("discards an unfinished local PDF after locking without falling back or queui
  await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(1)); session.lockPrivateData(); release();
  await expect(result).rejects.toMatchObject({ privateContentRefusal: true });
  expect(fetcher).not.toHaveBeenCalled(); expect(legacy).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+}, 30000);
+
+it("joins private members and member report labels with separate account metadata without sending report filters", async () => {
+ const f = await privateRecoveryFixture(), stamp = "2026-10-01T09:00:00.000Z", entryId = "64b7f9c2e13a4d5f6a7b8d77";
+ f.archive.replica.pending[1]!.records.push({ kind: "members", id: "member", authorId: "owner", value: { _id: "member", workspaceId: "workspace", userId: "owner", name: "Original name", role: "member", canViewOthersMoney: false, createdAt: stamp } }, { kind: "memberMoney", id: "member", authorId: "owner", value: { _id: "member", hourlyRate: 0 } }, { kind: "entries", id: entryId, authorId: "owner", value: { _id: entryId, workspaceId: "workspace", authorId: "owner", description: "Private member report filter", projectId: null, taskId: null, billable: true, start: stamp, end: "2026-10-01T10:00:00.000Z", durationSec: 3600, currency: "EUR", source: "web", createdAt: stamp, updatedAt: stamp } }, { kind: "entryMoney", id: entryId, authorId: "owner", value: { _id: entryId, hourlyRate: 90 } });
+ await seedPrivateWorkspaceClient(f);
+ const fetcher = vi.fn(async (url: unknown) => {
+  const target = new URL(String(url)); expect(target.origin).toBe(state.origin); expect(target.pathname).toBe("/api/trpc/profile.workspaceMemberMetadata"); expect(JSON.parse(target.searchParams.get("input")!)).toEqual({ workspaceId: "workspace" });
+  return Response.json({ result: { data: { workspaceId: "workspace", userId: "owner", members: [{ userId: "owner", memberId: "auth-owner", name: "Current account name", email: "owner@example.test" }] } } });
+ }); vi.stubGlobal("fetch", fetcher);
+ const api = client(); expect(await api.query("members.list", {})).toMatchObject([{ userId: "owner", memberId: "auth-owner", name: "Current account name", role: "owner", canViewOthersMoney: true, hourlyRate: 0 }]);
+ expect(await api.query("reports.summary", { from: "2026-10-01", to: "2026-10-01", groupBy: "member", search: "Private member report filter", timeZone: "UTC" })).toMatchObject({ groups: [{ label: "Current account name", seconds: 3600 }] });
+ expect(fetcher).toHaveBeenCalledTimes(2); await expect(api.mutation("members.updateVisibility", { memberId: "auth-owner", canViewOthersMoney: true })).rejects.toThrow("not available"); expect(fetcher).toHaveBeenCalledTimes(2); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });

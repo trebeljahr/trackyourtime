@@ -45,3 +45,5 @@ export * from "./display-preferences.js";
 export * from "./business-logo-inspection.js";
 
 export * from "./report-range.js";
+
+export * from "./workspace-member-metadata.js";

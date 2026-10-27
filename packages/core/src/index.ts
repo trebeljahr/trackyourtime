@@ -88,3 +88,6 @@ export * from "./privacy/report-view.js";
 
 export * from "./report-csv.js";
 export * from "./report-export.js";
+
+export * from "./privacy/member-view.js";
+export type { PrivateViewOptions } from "./privacy/view-source.js";

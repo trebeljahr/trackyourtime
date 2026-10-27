@@ -13,6 +13,7 @@ import {
   tagGroupIdentities, withholdSummaryMoney, type GroupAccumulator,
   type ReportRange, type TagLabel,
 } from "../report-math.js";
+import { privateMemberDisplayMetadata } from "./member-view.js";
 import { privateEntryReader } from "./entry-view.js";
 import { privateReportBoundForPolicy, privateReportRangeForPolicy, requirePrivateWorkspacePolicy, type VerifiedPrivateWorkspacePolicy } from "./mode-policy.js";
 import { privateViewSource, type PrivateViewOptions } from "./view-source.js";
@@ -26,7 +27,7 @@ const label = z.object({ _id: id, workspaceId: id, name: z.string().max(200) });
 const projectSchema = label.extend({ color, clientId: id.nullish().transform((value) => value ?? null) });
 const clientSchema = label.extend({ color: color.nullish().transform((value) => value ?? null) });
 const hex = (value: string | null | undefined) => value && /^[0-9a-f]{24}$/i.test(value) ? value.toLowerCase() : null;
-type Options = PrivateViewOptions & { policy: VerifiedPrivateWorkspacePolicy; path: PrivateReportQueryPath; input: unknown; now?: number };
+type Options = PrivateViewOptions & { policy: VerifiedPrivateWorkspacePolicy; path: PrivateReportQueryPath; input: unknown; now?: number; metadata?: unknown };
 
 /** Same report math as the standard engine, over one short-lived verified
  * local view. Filters, labels and decrypted results never leave this call. */
@@ -153,7 +154,8 @@ function readPrivateReport(options: Options, allRows = false): DetailedReportRes
         if (member.userId !== row.authorId || seen.has(member.userId)) throw new Error("Private report member identity is ambiguous");
         members.set(member.userId, member); seen.add(member.userId);
       }
-      const labels = resolveMemberLabels(authors, members, new Map());
+      const display = privateMemberDisplayMetadata(options, options.metadata);
+      const labels = resolveMemberLabels(authors, members, new Map([...display].map(([id, row]) => [id, row.name])));
       for (const group of groups.values()) group.label = labels.get(group.key) ?? FORMER_MEMBER_LABEL;
     }
     for (const [date, dayShares] of shares) timeline.get(date)!.shares = [...dayShares].filter(([, seconds]) => seconds > 0).map(([key, seconds]) => ({ key, seconds })).sort((a, b) => b.seconds - a.seconds || a.key.localeCompare(b.key));

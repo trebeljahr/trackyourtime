@@ -6,16 +6,7 @@ import { privateWorkspaceStorage } from "./private-session";
 import { privateScopedRpc } from "./private-scoped-rpc";
 import { currentServerApiLevel } from "./server-level";
 const KEY = "account-display-preferences";
-function networkFailure(input: unknown) {
-  const seen = new Set<unknown>(); let error = input;
-  for (let i = 0; i < 5 && error && typeof error === "object" && !seen.has(error); i++) {
-    seen.add(error);
-    if ((error as { data?: { code?: unknown } }).data?.code) return false;
-    if (error instanceof TypeError) return true;
-    error = (error as { cause?: unknown }).cause;
-  }
-  return false;
-}
+import { privateMetadataNetworkFailure } from "./private-metadata-network";
 /** Account preferences remain ordinary account metadata on the server. Their
  * device copy is encrypted; this read never asks for workspace settings/money.
  * Cached rendering preferences grant no workspace or device authorization. */
@@ -33,7 +24,7 @@ export async function privateDisplayPreferences(userId: string): Promise<UserPre
     const { rpc, supported } = privateScopedRpc(userId, "profile.displayPreferences");
     let raw;
     try { supported(); raw = await rpc.profile.displayPreferences.query(); supported(); }
-    catch (error) { binding.check(); if (cached && networkFailure(error)) return cached; throw error; }
+    catch (error) { binding.check(); if (cached && privateMetadataNetworkFailure(error)) return cached; throw error; }
     const next = validate(raw); binding.check();
     await host.exclusive(async () => { binding.check(); await storage.setItem(KEY, JSON.stringify(next)); binding.check(); }); binding.check(); return next;
   } finally { host.close(); }
