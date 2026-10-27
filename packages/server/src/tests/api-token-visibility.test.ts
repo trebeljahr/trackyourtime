@@ -123,6 +123,7 @@ describe("what a narrowed visibility then permits", () => {
 // `TimerReach` is the distinction between the two principals, and these tests
 // are the proof that the confined one cannot reach across.
 import mongoose from "mongoose";
+import { PrivateWorkspace } from "../models/PrivateData.js";
 import { TimeEntry, type TimeEntryDocLike } from "../models/TimeEntry.js";
 import {
   DEFAULT_USER_PREFERENCES,
@@ -233,6 +234,8 @@ const stubbable = TimeEntry as unknown as {
   findOneAndUpdate: StubbedFindOneAndUpdate;
   create: StubbedCreate;
 };
+const privateModes = PrivateWorkspace as unknown as { findOne: () => { lean: () => Promise<null> } };
+const realPrivateModeFindOne = privateModes.findOne;
 const realFindOne = stubbable.findOne;
 const realFindOneAndUpdate = stubbable.findOneAndUpdate;
 const realCreate = stubbable.create;
@@ -273,6 +276,7 @@ const withStubbedEntries = async (
   run: () => Promise<void>,
   docs: readonly TimeEntryDocLike[] = WORKSPACE_B_ENTRIES,
 ): Promise<void> => {
+  privateModes.findOne = () => ({ lean: async () => null });
   queried = [];
   updated = [];
   inserted = [];
@@ -302,6 +306,7 @@ const withStubbedEntries = async (
   try {
     await run();
   } finally {
+    privateModes.findOne = realPrivateModeFindOne;
     stubbable.findOne = realFindOne;
     stubbable.findOneAndUpdate = realFindOneAndUpdate;
     stubbable.create = realCreate;

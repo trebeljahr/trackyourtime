@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { ObjectId, type ClientSession, type Db, type Document, type Filter } from "mongodb";
 import { TRPCError } from "@trpc/server";
+import { ENTRY_OPERATION_RESULT_WORKSPACE_PATHS } from "../entries/operation-scopes.js";
 import { RECOVERY_KINDS } from "@starter/shared";
 
 /** Clear routing placeholders carry no original workspace name, slug or logo.
@@ -11,7 +12,7 @@ export function privateWorkspaceRoutingIdentity(workspaceId: string, kind?: unkn
   return { name: "Private workspace", slug: `private-${createHash("sha256").update(workspaceId).digest("hex").slice(0, 24)}`, ...(kind === undefined ? {} : { kind }) };
 }
 type RawRow = Document & { _id: string | ObjectId };
-export type PrivateRetirementLeak = { collection: string; reason: "original-records" | "integration-content" | "personal-labels" | "source-checksums" | "unknown-fields" | "unclassified-records"; records: number };
+export type PrivateRetirementLeak = { collection: string; reason: "original-records" | "cross-workspace-content" | "integration-content" | "personal-labels" | "source-checksums" | "unknown-fields" | "unclassified-records"; records: number };
 const privateFields: Record<string, string[]> = {
   privatepreparationrequests: ["userId", "workspaceId", "migrationId", "requestDigest", "expiresAt"],
   privatesourcechallengerequests: ["userId", "workspaceId", "challenge", "expiresAt"],
@@ -59,6 +60,10 @@ export async function auditPrivateWorkspaceRetirement(db: Db, workspaceId: strin
     if (rows[0]?.records) leaks.push({ collection, reason: "unknown-fields", records: rows[0].records });
   };
   for (const collection of RECOVERY_KINDS) if (collection !== "workspacemembers") await count(collection, "original-records", { workspaceId });
+  // The receipt's routing/charged workspace can differ from the timer it
+  // returned or replaced. Do not claim retirement while another workspace's
+  // receipt still carries original descriptions, rates or workspace names.
+  await count("entryoperations", "cross-workspace-content", { workspaceId: { $ne: workspaceId }, $or: ENTRY_OPERATION_RESULT_WORKSPACE_PATHS.map(path => ({ [`result.${path}`]: workspaceId })) });
   for (const collection of ["webhooksubscriptions", "webhookdeliveries"]) await count(collection, "integration-content", { workspaceId });
   await count("apitokens", "personal-labels", { workspaceId, ...outside("name", [null, ""]) });
   await unknownFields("apitokens", { workspaceId }, ["_id", "workspaceId", "userId", "name", "prefix", "tokenHash", "scopes", "grantedVisibility", "expiresAt", "lastUsedAt", "revokedAt", "createdAt", "updatedAt", "__v"]);

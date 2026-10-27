@@ -1,4 +1,5 @@
-import { transactional, transactionSession } from "../business-transaction.js";
+import { fenceWorkspace, transactional, transactionSession } from "../business-transaction.js";
+import { assertStandardWorkspace } from "../privacy/access.js";
 // The running timer: starting, stopping, discarding, continuing, and the
 // runaway prompt.
 //
@@ -316,6 +317,13 @@ const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
   }
 };
 
+async function assertStandardTimerWorkspace(workspaceId: string): Promise<void> {
+  // Contend with conversion before reading its mode, including when the timer
+  // belongs to a workspace other than the one selected by the request.
+  if (transactionSession()) await fenceWorkspace(workspaceId);
+  await assertStandardWorkspace(workspaceId);
+}
+
 /**
  * The running entry (`end === null`), or null when the timer is stopped.
  *
@@ -328,23 +336,18 @@ const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
  * Under a workspace reach it answers null instead of a timer running
  * elsewhere. See {@link TimerReach}.
  */
-export async function currentEntry(
+async function currentEntryImpl(
   scope: WorkspaceScope,
   reach: TimerReach,
 ): Promise<TimeEntryWire | null> {
-  // A confined caller leaves early when the person's timer is running in
-  // another workspace, rather than waking the guard for an entry it is then
-  // going to withhold anyway. The guard is confined too (it is handed the same
-  // reach below), so this is an early exit and not the confinement itself —
-  // deleting it would cost a read, not correctness.
-  if (reach.kind === "workspace") {
-    const here = await TimeEntry.findOne({
-      authorId: scope.userId,
-      workspaceId: reach.workspaceId,
-      end: null,
-    }).lean();
-    if (!here) return null;
-  }
+  // A token looks only in its own workspace and learns nothing about a
+  // foreign timer. A person-wide read first identifies the actual workspace
+  // before any legacy runaway evaluation can touch its retained originals.
+  const initial = await TimeEntry.findOne({ authorId: scope.userId, end: null, ...reachFilter(reach) }).lean();
+  if (!initial) return null;
+  // The selected workspace gate does not cover person-wide timer reach. Do
+  // not run legacy guards or return retained originals from another mode.
+  await assertStandardTimerWorkspace(initial.workspaceId);
 
   // Where the runaway guard is evaluated on read. The runaway-reminder job
   // evaluates it on a schedule too; this is the fallback between polls and
@@ -358,14 +361,20 @@ export async function currentEntry(
   // The guard already holds the authoritative document; re-reading it
   // would only re-race the write that just landed.
   if (outcome.kind === "ended") return null;
-  if (outcome.kind === "flagged") return withinReach(outcome.entry, reach);
+  if (outcome.kind === "flagged") {
+    await assertStandardTimerWorkspace(outcome.entry.workspaceId);
+    return withinReach(outcome.entry, reach);
+  }
 
   const running = await TimeEntry.findOne({
     authorId: scope.userId,
     end: null,
     ...reachFilter(reach),
   }).lean();
-  return running ? toClientTimeEntry(running) : null;
+  if (!running) return null;
+  // A concurrent start can change which workspace the final lookup found.
+  await assertStandardTimerWorkspace(running.workspaceId);
+  return toClientTimeEntry(running);
 }
 
 /**
@@ -788,6 +797,8 @@ export async function replacedByStart(
     end: stopped.end,
   };
 }
+
+export const currentEntry = transactional(currentEntryImpl);
 
 export const stopRunningEntry = transactional(stopRunningEntryImpl);
 

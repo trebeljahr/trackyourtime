@@ -3,7 +3,9 @@ import { TRPCError } from "@trpc/server";
 import { EntryOperation } from "../../models/EntryOperation.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import { isValidObjectId } from "mongoose";
-import { supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
+import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
+import { entryOperationResultWorkspaceIds } from "./operation-scopes.js";
+import { assertStandardWorkspace } from "../privacy/access.js";
 import type { WorkspaceScope } from "../scope.js";
 
 const hash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -33,9 +35,16 @@ export async function withEntryOperation<T>(
   const read = async (): Promise<{ result: T } | null> => {
     const receipt = await EntryOperation.findById(id).lean();
     if (!receipt) return null;
+    if (receipt.userId !== scope.userId) throw new TRPCError({ code: "FORBIDDEN" });
     if (receipt.requestHash !== requestHash || receipt.operation !== operation) throw new TRPCError({
       code: "CONFLICT", message: "OPERATION_ID_REUSED",
     });
+    // A stop/discard receipt can be charged to a different workspace than its
+    // request key. Older start receipts also embed a replacement-workspace
+    // name. Neither original may cross the standard boundary after conversion.
+    if (typeof receipt.workspaceId !== "string" || !receipt.workspaceId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The stored entry operation scope cannot be verified." });
+    const workspaces = new Set([receipt.workspaceId, ...entryOperationResultWorkspaceIds(receipt.result)]);
+    for (const workspaceId of [...workspaces].sort()) { await fenceWorkspace(workspaceId); await assertStandardWorkspace(workspaceId); }
     return { result: receipt.result as T };
   };
   try {
@@ -65,7 +74,7 @@ export async function withEntryOperation<T>(
     // Concurrent identical requests can race on the first insert. Only a
     // committed matching receipt converts that duplicate-key failure to success.
     if ((error as { code?: unknown })?.code === 11000) {
-      const prior = await read();
+      const prior = await withBusinessTransaction(read);
       if (prior) return prior.result;
     }
     throw error;

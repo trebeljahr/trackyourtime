@@ -86,6 +86,18 @@ describe("private workspace residual plaintext audit", { skip: skipWithoutDataba
     assert.equal(await db().collection("timeentries").countDocuments(), 1);
     assert.equal(await db().collection("webhooksubscriptions").countDocuments(), 1);
   });
+  it("detects private content embedded in receipts owned by another workspace without exposing its values", async () => {
+    for (const [index, result] of [
+      { workspaceId, description: "Retained private timer description" },
+      { workspaceId: "standard", replaced: { workspaceId, workspaceName: "Retained private workspace name" } },
+      { entry: { workspaceId, description: "Retained entry snapshot" } },
+      { stopped: { workspaceId, description: "Retained stopped snapshot" } },
+    ].entries()) await db().collection("entryoperations").insertOne({ workspaceId: "other", result, requestHash: `private receipt checksum ${index}` });
+    await db().collection("entryoperations").insertOne({ workspaceId: "other", result: { workspaceId: "unrelated", replaced: null } });
+    const report = await auditPrivateWorkspaceRetirement(db(), workspaceId);
+    assert.deepEqual(report.leaks, [{ collection: "entryoperations", reason: "cross-workspace-content", records: 4 }]);
+    assert.doesNotMatch(JSON.stringify(report), /Retained|checksum|description|other|unrelated/);
+  });
   it("requires pinned encrypted state even in an otherwise empty database", async () => {
     await assert.rejects(withBusinessTransaction(() => assertPrivateWorkspaceRetirement(db(), workspaceId, transactionSession()!)), /pinned encrypted workspace/);
     await db().collection("privateworkspaces").insertOne({ workspaceId, state: "encrypted", revision: 1, head: "A".repeat(43), directoryDigest: "B".repeat(43), backupVerified: true, sourceRevision: "retired" });
