@@ -61,6 +61,7 @@ it.each([null, "synthetic-native-session"])("boots a pinned private workspace us
     const value = await opened.read(); expect(value.records).toHaveLength(2);
     expect(value.records.map((row) => row.value)).toContainEqual({ name: "Confidential shared tag" });
     expect(value.records.map((row) => row.value)).toContainEqual({ description: "Confidential personal pin" });
+    expect((await opened.readKinds(["tags"])).records.map((row) => row.value)).toEqual([{ name: "Confidential shared tag" }]);
     expect(await opened.checkpoint()).toEqual({ activationRoot: f.snapshot.root, revision: 1, head: f.snapshot.root, pending: 0 });
     expect(f.fetcher).toHaveBeenCalledTimes(4);
     for (const [, input] of f.fetcher.mock.calls) {

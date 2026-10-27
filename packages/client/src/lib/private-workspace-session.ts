@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -78,6 +78,7 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
       scope, policy, directory: verifiedDirectory, current, close,
       exportRecovery: async () => { assertPolicy(); const value = await replica.exportRecovery(); assertPolicy(); return value; },
       read: async () => { assertPolicy(); const value = await replica.read(); assertPolicy(); return value; },
+      readKinds: async (kinds: readonly PrivateKind[]) => { assertPolicy(); const value = await replica.readKinds(kinds); assertPolicy(); return value; },
       checkpoint: async () => { assertPolicy(); const value = await replica.checkpoint(); assertPolicy(); return value; },
     };
   } catch (error) { closed = true; host?.close(); throw error; }
@@ -88,7 +89,7 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
  * separate path and cannot be used to select an active plaintext adapter. */
 export async function openPrivateWorkspaceSession(userId: string, workspaceId: string) {
   const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
-  return { scope: copy.scope, policy: copy.policy, directory: copy.directory, current: copy.current, close: copy.close, read: copy.read, checkpoint: copy.checkpoint };
+  return { scope: copy.scope, policy: copy.policy, directory: copy.directory, current: copy.current, close: copy.close, read: copy.read, readKinds: copy.readKinds, checkpoint: copy.checkpoint };
 }
 /** Capture includes exact pending packets and inventory conflicts without
  * replaying them. Private pins are immutable, so a profile reread can be paired

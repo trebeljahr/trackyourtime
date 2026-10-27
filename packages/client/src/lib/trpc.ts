@@ -18,6 +18,7 @@ import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
+import { readWorkspaceList } from "./private-workspace-list";
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -84,6 +85,29 @@ export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => 
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
     : withWorkspaceId(op.input, PENDING_WORKSPACE);
   return next(input === op.input ? op : { ...op, input });
+};
+
+/** Account-wide private navigation resolves before any standard list request. */
+export const privateWorkspaceListLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
+  if (op.path !== "workspaces.list" || op.type !== "query") return next(op);
+  return observable((observer) => {
+    const abort = new AbortController(); let subscription: { unsubscribe: () => void } | undefined;
+    void (async () => {
+      await Promise.all([whenApiOriginReady(), whenActiveWorkspaceReady()]);
+      if (abort.signal.aborted) return;
+      const value = await readWorkspaceList(() => new Promise((resolve, reject) => {
+        const cancel = () => reject(new Error("Workspace lookup canceled"));
+        abort.signal.addEventListener("abort", cancel, { once: true });
+        subscription = next(op).subscribe({
+          next: (result) => { if (result.result.type === undefined || result.result.type === "data") { abort.signal.removeEventListener("abort", cancel); resolve(result.result.data as never); } },
+          error: (error) => { abort.signal.removeEventListener("abort", cancel); reject(error); },
+          complete: () => { abort.signal.removeEventListener("abort", cancel); reject(new Error("Workspace list returned no data")); },
+        });
+      }), abort.signal);
+      if (!abort.signal.aborted) { observer.next({ result: { data: value } }); observer.complete(); }
+    })().catch((error) => { if (!abort.signal.aborted) observer.error(TRPCClientError.from(error)); });
+    return () => { abort.abort(); subscription?.unsubscribe(); };
+  });
 };
 
 /** Consume private operations before the legacy outbox or transport can see
@@ -324,6 +348,7 @@ export function getTRPCClient({ streamQueries = true }: { streamQueries?: boolea
   return trpc.createClient({
     links: [
       workspaceLink(),
+      privateWorkspaceListLink(),
       privateContentLink(),
       durableEntryLink(),
       syncSnapshotLink(),

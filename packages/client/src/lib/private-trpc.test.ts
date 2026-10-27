@@ -8,7 +8,7 @@ import { OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: () => state.ready(), rebaseApiUrl: (url: string) => url }));
-vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => "workspace", isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), workspaceNameFor: () => "Synthetic workspace" }));
+vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => "workspace", isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace"]), getKnownWorkspacesOwner: () => "owner", getActiveWorkspaceSnapshot: () => ({ activeId: "workspace", workspaces: null }), workspaceNameFor: () => "Synthetic workspace" }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => API_LEVEL, noteClientTooOld: () => {} }));
 vi.mock("./native-session", () => ({ getNativeToken: () => null }));
@@ -25,6 +25,13 @@ beforeEach(async () => {
 });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const client = () => getUntypedClient(getTRPCClient({ streamQueries: false }));
+it("serves verified private workspace names and permissions through the real account-wide client without HTTP", async () => {
+  const f = await privateRecoveryFixture();
+  f.archive.replica.pending[1]!.records.push({ kind: "workspaceIdentity", id: "organization", authorId: null, value: { workspaceId: "workspace", organization: { _id: "workspace", name: "Trusted private studio", kind: "team" } } });
+  await seedPrivateWorkspaceClient(f); const fetcher = vi.fn(() => { throw new Error("Navigation must stay local"); }); vi.stubGlobal("fetch", fetcher);
+  expect(await client().query("workspaces.list")).toMatchObject([{ id: "workspace", name: "Trusted private studio", role: "owner", memberCount: 1, permissions: { inviteMembers: true } }]);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 it("serves real app catalog queries from the private replica without standard HTTP or a legacy queue", async () => {
   await seedPrivateWorkspaceClient(await privateRecoveryFixture());
   const fetcher = vi.fn(() => { throw new Error("Unexpected standard transport"); }); vi.stubGlobal("fetch", fetcher);

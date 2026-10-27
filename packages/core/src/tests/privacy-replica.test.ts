@@ -47,6 +47,22 @@ it("keeps queued work encrypted, freezes nested inputs before waiting, and survi
   assert.equal(canonicalJson(f.calls[0]), canonicalJson(f.calls[1]));
   assert.equal((await reopened.read()).records[0]!.value.description, "Sensitive client work");
 });
+it("reads selected kinds across confirmed history and pending replacements/deletions without changing the checkpoint", async () => {
+  const f = await fixture(), tag: PlainPrivateRecord = { kind: "tags", id: "tag", authorId: null, value: { name: "Original" } };
+  await f.replica.enqueue({ records: [plain("entry"), tag] }); await f.replica.flushOne(f.transport);
+  await f.replica.enqueue({ records: [{ ...tag, value: { name: "Pending" } }] });
+  const reopened = await f.reopen(), before = await reopened.checkpoint(), selected = await reopened.readKinds(["tags"]);
+  assert.deepEqual(selected.records, [{ ...tag, value: { name: "Pending" } }]);
+  assert.deepEqual(selected, { ...await reopened.read(), records: selected.records });
+  assert.deepEqual(await reopened.checkpoint(), before);
+  await reopened.enqueue({ records: [], remove: [{ kind: "tags", id: "tag", authorId: null }] });
+  assert.deepEqual((await reopened.readKinds(["tags"])).records, []);
+  assert.equal((await reopened.readKinds(["entries"])).records.length, 1);
+  await assert.rejects(reopened.readKinds([]));
+  await assert.rejects(reopened.readKinds(["unknown" as "tags"]));
+  const waiting = reopened.readKinds(["entries"]); f.lock(); f.unlock();
+  await assert.rejects(waiting, PrivateStorageLockedError);
+});
 it("never sends an edit whose local durable write could not be confirmed", async () => {
   const backing = memoryStorage(); let drops = false;
   const faulty: KeyValueStorage = { ...backing, setItem: async (key, value) => { if (!drops) await backing.setItem(key, value); } };

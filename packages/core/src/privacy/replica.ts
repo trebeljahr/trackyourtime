@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { canWritePrivateRecord, encryptedRecordSchema, privateRecordRefSchema, privateWorkspaceChainSchema, signedPrivateWorkspaceEditSchema, type PrivateWorkspaceChange, type PrivateChainedWorkspaceChange, type SignedPrivateChainedEdit } from "@starter/shared";
+import { canWritePrivateRecord, encryptedRecordSchema, privateKindSchema, PRIVATE_KINDS, type PrivateKind, privateRecordRefSchema, privateWorkspaceChainSchema, signedPrivateWorkspaceEditSchema, type PrivateWorkspaceChange, type PrivateChainedWorkspaceChange, type SignedPrivateChainedEdit } from "@starter/shared";
 import type { QueueExclusive } from "../durable-entry.js";
 import type { KeyValueStorage } from "../storage.js";
 import { canonicalJson, type PublicKey } from "./crypto.js";
@@ -115,6 +115,21 @@ export async function createPrivateWorkspaceReplica(options: {
     await save({ v: 1, revision: 1, head: root, activationRoot: root, records: [...records], pending: [] }); access.check();
     return { revision: 1 as const };
   };
+  /** Capture before waiting: a queued read cannot revive after lock/re-unlock.
+   * Narrow views decrypt only selected kinds, including their optimistic edits. */
+  const readView = async (kinds?: ReadonlySet<PrivateKind>) => {
+    const access = identity();
+    return options.exclusive(async () => {
+      access.check(); const state = await load(); access.check();
+      const values = new Map<string, PlainPrivateRecord>();
+      for (const row of state.records) { if (kinds && !kinds.has(row.kind)) continue; values.set(address(row), await decryptPrivateRecord(workspaceId, row, userId, access.privateKey)); access.check(); }
+      for (const pending of state.pending) {
+        for (const row of pending.records) if (!kinds || kinds.has(row.kind)) values.set(address(row), row);
+        for (const row of pending.remove) if (!kinds || kinds.has(row.kind)) values.delete(address(row));
+      }
+      access.check(); return { revision: state.revision, head: state.head, pending: state.pending.length, conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)), records: [...values.values()] };
+    });
+  };
   return {
     namespace: encrypted.namespace,
     exportRecovery: () => options.exclusive(async () => { const access = identity(), state = await load(); access.check(); return structuredClone(state); }),
@@ -159,16 +174,8 @@ export async function createPrivateWorkspaceReplica(options: {
         access.check(); await save(state); access.check(); return operationId;
       });
     },
-    read: () => options.exclusive(async () => {
-      const access = identity(), state = await load(); access.check();
-      const values = new Map<string, PlainPrivateRecord>();
-      for (const row of state.records) { values.set(address(row), await decryptPrivateRecord(workspaceId, row, userId, access.privateKey)); access.check(); }
-      for (const pending of state.pending) {
-        for (const row of pending.records) values.set(address(row), row);
-        for (const row of pending.remove) values.delete(address(row));
-      }
-      return { revision: state.revision, head: state.head, pending: state.pending.length, conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)), records: [...values.values()] };
-    }),
+    read: () => readView(),
+    readKinds: async (kinds: readonly PrivateKind[]) => readView(new Set(z.array(privateKindSchema).min(1).max(PRIVATE_KINDS.length).parse(kinds))),
     pull: (transport: PrivateReplicaTransport, through?: number) => options.exclusive(() => pull(transport, through)),
     flushOne: (transport: PrivateReplicaTransport) => options.exclusive(async () => {
       const access = identity(), state = await load(); access.check();
