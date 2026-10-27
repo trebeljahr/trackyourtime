@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ProjectOption } from "./types";
 import { registerPrivateMutationActionCapture } from "@/lib/private-mutation-guard";
-const state = vi.hoisted(() => ({ scope: 0, fetch: vi.fn(), error: vi.fn(), success: vi.fn(), update: vi.fn(), create: vi.fn() }));
+const state = vi.hoisted(() => ({ scope: 0, mode: null as "encrypted" | "standard" | null, fetch: vi.fn(), error: vi.fn(), success: vi.fn(), update: vi.fn(), create: vi.fn() }));
+vi.mock("@/lib/active-workspace", () => ({ getActiveWorkspaceId: () => "workspace" }));
+vi.mock("@/lib/private-workspace-mode-cache", async (original) => ({ ...await original<typeof import("@/lib/private-workspace-mode-cache")>(), observedWorkspaceMode: () => state.mode }));
 vi.mock("@/lib/trpc", () => ({ trpc: { useUtils: () => ({ projects: { billingImpact: { fetch: state.fetch } } }) } }));
 vi.mock("@/components/ui/sonner", () => ({ toast: { error: state.error, success: state.success } }));
 vi.mock("@/lib/format", () => ({ useFormatSettings: () => ({ currency: "EUR", money: (value: number) => `EUR ${value}`, settings: { defaultHourlyRate: 80 } }) }));
@@ -16,7 +19,7 @@ const project: ProjectOption = { id: "project", workspaceId: "workspace", name: 
 let restore: () => void;
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  state.scope = 0; state.fetch.mockReset(); state.error.mockClear(); state.success.mockClear(); state.update.mockReset(); state.create.mockReset();
+  state.scope = 0; state.mode = null; state.fetch.mockReset(); state.error.mockClear(); state.success.mockClear(); state.update.mockReset(); state.create.mockReset();
   restore = registerPrivateMutationActionCapture(() => { const at = state.scope; return { current: () => state.scope === at, check: () => { if (state.scope !== at) throw new Error("Scope changed"); } }; });
 });
 afterEach(() => { cleanup(); restore(); vi.unstubAllGlobals(); });
@@ -83,4 +86,14 @@ it("ignores a stale modal click rather than answering a newer question with it",
   act(() => { latest = hook.result.current.ask({ ...project, name: "Newer project" }, next); }); await waitFor(() => expect(hook.result.current.dialog.props.open).toBe(true)); expect(await first).toBeNull();
   let settled = false; void latest.then(() => { settled = true; }); fireEvent.click(screen.getByTestId("apply-to-entries-accept")); await act(async () => { await Promise.resolve(); }); expect(settled).toBe(false);
   old.unmount(); hook.unmount(); expect(await latest).toBeNull();
+});
+
+it("shows the real private count and offers only the supported future-entry save", async () => {
+  const count = deferred<{ entries: number; invoiced: number }>(); state.fetch.mockReturnValue(count.promise); const hook = renderHook(() => useApplyToEntriesPrompt()); let result!: Promise<unknown>;
+  act(() => { result = hook.result.current.ask(project, next); });
+  await act(async () => { state.mode = "encrypted"; count.resolve({ entries: 7, invoiced: 2 }); });
+  const dialog = render(hook.result.current.dialog);
+  expect(screen.getByTestId("apply-to-entries-count")).toHaveTextContent("Your 7 earlier entries"); expect(screen.getByTestId("apply-to-entries-invoiced")).toHaveTextContent("2 invoiced entries");
+  expect(screen.getByText("In private workspaces, billing changes currently apply only to new entries.")).toBeInTheDocument(); expect(screen.queryByTestId("apply-to-entries-accept")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("apply-to-entries-new-only")); expect(await result).toBe("new-only"); dialog.unmount();
 });

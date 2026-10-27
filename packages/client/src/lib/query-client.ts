@@ -121,7 +121,7 @@ export const createAppQueryClient = (): QueryClient => {
   // scope and grants for every read. Standard queries keep radio pausing.
   const localPaths = [
     "clients.list", "clients.options", "projects.list", "projects.options",
-    "tasks.list", "tasks.options", "tasks.projectLinks", "tags.list",
+    "tasks.list", "tasks.options", "tasks.projectLinks", "tags.list", "projects.billingImpact",
     "entries.list", "entries.get", "entries.recent", "entries.descriptions",
     "favorites.list", "settings.get", "settings.businessProfile", "members.list",
     "reports.rows", "reports.totals", "reports.detailed", "reports.summary",

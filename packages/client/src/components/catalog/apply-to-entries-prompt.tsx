@@ -2,19 +2,15 @@
 
 import * as React from "react";
 import { capturePrivateMutationAction } from "@/lib/private-mutation-guard";
+import { getActiveWorkspaceId } from "@/lib/active-workspace";
+import { observedWorkspaceMode } from "@/lib/private-workspace-mode-cache";
 import type { ProjectBillingImpact } from "@starter/shared";
+import { ProjectBillingConfirmationBody, type BillingChange, type BillingConfirmationView } from "./project-billing-confirmation";
+export type { BillingChange } from "./project-billing-confirmation";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { translate, useT } from "@/i18n/use-t";
+import { translate } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { errorMessage, type ProjectOption } from "./types";
 
@@ -25,11 +21,6 @@ import { errorMessage, type ProjectOption } from "./types";
 export type ApplyChoice = "entries" | "new-only" | null;
 
 /** The billing half of a project update. */
-export type BillingChange = {
-  billableDefault: boolean;
-  hourlyRate: number | null;
-};
-
 /** True when `next` would change what new entries on `project` are billed at. */
 export function billingChanged(
   project: Pick<ProjectOption, "billableDefault" | "hourlyRate">,
@@ -41,13 +32,7 @@ export function billingChanged(
   );
 }
 
-type Pending = {
-  project: ProjectOption;
-  next: BillingChange;
-  impact: ProjectBillingImpact;
-  resolve: (choice: ApplyChoice) => void;
-  current: () => boolean;
-};
+type Pending = BillingConfirmationView & { resolve: (choice: ApplyChoice) => void; current: () => boolean };
 
 export type ApplyToEntriesPrompt = {
   /**
@@ -70,8 +55,6 @@ export type ApplyToEntriesPrompt = {
  * two cannot describe the same rewrite differently.
  */
 export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
-  const t = useT("catalog");
-  const tc = useT("common");
   const utils = trpc.useUtils();
   const [pending, setPending] = React.useState<Pending | null>(null);
   const pendingRef = React.useRef<Pick<Pending, "resolve" | "current"> | null>(null);
@@ -108,7 +91,7 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
       return new Promise<ApplyChoice>((resolve) => {
         pendingRef.current?.resolve(null);
         const task = { resolve, current }; pendingRef.current = task;
-        setPending({ project, next, impact, ...task });
+        setPending({ project, next, impact, private: observedWorkspaceMode(getActiveWorkspaceId()) === "encrypted", ...task });
       });
     },
     [utils],
@@ -122,10 +105,6 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
     setPending(null);
   };
 
-  const flagChanged =
-    pending !== null &&
-    pending.project.billableDefault !== pending.next.billableDefault;
-
   const dialog = (
     <Dialog
       open={pending !== null}
@@ -133,64 +112,7 @@ export function useApplyToEntriesPrompt(): ApplyToEntriesPrompt {
         if (!open) settle(null);
       }}
     >
-      <DialogContent className="sm:max-w-md" data-testid="apply-to-entries-dialog">
-        {pending ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{t("applyToEntries.title")}</DialogTitle>
-              <DialogDescription asChild>
-                <div className="space-y-2 text-sm text-muted-foreground">
-                  <p data-testid="apply-to-entries-count">
-                    {t("applyToEntries.count", {
-                      count: pending.impact.entries,
-                      project: pending.project.name,
-                    })}
-                  </p>
-                  <p>
-                    {flagChanged
-                      ? t("applyToEntries.flagChanged", {
-                          count: pending.impact.entries,
-                          billable: pending.next.billableDefault
-                            ? "billable"
-                            : "nonBillable",
-                        })
-                      : t("applyToEntries.rateOnly")}
-                  </p>
-                  {pending.impact.invoiced > 0 ? (
-                    <p data-testid="apply-to-entries-invoiced">
-                      {t("applyToEntries.invoiced", {
-                        count: pending.impact.invoiced,
-                      })}
-                    </p>
-                  ) : null}
-                </div>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => settle(null)}
-                data-testid="apply-to-entries-cancel"
-              >
-                {tc("actions.cancel")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => settle("new-only")}
-                data-testid="apply-to-entries-new-only"
-              >
-                {t("applyToEntries.newOnly")}
-              </Button>
-              <Button
-                onClick={() => settle("entries")}
-                data-testid="apply-to-entries-accept"
-              >
-                {t("applyToEntries.accept", { count: pending.impact.entries })}
-              </Button>
-            </DialogFooter>
-          </>
-        ) : null}
-      </DialogContent>
+      <ProjectBillingConfirmationBody pending={pending} settle={settle} />
     </Dialog>
   );
 

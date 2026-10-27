@@ -89,3 +89,17 @@ it("refuses partial money pairs, wrong record scope, duplicate IDs, ungranted ti
   const restricted = await fixture(false, false); restricted.add("entries", "ungranted", { authorId: "peer", projectId: "project", taskId: null, durationSec: 0, start: stamp, end: null, billable: false, currency: "EUR" }, "peer");
   assert.throws(() => restricted.read("tags.list"), /ungranted time/);
 });
+it("counts only the caller's original private project time for billing impact without opening money", async () => {
+  const f = await fixture(false, false);
+  f.add("entries", "billed-own", { authorId: "viewer", projectId: "project", invoiceId: "invoice" }, "viewer");
+  f.add("entries", "other-own", { authorId: "viewer", projectId: "zero-rate", invoiceId: null }, "viewer");
+  f.add("entries", "ignored-peer", { authorId: "peer", projectId: "project", invoiceId: null }, "peer");
+  f.records.splice(0, f.records.length, ...f.records.filter((row) => !["entryMoney", "projectMoney", "memberMoney", "settingsMoney", "clientMoney"].includes(row.kind)));
+  const before = structuredClone(f.records); assert.deepEqual(f.read("projects.billingImpact", { id: "project" }), { entries: 1, invoiced: 1 }); assert.deepEqual(f.records, before);
+});
+it("refuses forged authors, unknown projects, foreign scope and stale private billing counts", async () => {
+  const f = await fixture(); assert.throws(() => f.read("projects.billingImpact", { id: "missing" }), /not found/);
+  assert.throws(() => f.read("projects.billingImpact", { id: "project", workspaceId: "foreign" }), /belongs/); assert.throws(() => f.read("projects.billingImpact", { id: "project", search: "unknown" }));
+  const row = f.records.find((row) => row.kind === "entries" && row.authorId === "viewer")!; row.value.authorId = "peer"; assert.throws(() => f.read("projects.billingImpact", { id: "project" }), /author/); row.value.authorId = "viewer";
+  f.lock(); assert.throws(() => f.read("projects.billingImpact", { id: "project" }), /changed/);
+});

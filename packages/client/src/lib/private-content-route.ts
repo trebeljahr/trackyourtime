@@ -82,7 +82,7 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     session = await openPrivateWorkspaceSession(route.scope.userId, route.scope.workspaceId);
     route.check();
     notePrivateView(route.scope);
-    route.check(); const view = await session.read(); route.check();
+    route.check(); const view = path === "projects.billingImpact" ? await session.readKinds(["projects", "entries"]) : await session.read(); route.check();
     const opened = session;
     const options = { input, scope: opened.scope, directory: opened.directory, records: view.records, current: () => { try { route.check(); return opened.current(); } catch { return false; } } };
     if (path === "members.list") { const metadata = await privateWorkspaceMemberMetadata(options); route.check(); return privateMemberQuery({ ...options, metadata }); }

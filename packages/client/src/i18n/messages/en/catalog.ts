@@ -65,6 +65,9 @@ export const catalog = {
   },
   /** The question after a billing change: does it reach time already booked? */
   applyToEntries: {
+    privateCount: "{count, plural, one {Your # earlier entry on {project} keeps its saved billing.} other {Your # earlier entries on {project} keep their saved billing.}}",
+    privateTitle: "Save billing for new entries?",
+    privateNotice: "In private workspaces, billing changes currently apply only to new entries.",
     title: "Update existing entries?",
     count:
       "{count, plural, one {# time entry on {project} keeps the billing it was saved with.} other {# time entries on {project} keep the billing they were saved with.}} New entries use the new billing either way.",

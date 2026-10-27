@@ -418,3 +418,15 @@ it("does not revive an earlier private request after the device policy changes d
   const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher); resume(); await expect(pending).rejects.toThrow("changed");
   expect(await copy.checkpoint()).toEqual(before); expect(fetcher).not.toHaveBeenCalled(); copy.close();
 });
+
+it("reads private billing impact locally and keeps historical rates when the project changes for future entries", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); const fetcher = vi.fn(() => { throw new Error("Private billing must stay local"); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), project = await api.mutation("projects.create", { name: "Private rate history", hourlyRate: 90 }) as { id: string };
+  const input = { description: "Historical private hour", projectId: project.id, start: "2026-10-27T10:00:00.000Z", end: "2026-10-27T11:00:00.000Z", billable: true };
+  const old = await api.mutation("entries.create", input) as { id: string }; expect(await api.query("projects.billingImpact", { id: project.id })).toEqual({ entries: 1, invoiced: 0 });
+  await expect(api.mutation("projects.update", { id: project.id, hourlyRate: 120, applyToEntries: true })).rejects.toThrow();
+  expect(await api.mutation("projects.update", { id: project.id, hourlyRate: 120, applyToEntries: false })).toMatchObject({ hourlyRate: 120, entriesRewritten: null });
+  expect(await api.query("entries.get", { id: old.id })).toMatchObject({ hourlyRate: 90 });
+  expect(await api.mutation("entries.create", { ...input, description: "New private hour" })).toMatchObject({ hourlyRate: 120 });
+  expect(await api.query("projects.billingImpact", { id: project.id })).toEqual({ entries: 2, invoiced: 0 }); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});

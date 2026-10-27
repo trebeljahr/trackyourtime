@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { canSeeEntry, clientBillingSchema, clientListSchema, computeBudgetProgress, entryDurationSec, hasBudgetTarget, IDLE_BEHAVIORS, normalizeClientBilling, pickCatalogColor, projectBillableByDefault, projectListSchema, projectProjectForVisibility, resolveHourlyRate, rollupVisibility, SUPPORTED_LOCALES, tagListSchema, taskListSchema, TASK_COLOR_OFFSET, type Client, type Project, type Tag, type Task } from "@starter/shared";
+import { canSeeEntry, clientBillingSchema, clientListSchema, computeBudgetProgress, entryDurationSec, hasBudgetTarget, IDLE_BEHAVIORS, normalizeClientBilling, pickCatalogColor, projectBillableByDefault, projectBillingImpactSchema, projectListSchema, projectProjectForVisibility, resolveHourlyRate, rollupVisibility, SUPPORTED_LOCALES, tagListSchema, taskListSchema, TASK_COLOR_OFFSET, type Client, type Project, type Tag, type Task } from "@starter/shared";
 import type { VerifiedPrivateDirectory } from "./directory.js";
 import type { PlainPrivateRecord } from "./records.js";
 import { privateViewSource } from "./view-source.js";
@@ -11,7 +11,7 @@ const clientSchema = common.extend({ invoiceLocale: z.enum(SUPPORTED_LOCALES).nu
 const projectSchema = common.extend({ clientId: nullableId, billableDefault: z.boolean(), estimatedHours: money, idleBehavior: z.enum(IDLE_BEHAVIORS).nullish().transform((value) => value ?? null) });
 const projectMoneySchema = z.object({ hourlyRate: money, budgetAmount: money, budgetCurrency: z.string().regex(/^[A-Z]{3}$/).nullish().transform((value) => value ?? null) });
 const entrySchema = z.object({ _id: id, workspaceId: id, authorId: id, projectId: nullableId, taskId: nullableId, clientId: id.nullable().optional(), tagIds: z.array(id).default([]), durationSec: z.number().int().nonnegative(), start: timestamp, end: timestamp.nullish().transform((value) => value ?? null), billable: z.boolean(), currency: z.string().regex(/^[A-Z]{3}$/) });
-const supported = ["clients.list", "clients.options", "projects.list", "projects.options", "tasks.list", "tasks.options", "tasks.projectLinks", "tags.list"] as const;
+const supported = ["clients.list", "clients.options", "projects.list", "projects.options", "projects.billingImpact", "tasks.list", "tasks.options", "tasks.projectLinks", "tags.list"] as const;
 export type PrivateCatalogQueryPath = typeof supported[number];
 export const isPrivateCatalogQuery = (path: string): path is PrivateCatalogQueryPath => (supported as readonly string[]).includes(path);
 type Scope = { server: string; workspaceId: string; userId: string };
@@ -82,6 +82,18 @@ export function privateCatalogQuery(options: {
   };
   let result;
   switch (path) {
+    case "projects.billingImpact": {
+      const args = projectBillingImpactSchema.strict().parse(filter), project = ofKind("projects").find((row) => row.id === args.id);
+      if (!project || project.authorId !== null) throw new Error("Project not found"); value(project);
+      let entries = 0, invoiced = 0;
+      for (const row of ofKind("entries")) {
+        if (row.authorId !== scope.userId) continue;
+        const entry = z.object({ authorId: id, projectId: nullableId, invoiceId: nullableId }).parse(value(row));
+        if (entry.authorId !== scope.userId) throw new Error("Entry author differs from its signed record");
+        if (entry.projectId === args.id) { if (entry.invoiceId === null) entries++; else invoiced++; }
+      }
+      check(); return { entries, invoiced };
+    }
     case "clients.list": case "clients.options": {
       const args = clientListSchema.strict().parse(filter), clients = baseClients().filter((row) => args.includeArchived || !row.archived);
       if (path === "clients.options") { result = clients; break; }

@@ -56,6 +56,9 @@ export const catalog: Translation<typeof source> = {
     saveChanges: "Änderungen speichern",
   },
   applyToEntries: {
+    privateCount: "{count, plural, one {Dein # bisheriger Zeiteintrag in {project} behält seine gespeicherte Abrechnung.} other {Deine # bisherigen Zeiteinträge in {project} behalten ihre gespeicherte Abrechnung.}}",
+    privateTitle: "Abrechnung für neue Einträge speichern?",
+    privateNotice: "In privaten Arbeitsbereichen gelten Änderungen an der Abrechnung derzeit nur für neue Einträge.",
     title: "Bestehende Einträge aktualisieren?",
     count:
       "{count, plural, one {# Zeiteintrag in {project} behält die Abrechnung, mit der er gespeichert wurde.} other {# Zeiteinträge in {project} behalten die Abrechnung, mit der sie gespeichert wurden.}} Neue Einträge verwenden in jedem Fall die neue Abrechnung.",

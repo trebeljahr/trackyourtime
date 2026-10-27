@@ -161,3 +161,10 @@ it("keeps an old optimistic draft out of cache when device policy changes withou
   await act(async () => { await requirePrivateRouting({ server: state.origin, userId: "owner" }, () => true, true); resume(); });
   await waitFor(() => expect(mutation.state.status).toBe("error")); expect(writes).toEqual([]); expect(state.error).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
 });
+
+it("reads a cold private billing count while offline without waiting for the radio", async () => {
+  await seedPrivateWorkspaceClient(await privateManualEntryFixture()); await readPrivateDeviceAccessState("owner"); vi.stubGlobal("fetch", vi.fn(() => { throw new Error("Private count must stay local"); }));
+  const api = getTRPCClient({ streamQueries: false }), project = await api.projects.create.mutate({ name: "Offline private billing", hourlyRate: 80 });
+  const app = wrapper(); onlineManager.setOnline(false); const view = renderHook(() => trpc.projects.billingImpact.useQuery({ id: project.id }), { wrapper: app.render });
+  await waitFor(() => expect(view.result.current.isSuccess).toBe(true)); expect(view.result.current.data).toEqual({ entries: 0, invoiced: 0 }); expect(fetch).not.toHaveBeenCalled(); view.unmount(); app.queryClient.clear();
+});
