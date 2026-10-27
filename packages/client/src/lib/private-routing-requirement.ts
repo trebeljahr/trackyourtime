@@ -1,3 +1,4 @@
+import { eraseStoredWorkspaceNames, noteWorkspaceNameProtection } from "./workspace-name-privacy";
 import type { KeyValueStorage } from "@starter/core";
 import { isCapacitor } from "./shell";
 import { preferencesStorage } from "@/mobile/preferences-storage";
@@ -24,6 +25,14 @@ const keyOf = (scope: { server: string; userId: string }) => {
  * the signed encrypted inventory to choose an adapter after every restart.
  * It is not proof of current policy, and there is no downgrade/remove API.
  * Clearing all device storage or using a new device needs trusted enrollment. */
+/** Synchronous hydration may only use this on web. It requires unlock, never
+ * authorizes routing or proves that a private inventory is current. */
+export function privateRoutingRequiredOnWeb(scope: { server: string; userId: string }): boolean {
+  if (typeof window === "undefined") return false;
+  const raw = window.localStorage.getItem(keyOf(scope));
+  if (raw !== null && raw !== VALUE) throw new Error("Private routing metadata could not be verified");
+  return raw === VALUE;
+}
 export async function privateRoutingRequired(scope: { server: string; userId: string }): Promise<boolean> {
   const raw = await storage().getItem(keyOf(scope));
   if (raw !== null && raw !== VALUE) throw new Error("Private routing metadata could not be verified; existing data was kept");
@@ -34,8 +43,9 @@ export async function requirePrivateRouting(scope: { server: string; userId: str
   check(); const raw = await backing.getItem(key); check();
   if (raw !== null && raw !== VALUE) throw new Error("Private routing metadata could not be verified; existing data was kept");
   const policyChanged = digest !== undefined && digests.get(key) !== digest;
-  if (raw === VALUE) { if (digest) digests.set(key, digest); if (policyChanged || (publishing && !digest)) changed(); return; }
+  if (raw === VALUE) { await eraseStoredWorkspaceNames(scope, current); check(); noteWorkspaceNameProtection(scope); if (digest) digests.set(key, digest); if (policyChanged || (publishing && !digest)) changed(); return; }
   await backing.setItem(key, VALUE); check();
   if (await backing.getItem(key) !== VALUE) throw new Error("Could not confirm private routing protection; existing data was kept"); check();
+  await eraseStoredWorkspaceNames(scope, current); check(); noteWorkspaceNameProtection(scope);
   if (digest) digests.set(key, digest); changed();
 }

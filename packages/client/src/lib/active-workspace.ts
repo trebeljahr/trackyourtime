@@ -44,23 +44,10 @@ import {
 } from "@/mobile/preferences-storage";
 import { getAbsoluteApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
 
-/** Where the last known membership list is remembered. */
-export const KNOWN_WORKSPACES_STORAGE_KEY = "trackyourtime.known-workspaces";
-
-type KnownWorkspaces = {
-  /** The account the list was fetched for. */
-  userId: string;
-  /** The server it came from — workspace ids mean nothing on another one. */
-  server: string;
-  workspaces: WorkspaceSummary[];
-  /**
-   * Every workspace name this account has been seen in on this device,
-   * including ones it has since left. A row held for a workspace the person
-   * was removed from is described by name ("Start “Design” in Acme") rather
-   * than as an anonymous id — the list the server sends no longer contains it.
-   */
-  names: Record<string, string>;
-};
+import { KNOWN_WORKSPACES_STORAGE_KEY, publicWorkspaceDirectory, workspaceDirectoryExclusive, strictWorkspaceDirectoryStorage, eraseStoredWorkspaceNames, subscribeWorkspaceNameProtection, type KnownWorkspaces } from "./workspace-name-privacy";
+import { privateRoutingRequired, privateRoutingRequiredOnWeb } from "./private-routing-requirement";
+import { privateSession, subscribePrivateSession, subscribePrivateAccount } from "./private-session";
+export { KNOWN_WORKSPACES_STORAGE_KEY } from "./workspace-name-privacy";
 
 /** Enough for anyone's history of workspaces; the oldest names drop first. */
 const MAX_REMEMBERED_NAMES = 50;
@@ -139,6 +126,8 @@ let known: KnownWorkspaces | null = null;
 let snapshot: ActiveWorkspaceSnapshot = { activeId: null, workspaces: null };
 let hydration: Promise<void> | null = null;
 let hydrated = false;
+let protectedScope: string | null = null;
+const scopeKey = ({ server, userId }: { server: string; userId: string }) => JSON.stringify([server, userId]);
 
 const listeners = new Set<() => void>();
 
@@ -183,7 +172,7 @@ const publish = (notify = true): void => {
  * `whenActiveWorkspaceReady` and the fetch wrapper in `lib/trpc.ts`.
  */
 const hydrateSyncOnWeb = (): void => {
-  if (hydrated || typeof window === "undefined" || shouldUseNativeStorage()) {
+  if (hydrated || hydration !== null || typeof window === "undefined" || shouldUseNativeStorage()) {
     return;
   }
   try {
@@ -192,6 +181,15 @@ const hydrateSyncOnWeb = (): void => {
     known = parseKnown(
       window.localStorage.getItem(KNOWN_WORKSPACES_STORAGE_KEY)
     );
+    if (known) {
+      let required = true;
+      try { required = privateRoutingRequiredOnWeb(known); } catch { /* Uncertain privacy metadata never exposes cached names. */ }
+      if (required) {
+        const scope = { server: known.server, userId: known.userId }; protectedScope = scopeKey(scope); known = publicWorkspaceDirectory(known);
+        hydration = eraseStoredWorkspaceNames(scope, () => true).then(() => { hydrated = true; publish(); });
+        hydration.catch(() => undefined); publish(false); return;
+      }
+    }
   } catch {
     // Storage denied: nothing stored, the first list decides.
   }
@@ -212,6 +210,10 @@ export const whenActiveWorkspaceReady = (): Promise<void> => {
   hydrateSyncOnWeb();
   hydration ??= (async () => {
     await whenApiOriginReady();
+    if (typeof window !== "undefined" && shouldUseNativeStorage()) {
+      const legacy = parseKnown(window.localStorage.getItem(KNOWN_WORKSPACES_STORAGE_KEY));
+      if (legacy && await privateRoutingRequired(legacy)) await eraseStoredWorkspaceNames(legacy, () => true);
+    }
     const store = getStorage();
     const [id, list] = await Promise.all([
       store.getItem(ACTIVE_WORKSPACE_STORAGE_KEY),
@@ -221,6 +223,10 @@ export const whenActiveWorkspaceReady = (): Promise<void> => {
     if (!hydrated) {
       storedId = id !== null && id !== "" ? id : storedId;
       known = known ?? parseKnown(list);
+    }
+    if (known && await privateRoutingRequired(known)) {
+      protectedScope = scopeKey(known); known = publicWorkspaceDirectory(known);
+      await eraseStoredWorkspaceNames(known, () => true);
     }
     hydrated = true;
     publish();
@@ -314,45 +320,57 @@ export const applyWorkspaceList = async (
   userId: string
 ): Promise<WorkspaceListOutcome> => {
   await whenActiveWorkspaceReady();
-  const before = snapshot.activeId;
-  const previous = knownHere();
-  const sameAccount = previous !== null && previous.userId === userId;
+  return workspaceDirectoryExclusive(async () => {
+    const scope = { userId, server: getAbsoluteApiOrigin() };
+    const required = typeof window !== "undefined" && await privateRoutingRequired(scope);
+    if (required) protectedScope = scopeKey(scope);
+    const before = snapshot.activeId;
+    const previous = knownHere();
+    const sameAccount = previous !== null && previous.userId === userId;
 
-  const names: Record<string, string> = sameAccount ? { ...previous.names } : {};
-  for (const workspace of workspaces) {
-    // Re-inserted so the current ones are the newest keys.
-    delete names[workspace.id];
-    names[workspace.id] = workspace.name;
-  }
-  const ids = Object.keys(names);
-  for (const id of ids.slice(0, Math.max(0, ids.length - MAX_REMEMBERED_NAMES))) {
-    delete names[id];
-  }
-  known = {
-    userId,
-    server: getAbsoluteApiOrigin(),
-    workspaces: [...workspaces],
-    names,
-  };
-  // Another account's stored choice is not this account's.
-  if (!sameAccount && previous !== null) storedId = null;
-  publish();
+    const names: Record<string, string> = sameAccount ? { ...previous.names } : {};
+    for (const workspace of workspaces) {
+      // Re-inserted so the current ones are the newest keys.
+      delete names[workspace.id];
+      names[workspace.id] = workspace.name;
+    }
+    const ids = Object.keys(names);
+    for (const id of ids.slice(0, Math.max(0, ids.length - MAX_REMEMBERED_NAMES))) {
+      delete names[id];
+    }
+    known = {
+      userId,
+      server: getAbsoluteApiOrigin(),
+      workspaces: [...workspaces],
+      names,
+    };
+    if (required && !privateSession(userId)) known = publicWorkspaceDirectory(known);
+    // Another account's stored choice is not this account's.
+    if (!sameAccount && previous !== null) storedId = null;
+    publish();
 
-  const after = snapshot.activeId;
-  const lost =
-    before !== null &&
-    after !== before &&
-    sameAccount &&
-    !workspaces.some((w) => w.id === before)
-      ? (previous.workspaces.find((w) => w.id === before) ?? null)
-      : null;
+    const after = snapshot.activeId;
+    const lost =
+      before !== null &&
+      after !== before &&
+      sameAccount &&
+      !workspaces.some((w) => w.id === before)
+        ? (previous.workspaces.find((w) => w.id === before) ?? null)
+        : null;
 
-  await getStorage().setItem(KNOWN_WORKSPACES_STORAGE_KEY, JSON.stringify(known));
-  if (after !== null && after !== storedId) {
-    storedId = after;
-    await getStorage().setItem(ACTIVE_WORKSPACE_STORAGE_KEY, after);
-  }
-  return { activeId: after, previousId: before, changed: after !== before, lost };
+    const persisted = JSON.stringify(required ? publicWorkspaceDirectory(known) : known);
+    if (required) {
+      const strict = strictWorkspaceDirectoryStorage();
+      await strict.setItem(KNOWN_WORKSPACES_STORAGE_KEY, persisted);
+      if (await strict.getItem(KNOWN_WORKSPACES_STORAGE_KEY) !== persisted) throw new Error("Could not confirm private workspace-name cache protection");
+    } else await getStorage().setItem(KNOWN_WORKSPACES_STORAGE_KEY, persisted);
+    if (after !== null && after !== storedId) {
+      storedId = after;
+      await getStorage().setItem(ACTIVE_WORKSPACE_STORAGE_KEY, after);
+    }
+    const safeLost = required && lost && !privateSession(userId) ? publicWorkspaceDirectory({ ...scope, workspaces: [lost], names: {} }).workspaces[0] ?? null : lost;
+    return { activeId: after, previousId: before, changed: after !== before, lost: safeLost };
+  });
 };
 
 /**
@@ -366,11 +384,20 @@ export const clearActiveWorkspace = async (): Promise<void> => {
   known = null;
   publish();
   const store = getStorage();
-  await Promise.all([
+  await workspaceDirectoryExclusive(async () => { await Promise.all([
     store.removeItem(ACTIVE_WORKSPACE_STORAGE_KEY),
     store.removeItem(KNOWN_WORKSPACES_STORAGE_KEY),
-  ]);
+  ]); });
 };
+
+const concealLockedWorkspaceNames = () => {
+  if (known && protectedScope === scopeKey(known) && !privateSession(known.userId)) { known = publicWorkspaceDirectory(known); publish(); }
+};
+subscribePrivateSession(concealLockedWorkspaceNames);
+subscribePrivateAccount(concealLockedWorkspaceNames);
+subscribeWorkspaceNameProtection((scope) => {
+  if (known && scopeKey(known) === scopeKey(scope)) { protectedScope = scopeKey(scope); concealLockedWorkspaceNames(); }
+});
 
 // ── switching ────────────────────────────────────────────────────────
 
@@ -505,6 +532,7 @@ export const __resetActiveWorkspaceForTests = (): void => {
   snapshot = { activeId: null, workspaces: null };
   hydration = null;
   hydrated = false;
+  protectedScope = null;
   refetchList = null;
   lastNotFoundAt = 0;
   listeners.clear();
