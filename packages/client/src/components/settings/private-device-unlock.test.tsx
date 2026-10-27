@@ -39,7 +39,7 @@ it("polls once per request state, requires the browser code and never submits th
   expect(state.install).not.toHaveBeenCalled(); expect(screen.getByRole("alert").textContent).toMatch(/did not match/);
   fireEvent.change(input, { target: { value: response.code } }); fireEvent.click(screen.getByText("Confirm and unlock"));
   expect(state.install).toHaveBeenCalledWith({ master: "synthetic-private-key" });
-  expect(state.cancel).toHaveBeenCalledWith({ requestId: invite.requestId });
+  await waitFor(() => expect(state.cancel).toHaveBeenCalledWith({ requestId: invite.requestId }));
   expect(JSON.stringify([state.create.mock.calls, state.poll.mock.calls, state.cancel.mock.calls])).not.toContain(response.code);
 });
 it("cancels a pending delivery when the screen closes without installing a late response", async () => {

@@ -11,7 +11,12 @@ import { APP_VERSION } from "./app-version";
 /** A dedicated fixed-origin channel, outside legacy queues and batched app
  * requests. Unknown server versions never select an optimistic fallback. */
 export function privateScopedRpc(userId: string, capability: Capability) {
-  const binding = privateClientScope(userId);
+  return privateBoundRpc(privateClientScope(userId), capability);
+}
+/** Confirmation-authenticated device restore can fetch ciphertext before keys
+ * become the active application session. Its caller must retain scope checks. */
+export function privateBoundRpc(binding: ReturnType<typeof privateClientScope>, capability: Capability) {
+  binding.check();
   const supported = () => {
     binding.check(); const level = currentServerApiLevel();
     if (typeof level !== "number" || !Number.isSafeInteger(level) || level < REQUIRES_API_LEVEL[capability]) throw new Error("Confirm this server supports this encrypted data protocol before syncing");

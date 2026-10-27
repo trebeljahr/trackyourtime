@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createPrivateDeviceReceiver, encryptPrivateDeviceApproval } from "@starter/core";
@@ -7,7 +8,7 @@ vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getChosenWebU
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 const session = await import("./private-session");
 const { createPrivateDeviceUnlock, sealPrivateDeviceUnlock, privateDeviceWebOrigin } = await import("./private-device");
-beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubEnv("NEXT_PUBLIC_WEB_URL", ""); state.web = "https://app.example.test"; state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
+beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); vi.stubEnv("NEXT_PUBLIC_WEB_URL", ""); state.web = "https://app.example.test"; state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged(null); });
 afterEach(() => { session.lockPrivateData(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 it("uses the saved or known browser origin and refuses an unconfirmed replacement address", () => {
   expect(privateDeviceWebOrigin()).toBe("https://app.example.test");
@@ -23,15 +24,15 @@ it("uses the saved or known browser origin and refuses an unconfirmed replacemen
 it("keeps transferred keys locked until the browser code is confirmed, then restores the original identity", async () => {
   const draft = await session.newPrivateIdentity("owner");
   const native = await createPrivateDeviceUnlock("owner");
-  const payload = { v: 1, server: state.origin, userId: "owner", keys: { publicKey: draft.identity.publicKey, signingPublicKey: draft.identity.signingPublicKey }, secrets: draft.secrets };
+  const payload = { v: 2, workspaceTrust: null, server: state.origin, userId: "owner", keys: { publicKey: draft.identity.publicKey, signingPublicKey: draft.identity.signingPublicKey }, secrets: draft.secrets };
   const response = await encryptPrivateDeviceApproval(native.invite, payload);
   await native.accept(response.approval);
   expect(session.privateSession("owner")).toBeNull();
-  expect(() => native.confirm("invalid")).toThrow("did not match");
+  await expect(native.confirm("invalid")).rejects.toThrow("did not match");
   expect(session.privateSession("owner")).toBeNull();
-  native.confirm(response.code);
+  await native.confirm(response.code);
   expect(session.privateSession("owner")).toEqual(draft.secrets);
-  expect(() => native.confirm(response.code)).toThrow("closed");
+  await expect(native.confirm(response.code)).rejects.toThrow(/changed|closed/);
 });
 it("encrypts only the matching, unlocked browser identity and refuses late or cross-account approvals", async () => {
   const draft = await session.newPrivateIdentity("owner"); session.installPrivateSession("owner", draft.secrets);
@@ -47,14 +48,14 @@ it("encrypts only the matching, unlocked browser identity and refuses late or cr
 it("rejects malformed identity bindings and cannot install an old response after a server switch", async () => {
   const draft = await session.newPrivateIdentity("owner"), other = await session.newPrivateIdentity("owner");
   const native = await createPrivateDeviceUnlock("owner");
-  const response = await encryptPrivateDeviceApproval(native.invite, { v: 1, server: state.origin, userId: "owner", keys: { publicKey: other.identity.publicKey, signingPublicKey: other.identity.signingPublicKey }, secrets: draft.secrets });
+  const response = await encryptPrivateDeviceApproval(native.invite, { v: 2, workspaceTrust: null, server: state.origin, userId: "owner", keys: { publicKey: other.identity.publicKey, signingPublicKey: other.identity.signingPublicKey }, secrets: draft.secrets });
   await native.accept(response.approval);
-  expect(() => native.confirm(response.code)).toThrow("do not match");
+  await expect(native.confirm(response.code)).rejects.toThrow("do not match");
   expect(session.privateSession("owner")).toBeNull();
   const switched = await createPrivateDeviceUnlock("owner");
-  const original = await encryptPrivateDeviceApproval(switched.invite, { v: 1, server: state.origin, userId: "owner", keys: { publicKey: draft.identity.publicKey, signingPublicKey: draft.identity.signingPublicKey }, secrets: draft.secrets });
+  const original = await encryptPrivateDeviceApproval(switched.invite, { v: 2, workspaceTrust: null, server: state.origin, userId: "owner", keys: { publicKey: draft.identity.publicKey, signingPublicKey: draft.identity.signingPublicKey }, secrets: draft.secrets });
   await switched.accept(original.approval);
   state.origin = "https://other.example.test"; state.changed?.();
-  expect(() => switched.confirm(original.code)).toThrow("changed during");
+  await expect(switched.confirm(original.code)).rejects.toThrow("changed during");
   expect(session.privateSession("owner")).toBeNull(); switched.cancel();
 });

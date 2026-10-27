@@ -1,7 +1,9 @@
 import { createPrivateDeviceReceiver, encryptPrivateDeviceApproval } from "@starter/core";
-import { privateIdentitySchema, type PrivateDeviceInvite, type PrivateIdentity } from "@starter/shared";
-import { checkedPrivateSession, installVerifiedPrivateSession, privateDataOrigin, privateOperationScope, privateSession, type UnlockedIdentity } from "./private-session";
+import { privateDeviceTransferSchema, type PrivateDeviceTransfer, type PrivateDeviceInvite, type PrivateIdentity } from "@starter/shared";
+import { assertIdentityKeys, checkedPrivateSession, installVerifiedPrivateSession, privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion } from "./private-session";
 import { getChosenWebUrl } from "./api-origin";
+import { capturePrivateDeviceWorkspaceTrust, restorePrivateDeviceWorkspaceTrust } from "./private-device-workspace-trust";
+import { privateRoutingRequired, requirePrivateRouting } from "./private-routing-requirement";
 export class PrivateDeviceWebOriginError extends Error {
   constructor() { super("Choose a trusted browser address for this server before browser unlocking"); this.name = "PrivateDeviceWebOriginError"; }
 }
@@ -22,12 +24,6 @@ export function privateDeviceWebOrigin(): string {
   if (web.username || web.password || (web.protocol !== "https:" && !(web.protocol === "http:" && loopback(web)))) throw new PrivateDeviceWebOriginError();
   return web.origin;
 }
-type TransferredIdentity = {
-  v: 1; server: string; userId: string;
-  keys: Pick<PrivateIdentity, "publicKey" | "signingPublicKey">;
-  secrets: UnlockedIdentity;
-};
-const publicKeys = privateIdentitySchema.pick({ publicKey: true, signingPublicKey: true });
 
 /** Private keys leave the browser only in the receiving app's encrypted box.
  * The confirmation code is displayed locally; never include it in an API call. */
@@ -35,25 +31,36 @@ export async function sealPrivateDeviceUnlock(userId: string, invite: PrivateDev
   const assertCurrent = privateOperationScope(userId);
   if (invite.server !== privateDataOrigin() || invite.userId !== userId) throw new Error("This request belongs to another server or account");
   const current = checkedPrivateSession(userId, identity);
-  const value: TransferredIdentity = { v: 1, server: invite.server, userId, keys: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey }, secrets: current };
+  const workspaceTrust = await capturePrivateDeviceWorkspaceTrust(userId); assertCurrent();
+  if (privateSession(userId) !== current) throw new Error("Private data is locked");
+  const value = privateDeviceTransferSchema.parse({ v: 2, server: invite.server, userId, keys: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey }, secrets: current, workspaceTrust });
   const result = await encryptPrivateDeviceApproval(invite, value);
   assertCurrent(); if (privateSession(userId) !== current) throw new Error("Private data is locked");
   return result;
 }
 export async function createPrivateDeviceUnlock(userId: string) {
-  const assertCurrent = privateOperationScope(userId), server = privateDataOrigin();
-  const receiver = await createPrivateDeviceReceiver<TransferredIdentity>({ server, userId });
-  try { assertCurrent(); } catch (error) { receiver.cancel(); throw error; }
+  const assertCurrent = privateOperationScope(userId), server = privateDataOrigin(), version = privateSessionVersion();
+  let canceled = false, expiresAt = Number.POSITIVE_INFINITY;
+  const waiting = () => { assertCurrent(); if (canceled || privateSessionVersion() !== version) throw new Error("Private-device unlock changed during this request"); if (Date.now() >= expiresAt) throw new Error("Private-device unlock expired during this request"); };
+  const receiver = await createPrivateDeviceReceiver<PrivateDeviceTransfer>({ server, userId });
+  expiresAt = receiver.invite.expiresAt;
+  try { waiting(); } catch (error) { receiver.cancel(); throw error; }
   return {
     invite: receiver.invite,
-    async accept(box: unknown) { assertCurrent(); await receiver.accept(box); assertCurrent(); },
-    confirm(code: string) {
-      assertCurrent();
-      const value = receiver.confirm(code);
-      if (value?.v !== 1 || value.server !== server || value.userId !== userId) throw new Error("Invalid private identity transfer");
-      const keys = publicKeys.parse(value.keys);
-      installVerifiedPrivateSession(userId, keys, value.secrets);
+    async accept(box: unknown) { waiting(); await receiver.accept(box); waiting(); },
+    async confirm(code: string) {
+      waiting();
+      const value = privateDeviceTransferSchema.parse(receiver.confirm(code));
+      if (value.server !== server || value.userId !== userId) throw new Error("Invalid private identity transfer");
+      assertIdentityKeys(value.keys, value.secrets);
+      if (value.workspaceTrust) {
+        await requirePrivateRouting({ server, userId }, () => { try { waiting(); return true; } catch { return false; } }); waiting();
+        // Restore with confirmation-authenticated temporary keys. Publishing a
+        // session first could let an old standard policy leak private filters.
+        await restorePrivateDeviceWorkspaceTrust(userId, value.workspaceTrust, { server, secrets: value.secrets, check: waiting }); waiting();
+      } else { const required = await privateRoutingRequired({ server, userId }); waiting(); if (required) throw new Error("This account needs its trusted workspace checkpoint before unlocking this device"); }
+      installVerifiedPrivateSession(userId, value.keys, value.secrets);
     },
-    cancel: receiver.cancel,
+    cancel: () => { canceled = true; receiver.cancel(); },
   };
 }

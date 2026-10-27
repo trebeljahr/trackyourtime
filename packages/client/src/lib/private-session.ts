@@ -55,7 +55,7 @@ export function installPrivateSession(userId: string, secrets: UnlockedIdentity)
   session = { userId, origin: getApiOrigin(), secrets }; changed();
   void resumePrivateActivity(userId).catch(() => undefined);
 }
-function assertIdentityKeys(identity: Pick<PrivateIdentity, "publicKey" | "signingPublicKey">, secrets: UnlockedIdentity): void {
+export function assertIdentityKeys(identity: Pick<PrivateIdentity, "publicKey" | "signingPublicKey">, secrets: UnlockedIdentity): void {
   const same = (publicKey: PublicKey, privateKey: PublicKey) => publicKey.kty === privateKey.kty && publicKey.crv === privateKey.crv && publicKey.x === privateKey.x && publicKey.y === privateKey.y;
   if (!same(identity.publicKey, secrets.privateKey) || !same(identity.signingPublicKey, secrets.signingPrivateKey)) throw new Error("Private identity public keys do not match its encrypted keys");
 }

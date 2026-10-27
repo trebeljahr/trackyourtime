@@ -26,10 +26,12 @@ export function PrivateDeviceUnlock({ userId }: { userId: string }): React.JSX.E
   const request = React.useRef<Request | null>(null), url = React.useRef<string | null>(null);
   const [phase, setPhase] = React.useState<"idle" | "starting" | "waiting" | "confirm">("idle");
   const [code, setCode] = React.useState("");
+  const [confirming, setConfirming] = React.useState(false);
   const [problem, setProblem] = React.useState<"failed" | "codeMismatch" | "expired" | "browserAddress" | null>(null);
   const generation = React.useRef(0);
   const discard = React.useCallback(() => {
     generation.current++;
+    setConfirming(false);
     const current = request.current; request.current = null; url.current = null; current?.cancel();
     if (current && current.invite.server === privateDataOrigin()) void cancelRequest({ requestId: current.invite.requestId }).catch(() => undefined);
   }, [cancelRequest]);
@@ -84,13 +86,16 @@ export function PrivateDeviceUnlock({ userId }: { userId: string }): React.JSX.E
     {phase === "waiting" && <><p role="status" className="text-sm">{t("privateDevice.waiting")}</p><Button variant="outline" size="sm" onClick={() => { if (url.current) void openBrowser(url.current).catch(() => setProblem("failed")); }}>{t("privateDevice.reopen")}</Button></>}
     {phase === "confirm" && <div className="max-w-xs space-y-2">
       <Label htmlFor="private-device-code">{t("privateDevice.codeLabel")}</Label>
-      <Input id="private-device-code" autoComplete="one-time-code" spellCheck={false} maxLength={9} value={code} onChange={(event) => setCode(event.target.value)} />
-      <Button variant="outline" disabled={!/^[0-9a-fA-F]{8}$/.test(code.replace(/\s/g, ""))} onClick={() => {
-        try { if (!request.current) throw new Error("Private-device request is closed"); request.current.confirm(code); discard(); setPhase("idle"); setCode(""); }
+      <Input id="private-device-code" autoComplete="one-time-code" spellCheck={false} disabled={confirming} maxLength={9} value={code} onChange={(event) => setCode(event.target.value)} />
+      <Button variant="outline" disabled={confirming || !/^[0-9a-fA-F]{8}$/.test(code.replace(/\s/g, ""))} onClick={async () => {
+        const current = request.current, at = generation.current; setConfirming(true);
+        try { if (!current) throw new Error("Private-device request is closed"); await current.confirm(code); if (at !== generation.current) return; discard(); setPhase("idle"); setCode(""); }
         catch (error) {
+          if (at !== generation.current) return;
           if (error instanceof PrivateDeviceCodeError && !error.closed) { setProblem("codeMismatch"); setCode(""); }
           else { discard(); setPhase("idle"); setProblem(error instanceof PrivateDeviceCodeError ? "codeMismatch" : "failed"); }
         }
+        finally { if (at === generation.current) setConfirming(false); }
       }}>{t("privateDevice.confirm")}</Button>
     </div>}
     {phase !== "idle" && <Button variant="ghost" size="sm" onClick={() => { discard(); setPhase("idle"); setCode(""); setProblem(null); }}>{t("privateDevice.cancel")}</Button>}
