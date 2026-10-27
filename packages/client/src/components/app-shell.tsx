@@ -24,7 +24,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { SyncStatus } from "@starter/core";
+import { usePrivateWorkspaceSync } from "@/hooks/use-private-workspace-sync";
+import { WorkspaceSyncIndicator } from "./workspace-sync-indicator";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BrandMark } from "@/components/brand-mark";
@@ -131,39 +132,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-/**
- * The label is `shell.sync.<status>`, resolved at render time. Traffic-light
- * colours, not theme tokens: `--primary` is a neutral in this theme, so an
- * "in sync" dot drawn with it read as a white dot that said nothing.
- */
-const STATUS_DOT: Record<SyncStatus, string> = {
-  open: "bg-emerald-500",
-  connecting: "bg-amber-500 animate-pulse",
-  closed: "bg-red-500",
-};
 
-function SyncDot({ status }: { status: SyncStatus }): React.JSX.Element {
-  const t = useT("shell");
-  const label = t(`sync.${status}`);
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className="flex size-6 items-center justify-center"
-          aria-label={label}
-          data-testid="sync-status"
-          data-status={status}
-        >
-          <span
-            aria-hidden="true"
-            className={cn("size-2 rounded-full", STATUS_DOT[status])}
-          />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 function RunningTimerIndicator({
   pathname,
@@ -376,7 +345,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
   const windowView = useDesktopWindow();
   const pathname = usePathname();
   const router = useRouter();
-  const status = useSync();
+  const status = useSync(), privateSync = usePrivateWorkspaceSync();
   useQueryPersistence();
   const t = useT("shell");
   // Resume/pause for the native shells. A no-op on web, where nothing ever
@@ -586,7 +555,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
               </Tooltip>
               <WorkspaceSwitcher />
               <RunningTimerIndicator pathname={pathname} />
-              <SyncDot status={status} />
+              <WorkspaceSyncIndicator status={status} privateSync={privateSync} />
               <ThemeSync />
               <LocaleSync />
               <ThemeToggle />

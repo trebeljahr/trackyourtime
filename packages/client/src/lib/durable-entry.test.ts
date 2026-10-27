@@ -1,3 +1,4 @@
+vi.mock("./private-workspace-mutation", () => ({ mutatePrivateWorkspace: async () => { throw new Error("Unexpected private edit"); } }));
 vi.mock("./private-workspace-list", () => ({ readWorkspaceList: (read: () => Promise<unknown>) => read() }));
 vi.mock("./private-workspace-creation", () => ({ preparePrivateWorkspaceCreation: async () => null }));
 vi.mock("./private-request-scope", () => ({ privateRequestScopeHeaders: () => ({}), capturePrivateRequestScope: () => ({}), checkPrivateRequestScope: () => {} }));

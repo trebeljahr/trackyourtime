@@ -20,6 +20,7 @@ import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
 import { readWorkspaceList } from "./private-workspace-list";
 import { capturePrivateRequestScope, checkPrivateRequestScope, privateRequestScopeHeaders } from "./private-request-scope";
+import { mutatePrivateWorkspace } from "./private-workspace-mutation";
 import { preparePrivateWorkspaceCreation } from "./private-workspace-creation";
 
 export const trpc = createTRPCReact<AppRouter>();
@@ -162,7 +163,7 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
       if (cancelled) return;
       checkPrivateRequestScope(originalScope);
       if (route.mode === "encrypted") {
-        const value = await readPrivateWorkspaceQuery(route, op.path, addressed, op.type); route.check();
+        const value = op.type === "mutation" ? await mutatePrivateWorkspace(route, op.path, addressed) : await readPrivateWorkspaceQuery(route, op.path, addressed, op.type); checkPrivateRequestScope(originalScope); route.check();
         if (!cancelled) { observer.next({ result: { data: value } } as never); observer.complete(); }
       } else {
         route.check(); subscription = next({ ...op, input: addressed, context: { ...op.context, privateContentScope: originalScope } }).subscribe({

@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -80,6 +80,15 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
       read: async () => { assertPolicy(); const value = await replica.read(); assertPolicy(); return value; },
       readKinds: async (kinds: readonly PrivateKind[]) => { assertPolicy(); const value = await replica.readKinds(kinds); assertPolicy(); return value; },
       checkpoint: async () => { assertPolicy(); const value = await replica.checkpoint(); assertPolicy(); return value; },
+      status: async () => { assertPolicy(); const value = await replica.status(); assertPolicy(); return value; },
+      editFavorite: async (path: PrivateFavoriteEditPath, input: unknown) => {
+        const frozen = structuredClone(input); assertPolicy();
+        const result = await replica.transact(PRIVATE_FAVORITE_EDIT_KINDS, ({ records, directory }) => {
+          assertPolicy(); return privateFavoriteEdit({ scope, directory, records, current, path, input: frozen });
+        }); assertPolicy(); return result;
+      },
+      pull: async (transport: PrivateReplicaTransport, through?: number) => { assertPolicy(); const result = await replica.pull(transport, through); assertPolicy(); return result; },
+      flushOne: async (transport: PrivateReplicaTransport) => { assertPolicy(); const result = await replica.flushOne(transport); assertPolicy(); return result; },
     };
   } catch (error) { closed = true; host?.close(); throw error; }
   finally { inventoryHost?.close(); }
@@ -90,6 +99,28 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
 export async function openPrivateWorkspaceSession(userId: string, workspaceId: string) {
   const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
   return { scope: copy.scope, policy: copy.policy, directory: copy.directory, current: copy.current, close: copy.close, read: copy.read, readKinds: copy.readKinds, checkpoint: copy.checkpoint };
+}
+/** This transport carries signed ciphertext only and never falls back to the
+ * old unchained routes. Public server write/rollout guards remain independent. */
+export function privateWorkspaceJournalTransport(userId: string, workspaceId: string): PrivateReplicaTransport {
+  const { rpc, supported } = privateScopedRpc(userId, "privacy.historyChain", 20_000);
+  const obsolete = async (): Promise<never> => { throw new Error("Unchained workspace transport is disabled"); };
+  return { commit: obsolete, changes: obsolete,
+    chainedCommit: async (input) => { supported(); const result = await rpc.privacy.chainedWrite.mutate({ ...input, workspaceId }); supported(); return result; },
+    chainedChanges: async (input) => { supported(); const result = await rpc.privacy.chainedChanges.query({ ...input, workspaceId }); supported(); return result; },
+  };
+}
+/** Separate write/sync facade. Domain intent is validated and durably saved
+ * inside the replica lock. A local result is not a server sync receipt. */
+export async function openPrivateWorkspaceSyncSession(userId: string, workspaceId: string) {
+  const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
+  try {
+    const transport = privateWorkspaceJournalTransport(userId, workspaceId);
+    return { scope: copy.scope, current: copy.current, close: copy.close, checkpoint: copy.checkpoint, status: copy.status,
+      editFavorite: copy.editFavorite,
+      pull: (through?: number) => copy.pull(transport, through), flushOne: () => copy.flushOne(transport),
+    };
+  } catch (error) { copy.close(); throw error; }
 }
 /** Capture includes exact pending packets and inventory conflicts without
  * replaying them. Private pins are immutable, so a profile reread can be paired

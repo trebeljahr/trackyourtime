@@ -1,3 +1,4 @@
+vi.mock("./private-workspace-mutation", () => ({ mutatePrivateWorkspace: async () => { throw new Error("Unexpected private edit"); } }));
 vi.mock("./private-workspace-creation", () => ({ preparePrivateWorkspaceCreation: async () => null }));
 vi.mock("./private-request-scope", () => ({ privateRequestScopeHeaders: () => ({}), capturePrivateRequestScope: () => ({}), checkPrivateRequestScope: () => {} }));
 import { beforeEach, describe, expect, it, vi } from "vitest";

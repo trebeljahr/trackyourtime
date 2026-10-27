@@ -116,6 +116,15 @@ export const shell = {
     more: "More",
   },
   sync: {
+    private: {
+      checking: "Checking private workspace sync",
+      syncing: "Syncing private changes. Saved edits stay on this device until delivery is verified.",
+      saved: "Private workspace synced",
+      pending: "Saved on this device — {count, plural, one {# private change still needs} other {# private changes still need}} to sync. Open Settings to back up this copy.",
+      unavailable: "Private sync unavailable. Saved edits stay on this device. Open Settings to back up this copy.",
+      conflict: "Private changes need review. Your saved copy was kept. Open Settings to back it up.",
+      count: "{count, plural, one {# unsynced} other {# unsynced}}",
+    },
     open: "Live — changes sync across your devices",
     connecting: "Connecting…",
     closed: "Offline — reconnecting",

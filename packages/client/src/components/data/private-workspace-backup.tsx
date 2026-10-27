@@ -58,7 +58,7 @@ export function PrivateWorkspaceBackup({ userId, workspaceId }: { userId: string
   };
   const active = () => { if (!alive.current || !controller.current) throw new Error("Private backup screen changed"); return controller.current; };
   const disabled = pending || !ready || (!settings && (!account.data || secret.trim().length !== 43));
-  return <section className="space-y-3 border-t pt-4" data-testid="private-workspace-backup">
+  return <section id="private-workspace-backup" className="scroll-mt-24 space-y-3 border-t pt-4" data-testid="private-workspace-backup">
     <h3 className="text-sm font-medium">{t("privateBackups.title")}</h3>
     <p className="max-w-prose text-sm text-muted-foreground">{t("privateBackups.description")}</p>
     <p className="max-w-prose text-xs text-muted-foreground">{t("privateBackups.limits")}</p>

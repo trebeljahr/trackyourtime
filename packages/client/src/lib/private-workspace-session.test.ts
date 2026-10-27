@@ -178,3 +178,14 @@ it("backs up an inventory conflict while refusing to use that conflict for live 
     } finally { master.fill(0); }
   } finally { host.close(); }
 });
+
+it("bounds journal transport decoding after headers so a stalled response cannot freeze later retries", async () => {
+  await fixture();
+  const { privateScopedRpc } = await import("./private-scoped-rpc");
+  const { rpc } = privateScopedRpc("owner", "privacy.historyChain", 20);
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, input?: RequestInit) => {
+    expect(input?.signal).toBeTruthy();
+    return new Response(new ReadableStream({ start(controller) { input!.signal!.addEventListener("abort", () => controller.error(input!.signal!.reason), { once: true }); } }), { headers: { "content-type": "application/json" } });
+  }); vi.stubGlobal("fetch", fetcher);
+  await expect(rpc.privacy.chainedChanges.query({ workspaceId: "workspace", after: 1 })).rejects.toThrow(); expect(fetcher).toHaveBeenCalledOnce();
+});

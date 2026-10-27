@@ -1152,13 +1152,16 @@ API response or authorize activation.
   plus a lossless encrypted backup, isolated restore proof and rollback workflow.
 - Verified member-key onboarding and rotation, including transactional fencing
   against membership/permission changes and every legacy writer.
-- Client CRUD, timers, reports, invoices and import/export adapters, and native
-  and extension persistence. Existing clients do not use this replica yet.
+- Remaining private CRUD, timers, invoices/import and integration adapters, and
+  native/extension persistence. Catalog, entry, settings, member and report reads,
+  local report exports and favorite writes now use private adapters; unsupported
+  private methods still refuse before standard transport.
 - User-facing conflict review/export of unsent work and recovery after local
   storage corruption or loss. New revisions alone cannot settle a conflict.
-- Connect the signed account inventory and device mode-pin adapters to trusted
-  profile/device/recovery transport and every content/queue path. Missing keys,
-  omitted metadata or an older API must never silently select plaintext adapters.
+- Complete all-device cutover/retirement and interrupted-setup/recovery flows.
+  Signed local inventory now gates content/queues, imported keys and trusted-device
+  pairing. A prior standard device or stale recovery file still cannot infer a
+  newer conversion from blind-server mode claims.
 - Complete client business-transition validation, including approval submissions
   versus reviews, invoice links on colleagues' entries and issued-document
   immutability. Coarse record-kind rights alone do not encode those rules.
@@ -1218,3 +1221,42 @@ that changes independently of the app's session provider.
 These adapters do not open conversion, private writes or retirement. Actual
 MongoDB replica-set tests cover the official adapter, unique IDs, quota races
 and rollback; local fixtures contain synthetic accounts only.
+
+## Atomic personal edits and the active journal driver
+
+`replica.transact` validates an operation against the current decrypted domain
+view and appends its encrypted pending change under one cross-window lock.
+It requires an authenticated activation root and directory. Existing conflicts
+refuse new domain edits; there is no automatic rebase. Returned results become
+visible only after durable storage readback. The builder cannot write kinds
+outside its selected view. Pending record values are copied before invoking
+it, so a failed plan cannot mutate earlier pending intent. Replica reads,
+checkpoints, bootstrap, enqueue, pull and flush capture their key generation
+before waiting; locking and unlocking cannot revive an earlier queued call.
+
+The first mounted private mutation domain is personal favorites: create,
+remove and reorder. It validates references, default billing, explicit-null
+versus project-inferred clients, duplicate pins, the 50-pin limit, self-only
+ownership and dense ordering. Reordering ignores unknown IDs and retains
+omitted pins. Original unknown fields remain on retained records. Creation of
+an existing pin is a no-op. Other private domain writes still refuse before
+normal HTTP or the legacy outbox.
+
+The separate sync facade uses only signed chained commits and verified journal
+pages. It cannot fall back to legacy writes. While an active private workspace
+is unlocked and visible, the shell runs bounded serial passes, retries after
+edits, reconnect and visibility changes, and polls every 30 seconds. A pass
+loads at most eight journal pages and submits at most eight pending operations.
+A 20-second journal request deadline stays active through response decoding.
+Pending work survives partial/lost replies, version refusals and conflicts;
+only matching authenticated history can acknowledge an operation. A public
+scope notification can wake other windows, which independently verify local data.
+No content, keys or result payloads cross the notification channel.
+
+Local edit success and server delivery are separate. The existing connection
+indicator shows private pending counts and a distinct delivery status; a live
+socket cannot turn an unsent private queue green. Its private link opens the
+saved-copy backup controls in Settings. Sync failures expose fixed local copy
+text rather than raw decoder/server values. Review/repair of conflicts and
+remaining domain transitions are still required for full rollout. Public
+conversion, chained writes and retirement remain disabled on the server.

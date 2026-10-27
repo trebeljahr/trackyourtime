@@ -63,6 +63,10 @@ export async function createPrivateWorkspaceReplica(options: {
     if (!value || !value.current()) throw new PrivateStorageLockedError();
     return { ...value, check: () => { if (!value.current()) throw new PrivateStorageLockedError(); } };
   };
+  const withAccess = async <T>(work: (access: ReturnType<typeof identity>) => Promise<T>) => {
+    const access = identity();
+    return options.exclusive(async () => { access.check(); const result = await work(access); access.check(); return result; });
+  };
   const load = async (): Promise<State> => {
     const raw = await storage.getItem(storageKey);
     const state = raw === null ? { v: 1 as const, revision: 0, head: null, activationRoot: null, records: [], pending: [] } : stateSchema.parse(JSON.parse(raw));
@@ -70,8 +74,8 @@ export async function createPrivateWorkspaceReplica(options: {
     return state;
   };
   const save = (state: State) => storage.setItem(storageKey, JSON.stringify(state));
-  const pull = async (transport: PrivateReplicaTransport, through?: number) => {
-    const access = identity(), state = await load(); access.check();
+  const pull = async (transport: PrivateReplicaTransport, through: number | undefined, access: ReturnType<typeof identity>) => {
+    const state = await load(); access.check();
     if (state.head !== null && (!transport.chainedChanges || !access.directory)) throw new Error("This workspace requires verified chained history; stored data was kept");
     const query = { after: state.revision, ...(through === undefined ? {} : { through }) };
     const page = state.head === null ? await transport.changes(query) : await transport.chainedChanges!(query); access.check();
@@ -115,35 +119,63 @@ export async function createPrivateWorkspaceReplica(options: {
     await save({ v: 1, revision: 1, head: root, activationRoot: root, records: [...records], pending: [] }); access.check();
     return { revision: 1 as const };
   };
+  const materialize = async (state: State, access: ReturnType<typeof identity>, kinds?: ReadonlySet<PrivateKind>) => {
+    const values = new Map<string, PlainPrivateRecord>();
+    for (const row of state.records) { if (kinds && !kinds.has(row.kind)) continue; values.set(address(row), await decryptPrivateRecord(workspaceId, row, userId, access.privateKey)); access.check(); }
+    for (const pending of state.pending) {
+      for (const row of pending.records) if (!kinds || kinds.has(row.kind)) values.set(address(row), row);
+      for (const row of pending.remove) if (!kinds || kinds.has(row.kind)) values.delete(address(row));
+    }
+    access.check(); return { revision: state.revision, head: state.head, pending: state.pending.length, conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)), records: structuredClone([...values.values()]) };
+  };
+  const append = async (state: State, access: ReturnType<typeof identity>, snapshot: { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[] }) => {
+    const records = z.array(plainSchema).max(100).parse(snapshot.records), remove = z.array(privateRecordRefSchema).max(100).parse(snapshot.remove ?? []);
+    if (!records.length && !remove.length) throw new Error("Empty private workspace edit");
+    const seen = new Set<string>();
+    for (const row of [...records, ...remove]) { const key = address(row); if (seen.has(key)) throw new Error("Duplicate private workspace record"); seen.add(key); }
+    if (state.head !== null) {
+      const actor = access.directory?.signed.directory.members.find((member) => member.userId === userId);
+      if (!actor || [...records, ...remove].some((row) => !canWritePrivateRecord(row.kind, row.authorId, actor))) throw new Error("Verified workspace permissions forbid this private edit");
+      const known = new Map(state.records.map((row) => [address(row), row.authorId]));
+      for (const pending of state.pending) {
+        for (const row of pending.records) known.set(address(row), row.authorId);
+        for (const row of pending.remove) known.delete(address(row));
+      }
+      for (const row of [...records, ...remove]) if (known.has(address(row)) && known.get(address(row)) !== row.authorId) throw new Error("A private edit cannot replace another author's record");
+    }
+    if (state.pending.length >= 1000) throw new Error("Sync or export pending private edits before adding more");
+    const operationId = crypto.randomUUID();
+    state.pending.push({ operationId, basedOn: state.revision + state.pending.length, records, remove, submitted: null, chain: null, directoryDigest: null });
+    access.check(); await save(state); access.check(); return operationId;
+  };
   /** Capture before waiting: a queued read cannot revive after lock/re-unlock.
    * Narrow views decrypt only selected kinds, including their optimistic edits. */
   const readView = async (kinds?: ReadonlySet<PrivateKind>) => {
     const access = identity();
     return options.exclusive(async () => {
       access.check(); const state = await load(); access.check();
-      const values = new Map<string, PlainPrivateRecord>();
-      for (const row of state.records) { if (kinds && !kinds.has(row.kind)) continue; values.set(address(row), await decryptPrivateRecord(workspaceId, row, userId, access.privateKey)); access.check(); }
-      for (const pending of state.pending) {
-        for (const row of pending.records) if (!kinds || kinds.has(row.kind)) values.set(address(row), row);
-        for (const row of pending.remove) if (!kinds || kinds.has(row.kind)) values.delete(address(row));
-      }
-      access.check(); return { revision: state.revision, head: state.head, pending: state.pending.length, conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)), records: [...values.values()] };
+      return materialize(state, access, kinds);
     });
   };
   return {
     namespace: encrypted.namespace,
-    exportRecovery: () => options.exclusive(async () => { const access = identity(), state = await load(); access.check(); return structuredClone(state); }),
-    checkpoint: () => options.exclusive(async () => {
-      const access = identity(), state = await load(); access.check();
+    exportRecovery: () => withAccess(async (access) => { const state = await load(); access.check(); return structuredClone(state); }),
+    checkpoint: () => withAccess(async (access) => {
+      const state = await load(); access.check();
       return { activationRoot: state.activationRoot, revision: state.revision, head: state.head, pending: state.pending.length };
     }),
-    bootstrap: (snapshot: VerifiedPrivateInitialSnapshot) => options.exclusive(async () => {
-      const access = identity(), state = await load(); access.check();
+    status: () => withAccess(async (access) => {
+      const state = await load(); access.check();
+      return { activationRoot: state.activationRoot, revision: state.revision, head: state.head, pending: state.pending.length,
+        conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)) };
+    }),
+    bootstrap: (snapshot: VerifiedPrivateInitialSnapshot) => withAccess(async (access) => {
+      const state = await load(); access.check();
       assertPrivateInitialSnapshot(snapshot, scope, access.directoryDigest);
       return installInitial(state, snapshot.signed.manifest.root, snapshot.records);
     }),
-    bootstrapProjection: (snapshot: VerifiedPrivateProjectionSnapshot) => options.exclusive(async () => {
-      const access = identity(), state = await load(); access.check();
+    bootstrapProjection: (snapshot: VerifiedPrivateProjectionSnapshot) => withAccess(async (access) => {
+      const state = await load(); access.check();
       assertPrivateProjectionSnapshot(snapshot, scope, access.directoryDigest);
       const records = [...snapshot.sharedRecords, ...snapshot.personalRecords].sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
       return installInitial(state, snapshot.root, records);
@@ -152,33 +184,33 @@ export async function createPrivateWorkspaceReplica(options: {
       // Capture user intent synchronously, before waiting on storage or another
       // window's lock. No caller-owned nested object survives into the outbox.
       const snapshot = structuredClone(z.object({ records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100).optional() }).strict().parse(input));
-      return options.exclusive(async () => {
-        const access = identity(), state = await load(); access.check();
-        const records = z.array(plainSchema).max(100).parse(snapshot.records), remove = z.array(privateRecordRefSchema).max(100).parse(snapshot.remove ?? []);
-        if (!records.length && !remove.length) throw new Error("Empty private workspace edit");
-        const seen = new Set<string>();
-        for (const row of [...records, ...remove]) { const key = address(row); if (seen.has(key)) throw new Error("Duplicate private workspace record"); seen.add(key); }
-        if (state.head !== null) {
-          const actor = access.directory?.signed.directory.members.find((member) => member.userId === userId);
-          if (!actor || [...records, ...remove].some((row) => !canWritePrivateRecord(row.kind, row.authorId, actor))) throw new Error("Verified workspace permissions forbid this private edit");
-          const known = new Map(state.records.map((row) => [address(row), row.authorId]));
-          for (const pending of state.pending) {
-            for (const row of pending.records) known.set(address(row), row.authorId);
-            for (const row of pending.remove) known.delete(address(row));
-          }
-          for (const row of [...records, ...remove]) if (known.has(address(row)) && known.get(address(row)) !== row.authorId) throw new Error("A private edit cannot replace another author's record");
-        }
-        if (state.pending.length >= 1000) throw new Error("Sync or export pending private edits before adding more");
-        const operationId = crypto.randomUUID();
-        state.pending.push({ operationId, basedOn: state.revision + state.pending.length, records, remove, submitted: null, chain: null, directoryDigest: null });
-        access.check(); await save(state); access.check(); return operationId;
+      return withAccess(async (access) => {
+        const state = await load(); access.check();
+        return append(state, access, snapshot);
+      });
+    },
+    /** Validate domain intent against the latest confirmed + optimistic view
+     * and save it under the same cross-window lock. A separate read/enqueue
+     * would lose order/uniqueness checks when two tabs edit simultaneously. */
+    transact: <T>(kinds: readonly PrivateKind[], build: (view: { records: PlainPrivateRecord[]; directory: VerifiedPrivateDirectory }) => { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[]; result: T }) => {
+      const selected = new Set(z.array(privateKindSchema).min(1).max(PRIVATE_KINDS.length).parse(kinds));
+      return withAccess(async (access) => {
+        const state = await load(); access.check();
+        if (!state.activationRoot || !state.head || !access.directory) throw new Error("Atomic private edits require a verified activation and directory");
+        const view = await materialize(state, access, selected); access.check();
+        if (view.conflict) throw new PrivateReplicaConflictError();
+        const plan = build({ records: view.records, directory: access.directory }); access.check();
+        const frozen = structuredClone(plan);
+        if ([...frozen.records, ...(frozen.remove ?? [])].some((row) => !selected.has(row.kind))) throw new Error("Private edit exceeds its validated domain view");
+        const operationId = !frozen.records.length && !frozen.remove?.length ? null : await append(state, access, frozen);
+        access.check(); return { operationId, result: frozen.result };
       });
     },
     read: () => readView(),
     readKinds: async (kinds: readonly PrivateKind[]) => readView(new Set(z.array(privateKindSchema).min(1).max(PRIVATE_KINDS.length).parse(kinds))),
-    pull: (transport: PrivateReplicaTransport, through?: number) => options.exclusive(() => pull(transport, through)),
-    flushOne: (transport: PrivateReplicaTransport) => options.exclusive(async () => {
-      const access = identity(), state = await load(); access.check();
+    pull: (transport: PrivateReplicaTransport, through?: number) => withAccess((access) => pull(transport, through, access)),
+    flushOne: (transport: PrivateReplicaTransport) => withAccess(async (access) => {
+      const state = await load(); access.check();
       const first = state.pending[0]; if (!first) return { revision: state.revision, pending: 0 };
       // No automatic rebasing: an offline edit must not silently overwrite
       // work made on another device. Keep the exact input for explicit repair.
@@ -210,7 +242,7 @@ export async function createPrivateWorkspaceReplica(options: {
       }
       access.check();
       if (reply.revision !== first.basedOn + 1) throw new Error("Invalid private workspace receipt");
-      const result = await pull(transport); access.check();
+      const result = await pull(transport, undefined, access); access.check();
       if (result.revision < reply.revision || result.pending !== state.pending.length - 1) throw new Error("Private workspace receipt has no verified journal record");
       return { revision: result.revision, pending: result.pending };
     }),

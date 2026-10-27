@@ -93,3 +93,5 @@ export * from "./privacy/member-view.js";
 export type { PrivateViewOptions } from "./privacy/view-source.js";
 
 export * from "./privacy/workspace-view.js";
+
+export * from "./privacy/favorite-edit.js";

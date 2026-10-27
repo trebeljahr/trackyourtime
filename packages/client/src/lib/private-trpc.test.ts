@@ -4,7 +4,7 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { getUntypedClient } from "@trpc/client";
 import { API_LEVEL, normalizeDisplayPreferences } from "@starter/shared";
-import { OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
+import { privateWorkspaceManifest, privateWorkspaceManifestForReader, privateWorkspaceChainRoot, OFFLINE_QUEUE_STORAGE_KEY } from "@starter/core";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", native: false, tokenRevision: 0, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: () => state.ready(), rebaseApiUrl: (url: string) => url }));
@@ -153,7 +153,7 @@ it("reads only the current person's private favorites through the real client wi
  f.archive.replica.pending[1]!.records.push({ kind: "favorites", id: "new-pin", authorId: "owner", value: { _id: "new-pin", workspaceId: "workspace", userId: "owner", description: "Private pinned work", projectId: null, taskId: null, billable: false, order: 0, createdAt: stamp, updatedAt: stamp } });
  await seedPrivateWorkspaceClient(f); const fetcher = vi.fn(() => { throw new Error("Private pins must stay local"); }); vi.stubGlobal("fetch", fetcher);
  expect(await client().query("favorites.list", {})).toMatchObject([{ id: "new-pin", description: "Private pinned work", projectName: null }]);
- await expect(client().mutation("favorites.create", { description: "Do not send" })).rejects.toThrow("not available"); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+ expect(await client().mutation("favorites.create", { description: "Saved private pin" })).toMatchObject({ description: "Saved private pin", order: 1 }); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
  session.lockPrivateData(); await expect(client().query("favorites.list", {})).rejects.toThrow("Unlock"); expect(fetcher).not.toHaveBeenCalled();
 });
 
@@ -229,4 +229,72 @@ it("joins private members and member report labels with separate account metadat
  const api = client(); expect(await api.query("members.list", {})).toMatchObject([{ userId: "owner", memberId: "auth-owner", name: "Current account name", role: "owner", canViewOthersMoney: true, hourlyRate: 0 }]);
  expect(await api.query("reports.summary", { from: "2026-10-01", to: "2026-10-01", groupBy: "member", search: "Private member report filter", timeZone: "UTC" })).toMatchObject({ groups: [{ label: "Current account name", seconds: 3600 }] });
  expect(fetcher).toHaveBeenCalledTimes(2); await expect(api.mutation("members.updateVisibility", { memberId: "auth-owner", canViewOthersMoney: true })).rejects.toThrow("not available"); expect(fetcher).toHaveBeenCalledTimes(2); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+
+it("atomically creates, reorders and removes private favorites through the real app client with no HTTP or legacy storage", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); const fetcher = vi.fn(() => { throw new Error("Private edits must stay encrypted and local until sync"); }); vi.stubGlobal("fetch", fetcher);
+  const api = client(), [first, duplicate] = await Promise.all([api.mutation("favorites.create", { description: "Same private pin" }), api.mutation("favorites.create", { description: " Same private pin " })]) as { id: string }[];
+  expect(first!.id).toBe(duplicate!.id);
+  const second = await api.mutation("favorites.create", { description: "Second pin" }) as { id: string };
+  expect(await api.mutation("favorites.reorder", { ids: [second.id, "foreign"] })).toMatchObject([{ id: second.id, order: 0 }, { id: first!.id, order: 1 }]);
+  expect(await api.mutation("favorites.remove", { id: second.id })).toEqual({ success: true, id: second.id });
+  expect(await api.query("favorites.list", {})).toMatchObject([{ id: first!.id, order: 0 }]); expect(fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]);
+  session.lockPrivateData(); await expect(api.mutation("favorites.create", { description: "Locked draft" })).rejects.toThrow("Unlock");
+});
+
+function servePrivateJournal(initial: Awaited<ReturnType<typeof privateRecoveryFixture>>, loseReply = false) {
+  const journal: import("@starter/shared").PrivateChainedWorkspaceChange[] = [], requests: string[] = [];
+  let lost = false;
+  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const target = new URL(String(url)), path = target.pathname.split("/").at(-1), raw = init?.body ?? target.searchParams.get("input"), input = JSON.parse(String(raw));
+    expect(target.origin).toBe(state.origin); expect(init?.cache).toBe("no-store"); expect(init?.redirect).toBe("error"); expect(input.workspaceId).toBe("workspace");
+    expect(String(raw)).not.toContain("Private pin queued for sync"); expect(String(raw)).not.toContain(initial.secrets.master); expect(new Headers(init?.headers).has("x-trackyourtime-local-scope")).toBe(false); requests.push(path!);
+    let data;
+    if (path === "privacy.chainedChanges") {
+      const through = input.through ?? journal.length + 1;
+      data = { through, next: null, changes: journal.filter((row) => row.revision > input.after && row.revision <= through) };
+    } else {
+      expect(path).toBe("privacy.chainedWrite"); expect(input.edit.expectedRevision).toBe(journal.length + 1);
+      const { workspaceId: _scope, ...signed } = input; void _scope;
+      const manifest = privateWorkspaceManifestForReader(await privateWorkspaceManifest(signed.edit), "owner");
+      journal.push({ revision: journal.length + 2, manifest, signature: signed.readerSignatures.find((row: { userId: string }) => row.userId === "owner").signature, records: signed.edit.records, chain: signed.chain });
+      data = { revision: journal.length + 1, head: await privateWorkspaceChainRoot(signed.chain) };
+      if (loseReply && !lost) { lost = true; throw new TypeError("Lost private sync reply"); }
+    }
+    return new Response(JSON.stringify({ result: { data } }), { headers: { "content-type": "application/json" } });
+  }); vi.stubGlobal("fetch", fetcher); return { journal, requests, fetcher };
+}
+it("delivers locally saved private favorites only through signed ciphertext and reports verified completion", async () => {
+  const f = await privateRecoveryFixture(); await seedPrivateWorkspaceClient(f);
+  await client().mutation("favorites.create", { description: "Private pin queued for sync" });
+  const wire = servePrivateJournal(f), { syncPrivateWorkspace } = await import("./private-workspace-sync"), states: unknown[] = [];
+  expect(await syncPrivateWorkspace({ server: state.origin, userId: "owner", workspaceId: "workspace" }, (state) => states.push(state), () => true)).toEqual({ changed: true });
+  expect(states.at(-1)).toEqual({ phase: "saved", pending: 0 }); expect(wire.journal).toHaveLength(3); expect(wire.requests.every((path) => ["privacy.chainedChanges", "privacy.chainedWrite"].includes(path))).toBe(true);
+  expect(await client().query("favorites.list", {})).toMatchObject([{ description: "Private pin queued for sync" }]); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+it("keeps the exact pending private queue after a lost reply and recovers through authenticated history", async () => {
+  const f = await privateRecoveryFixture(); await seedPrivateWorkspaceClient(f); await client().mutation("favorites.create", { description: "Private pin queued for sync" });
+  const wire = servePrivateJournal(f, true), { syncPrivateWorkspace } = await import("./private-workspace-sync"), states: unknown[] = [], scope = { server: state.origin, userId: "owner", workspaceId: "workspace" };
+  await syncPrivateWorkspace(scope, (state) => states.push(state), () => true); expect(states.at(-1)).toEqual({ phase: "unavailable", pending: 3 });
+  expect(await client().query("favorites.list", {})).toMatchObject([{ description: "Private pin queued for sync" }]);
+  await syncPrivateWorkspace(scope, (state) => states.push(state), () => true); expect(states.at(-1)).toEqual({ phase: "saved", pending: 0 }); expect(wire.journal).toHaveLength(3);
+});
+it("keeps pending edits visible when the guarded server refuses encrypted writes", async () => {
+  await seedPrivateWorkspaceClient(await privateRecoveryFixture()); await client().mutation("favorites.create", { description: "Guarded local pin" });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "Internal protocol closed", code: -32603, data: { code: "NOT_IMPLEMENTED", httpStatus: 501 } } }), { status: 501, headers: { "content-type": "application/json" } })));
+  const { syncPrivateWorkspace } = await import("./private-workspace-sync"), states: unknown[] = [];
+  await syncPrivateWorkspace({ server: state.origin, userId: "owner", workspaceId: "workspace" }, (state) => states.push(state), () => true);
+  expect(states.at(-1)).toEqual({ phase: "unavailable", pending: 3 }); expect(await client().query("favorites.list", {})).toMatchObject([{ description: "Guarded local pin" }]);
+});
+
+it("wakes other windows using public scope only and ignores malformed or foreign-shaped notifications", async () => {
+  class Channel { onmessage: ((event: { data: unknown }) => void) | null = null; postMessage = vi.fn(); close = vi.fn(); constructor() { channels.push(this); } }
+  const channels: Channel[] = [];
+  vi.stubGlobal("BroadcastChannel", Channel);
+  const { subscribePrivateWorkspaceEdits, notifyPrivateWorkspaceEdit } = await import("./private-workspace-sync"), listener = vi.fn(), unsubscribe = subscribePrivateWorkspaceEdits(listener), scope = { server: state.origin, userId: "owner", workspaceId: "workspace" };
+  const opened = channels[0]!;
+  notifyPrivateWorkspaceEdit(scope); expect(listener).toHaveBeenCalledWith(scope); expect(opened!.postMessage).toHaveBeenCalledWith(scope);
+  opened!.onmessage!({ data: { ...scope, description: "Unexpected private value" } }); expect(listener).toHaveBeenCalledTimes(1);
+  opened!.onmessage!({ data: { ...scope, server: "file:///private" } }); expect(listener).toHaveBeenCalledTimes(1);
+  opened!.onmessage!({ data: scope }); expect(listener).toHaveBeenCalledTimes(2); unsubscribe(); expect(opened!.close).toHaveBeenCalledOnce();
 });

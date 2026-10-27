@@ -110,6 +110,15 @@ export const shell: Translation<typeof source> = {
     more: "Mehr",
   },
   sync: {
+    private: {
+      checking: "Synchronisierung des privaten Arbeitsbereichs wird geprüft",
+      syncing: "Private Änderungen werden synchronisiert. Gespeicherte Änderungen bleiben bis zur bestätigten Übertragung auf diesem Gerät.",
+      saved: "Privater Arbeitsbereich synchronisiert",
+      pending: "Auf diesem Gerät gespeichert — {count, plural, one {# private Änderung muss} other {# private Änderungen müssen}} noch synchronisiert werden. Öffne die Einstellungen, um diese Kopie zu sichern.",
+      unavailable: "Private Synchronisierung nicht verfügbar. Gespeicherte Änderungen bleiben auf diesem Gerät. Du kannst diese Kopie in den Einstellungen sichern.",
+      conflict: "Private Änderungen müssen geprüft werden. Deine gespeicherte Kopie bleibt erhalten. Sichere sie in den Einstellungen.",
+      count: "{count, plural, one {# nicht synchronisiert} other {# nicht synchronisiert}}",
+    },
     open: "Live – Änderungen werden zwischen deinen Geräten synchronisiert",
     connecting: "Verbindung wird hergestellt …",
     closed: "Offline – Verbindung wird wiederhergestellt",
