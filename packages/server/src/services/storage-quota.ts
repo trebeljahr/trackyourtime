@@ -1,3 +1,4 @@
+import { assertNoPrivateRunningTimer } from "./privacy/timer-state.js";
 import { guardPlaintextWorkspaceWrites } from "./privacy/plaintext-guard.js";
 import mongoose, { type Model } from "mongoose";
 import { TRPCError } from "@trpc/server";
@@ -22,13 +23,13 @@ export function quotaCollections(): Record<string, string> {
   };
 }
 
-type Row = { _id: unknown; workspaceId: string; bytes: number; userId?: string };
+type Row = { _id: unknown; workspaceId: string; bytes: number; userId?: string; authorId?: string; end?: Date | null };
 type State = { fences: Set<string>; workspaces: Map<string, number>; usage: Map<string, number>; accounts: Map<string, number>; adopting: boolean };
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
 
 type ModelIdentity = Pick<Model<unknown>, "modelName" | "collection">;
 type RuntimeCall = (...args: unknown[]) => Promise<unknown>;
-type StorageDocument = { _id: unknown; workspaceId: string; userId: string };
+type StorageDocument = { _id: unknown; workspaceId: string; userId: string; authorId?: string; end?: Date | null };
 type StorageQuery = {
   op: string;
   exec: RuntimeCall;
@@ -154,8 +155,15 @@ async function snapshot(model: ModelIdentity, filter: Record<string, unknown>, s
     { $match: filter },
     ...(sort ? [{ $sort: sort }] : []),
     ...(single ? [{ $limit: 1 }] : []),
-    { $project: { _id: 1, workspaceId: 1, userId: 1, bytes: charge(model.modelName) } },
+    { $project: { _id: 1, workspaceId: 1, userId: 1, authorId: 1, end: 1, bytes: charge(model.modelName) } },
   ], { session: transactionSession() }).toArray();
+}
+
+async function guardRunningEntries(model: ModelIdentity, rows: readonly { authorId?: unknown; end?: unknown }[]): Promise<void> {
+  if (model.modelName !== "TimeEntry") return;
+  const users = new Set(rows.filter(row => row.end == null).map(row => row.authorId));
+  if ([...users].some(id => typeof id !== "string" || !id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Running entries need their original author." });
+  for (const userId of ([...users] as string[]).sort()) await assertNoPrivateRunningTimer(userId);
 }
 
 async function accountChange(before: Row[], after: Row[]): Promise<void> {
@@ -246,6 +254,10 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
         query.setUpdate({ ...record(update), $setOnInsert: { ...record(record(update).$setOnInsert), _id: id } });
         ids.push(id);
       }
+      if (!["deleteOne", "deleteMany", "findOneAndDelete"].includes(op)) {
+        const after = before.length ? before.map(row => ({ authorId: row.authorId, end: record(record(update).$set).end === undefined ? row.end : record(record(update).$set).end })) : options.upsert ? [proposed] : [];
+        await guardRunningEntries(model, after);
+      }
       await prepare([...before.map((row) => row.workspaceId), ...(typeof proposed.workspaceId === "string" ? [proposed.workspaceId] : [])],
         model.modelName === "WorkspaceMember" ? [...before.map((row) => row.userId!), ...(typeof proposed.userId === "string" ? [proposed.userId] : [])] : [], privateData);
       const result = await Reflect.apply(exec, query, args);
@@ -258,6 +270,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
     const doc = this;
     return guarded(async () => {
       const before = await snapshot(model, { _id: doc._id });
+      await guardRunningEntries(model, [doc as StorageDocument & { authorId?: string; end?: unknown }]);
       await prepare([...before.map((row) => row.workspaceId), doc.workspaceId], model.modelName === "WorkspaceMember" ? [doc.userId] : [], privateData);
       const result = await Reflect.apply(save, doc, [{ ...record(args[0]), session: transactionSession() }, ...args.slice(1)]);
       await accountChange(before, await snapshot(model, { _id: doc._id }));
@@ -275,6 +288,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
     return guarded(async () => {
       const documents: unknown[] = Array.isArray(docs) ? docs : [docs];
       const rows = documents.map((doc) => ({ ...record(doc), _id: (doc as StorageDocument)._id ?? new mongoose.Types.ObjectId() } as StorageDocument));
+      await guardRunningEntries(model, rows);
       await prepare(rows.map((row) => row.workspaceId), model.modelName === "WorkspaceMember" ? rows.map((row) => row.userId) : [], privateData);
       const result = await Reflect.apply(insertMany, model, [rows, { ...record(options), ordered: true, throwOnValidationError: true }]);
       await accountChange([], await snapshot(model, { _id: { $in: rows.map((row) => row._id) } }));

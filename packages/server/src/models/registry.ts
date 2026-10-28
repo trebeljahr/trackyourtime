@@ -32,3 +32,5 @@ export function allModels(): mongoose.Model<unknown>[] {
 }
 
 import "./TimesheetApproval.js";
+
+import "./PrivateTimer.js";

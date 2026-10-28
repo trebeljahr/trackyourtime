@@ -123,7 +123,8 @@ describe("what a narrowed visibility then permits", () => {
 // `TimerReach` is the distinction between the two principals, and these tests
 // are the proof that the confined one cannot reach across.
 import mongoose from "mongoose";
-import { PrivateWorkspace } from "../models/PrivateData.js";
+import { PrivateTimerVersion } from "../models/PrivateTimer.js";
+import { PrivateAccount, PrivateWorkspace } from "../models/PrivateData.js";
 import { TimeEntry, type TimeEntryDocLike } from "../models/TimeEntry.js";
 import {
   DEFAULT_USER_PREFERENCES,
@@ -236,6 +237,8 @@ const stubbable = TimeEntry as unknown as {
 };
 const privateModes = PrivateWorkspace as unknown as { findOne: () => { lean: () => Promise<null> } };
 const realPrivateModeFindOne = privateModes.findOne;
+const timerVersions = PrivateTimerVersion as unknown as { exists: () => Promise<null> }, realTimerVersionExists = PrivateTimerVersion.exists;
+const privateAccounts = PrivateAccount as unknown as { findOne: () => { lean: () => Promise<null> } }, realPrivateAccountFindOne = privateAccounts.findOne;
 const realFindOne = stubbable.findOne;
 const realFindOneAndUpdate = stubbable.findOneAndUpdate;
 const realCreate = stubbable.create;
@@ -277,6 +280,8 @@ const withStubbedEntries = async (
   docs: readonly TimeEntryDocLike[] = WORKSPACE_B_ENTRIES,
 ): Promise<void> => {
   privateModes.findOne = () => ({ lean: async () => null });
+  privateAccounts.findOne = () => ({ lean: async () => null });
+  timerVersions.exists = async () => null;
   queried = [];
   updated = [];
   inserted = [];
@@ -307,6 +312,8 @@ const withStubbedEntries = async (
     await run();
   } finally {
     privateModes.findOne = realPrivateModeFindOne;
+    privateAccounts.findOne = realPrivateAccountFindOne;
+    timerVersions.exists = realTimerVersionExists as unknown as typeof timerVersions.exists;
     stubbable.findOne = realFindOne;
     stubbable.findOneAndUpdate = realFindOneAndUpdate;
     stubbable.create = realCreate;

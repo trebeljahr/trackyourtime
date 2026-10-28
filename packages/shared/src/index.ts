@@ -48,3 +48,5 @@ export * from "./report-range.js";
 
 export * from "./workspace-member-metadata.js";
 export * from "./private-device-transfer.js";
+
+export * from "./private-timer.js";

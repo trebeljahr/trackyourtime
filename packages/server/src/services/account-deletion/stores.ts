@@ -3,6 +3,7 @@ import { PRIVATE_USER_ONLY_KINDS } from "@starter/shared";
 import { PrivateInventoryVersion } from "../../models/PrivateInventoryVersion.js";
 import { withPrivateWorkspaceErasure } from "../privacy/plaintext-guard.js";
 // The two real row stores behind `deleteAccountData`.
+import { PrivateTimerVersion } from "../../models/PrivateTimer.js";
 import { PrivateAccount, PrivatePreparationRequest, PrivateDirectory, PrivateDeviceRequest, PrivateSourceChallengeRequest, PrivateMigrationReceipt, PrivateRecord, PrivateSnapshotChunk, PrivateSnapshotReader, PrivateProjectionRoot, PrivateProjectionReader, PrivateWorkspace, PrivateWorkspaceCommit } from "../../models/PrivateData.js";
 import type { Model } from "mongoose";
 import { withStorageOwnershipAdoption } from "../storage-quota.js";
@@ -51,6 +52,7 @@ type AppCollection = Exclude<
 const APP_MODELS: Record<AppCollection, Model<any, {}, {}, any>> = {
   privateAccounts: PrivateAccount,
   privateInventoryVersions: PrivateInventoryVersion,
+  privateTimerVersions: PrivateTimerVersion,
   privateDirectories: PrivateDirectory,
   privateSnapshotChunks: PrivateSnapshotChunk,
   privateSnapshotReaders: PrivateSnapshotReader,

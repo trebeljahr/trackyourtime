@@ -25,7 +25,7 @@ const privateFields: Record<string, string[]> = {
   privateworkspacecommits: ["workspaceId", "userId", "operationId", "revision", "manifest", "signature", "readerSignatures", "records", "chain", "head"],
   privateworkspaces: ["workspaceId", "state", "ownerId", "revision", "head", "directoryDigest", "leaseUntil", "migrationId", "sourceRevision", "supplementRevision", "preparationProtocol", "originalStage", "operatorBackup", "backupVerified"],
 };
-const privateCollections = ["privateaccounts", "privatedevicerequests", ...Object.keys(privateFields)];
+const privateCollections = ["privatetimerversions", "privateaccounts", "privatedevicerequests", ...Object.keys(privateFields)];
 const operationalCollections = ["storageusages", "storagefences", "workspacewritefences", "importbudgets", "importleases", "scheduledjobs"];
 const accountCollections = ["user", "account", "session", "verification", "member", "invitation", "deviceCode", "twoFactor", "passkey", "profiles", "avatars", "userpreferences"];
 const special = ["workspacemembers", "apitokens", "webhooksubscriptions", "webhookdeliveries", "privatemigrationreceipts", "privatepreparationreservations", "privateworkspaces", "organization"];

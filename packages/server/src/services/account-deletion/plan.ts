@@ -25,6 +25,7 @@ export {
 export type DeletionCollection =
   | "privateAccounts"
   | "privateInventoryVersions"
+  | "privateTimerVersions"
   | "privateDeviceRequests"
   | "privatePreparationReservations"
   | "privatePreparationRequests"
@@ -230,6 +231,7 @@ export function userScopedSteps(user: { id: string; email?: string | null }): De
     { collection: "storageFences", filter: { _id: `account:${user.id}` } },
     { collection: "importLeases", filter: { _id: JSON.stringify(["user", user.id]) } },
     { collection: "authPasskeys", filter: { userId: user.id } },
+    { collection: "privateTimerVersions", filter: { userId: user.id } },
     { collection: "privateInventoryVersions", filter: { userId: user.id } },
     { collection: "privateAccounts", filter: { userId: user.id } },
     { collection: "privateDeviceRequests", filter: { userId: user.id } },

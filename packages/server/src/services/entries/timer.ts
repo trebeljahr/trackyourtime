@@ -1,4 +1,5 @@
 import { fenceWorkspace, transactional, transactionSession } from "../business-transaction.js";
+import { assertNoPrivateRunningTimer } from "../privacy/timer-state.js";
 import { assertStandardWorkspace } from "../privacy/access.js";
 // The running timer: starting, stopping, discarding, continuing, and the
 // runaway prompt.
@@ -239,6 +240,7 @@ export type StartedEntry = {
 };
 
 const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
+  await assertNoPrivateRunningTimer(args.authorId);
   const refs = await resolveRefs(args.workspaceId, args.projectId, args.taskId);
   const clientId = await resolveClientId(
     args.workspaceId,
@@ -343,6 +345,7 @@ async function currentEntryImpl(
   // A token looks only in its own workspace and learns nothing about a
   // foreign timer. A person-wide read first identifies the actual workspace
   // before any legacy runaway evaluation can touch its retained originals.
+  if (reach.kind === "person") await assertNoPrivateRunningTimer(scope.userId, true);
   const initial = await TimeEntry.findOne({ authorId: scope.userId, end: null, ...reachFilter(reach) }).lean();
   if (!initial) return null;
   // The selected workspace gate does not cover person-wide timer reach. Do
@@ -412,6 +415,7 @@ async function startTimerDetailedImpl(
 ): Promise<StartedEntry> {
   const start = input.start ? new Date(input.start) : new Date();
   if (Number.isNaN(start.getTime())) throw badRequest("Invalid start");
+  await assertNoPrivateRunningTimer(scope.userId);
 
   // The confined behaviour, chosen rather than inherited: REFUSE. The two
   // honest options were to refuse, or to start here and leave the foreign

@@ -15,6 +15,8 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import mongoose from "mongoose";
+import { PrivateTimerVersion } from "../models/PrivateTimer.js";
+import { PrivateAccount } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import type { TimeEntry as TimeEntryWire } from "@starter/shared";
 import { TimeEntry, type TimeEntryDocLike } from "../models/TimeEntry.js";
@@ -69,7 +71,10 @@ const settings = WorkspaceSettingsModel as unknown as {
   findOne: (filter: { workspaceId: string }) => Lean<Record<string, unknown>>;
 };
 const members = WorkspaceMember as unknown as { findOne: () => Lean<{ hourlyRate: null }> };
+const timerVersions = PrivateTimerVersion as unknown as { exists: () => Promise<null> }, realTimerVersionExists = PrivateTimerVersion.exists;
+const privateAccounts = PrivateAccount as unknown as { findOne: () => Lean<null> };
 const real = {
+  privateFindOne: privateAccounts.findOne,
   membersFindOne: members.findOne,
   findOne: entries.findOne,
   findOneAndUpdate: entries.findOneAndUpdate,
@@ -81,6 +86,8 @@ let running: TimeEntryDocLike[];
 let queried: Record<string, unknown>[];
 
 beforeEach(() => {
+  privateAccounts.findOne = () => ({ lean: async () => null });
+  timerVersions.exists = async () => null;
   members.findOne = () => ({ lean: async () => ({ hourlyRate: null }) });
   running = [];
   queried = [];
@@ -116,6 +123,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  privateAccounts.findOne = real.privateFindOne;
+  timerVersions.exists = realTimerVersionExists as unknown as typeof timerVersions.exists;
   entries.findOne = real.findOne;
   entries.findOneAndUpdate = real.findOneAndUpdate;
   entries.create = real.create;

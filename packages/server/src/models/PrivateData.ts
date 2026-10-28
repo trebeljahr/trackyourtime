@@ -2,9 +2,10 @@ import { installStorageQuota } from "../services/storage-quota.js";
 import mongoose, { Schema } from "mongoose";
 import { PrivatePreparationReservation } from "./PrivatePreparationReservation.js";
 import type { EncryptedRecord, PrivateIdentity, PrivateDeviceApproval, PrivateDeviceInvite } from "@starter/shared";
-export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number; keySerial: number; inventoryRevision: number; inventoryRoot: string | null; inventoryBytes: number }>({
+export const PrivateAccount = mongoose.model("PrivateAccount", new Schema<{ userId: string; identity: PrivateIdentity; revision: number; deviceSerial: number; keySerial: number; inventoryRevision: number; inventoryRoot: string | null; inventoryBytes: number; timerRevision: number; timerRoot: string | null; timerSigned: import("@starter/shared").SignedPrivateTimer | null; timerBytes: number }>({
   userId: { type: String, required: true, unique: true }, identity: { type: Schema.Types.Mixed, required: true }, revision: { type: Number, default: 1 },
   deviceSerial: { type: Number, default: 0 }, keySerial: { type: Number, default: 0 },
+  timerRevision: { type: Number, default: 0 }, timerRoot: { type: String, default: null }, timerSigned: { type: Schema.Types.Mixed, default: null }, timerBytes: { type: Number, default: 0 },
   inventoryRevision: { type: Number, default: 0 }, inventoryRoot: { type: String, default: null }, inventoryBytes: { type: Number, default: 0 },
 }, { timestamps: true }));
 export const PrivateWorkspace = mongoose.model("PrivateWorkspace", new Schema<{ workspaceId: string; state: "migrating" | "reserved" | "encrypted"; ownerId: string; revision: number; head: string | null; directoryDigest: string | null; leaseUntil: Date; migrationId: string; sourceRevision: string; supplementRevision?: string | null; preparationProtocol?: "client-v2" | null; originalStage?: { signed: import("@starter/shared").SignedPrivateOriginalStageRequest; cursor: number; complete: boolean } | null; operatorBackup?: { proof: Record<string, unknown>; signature: string } | null; backupVerified: boolean }>({

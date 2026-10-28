@@ -4,6 +4,7 @@ import { EntryOperation } from "../../models/EntryOperation.js";
 import { TimeEntry } from "../../models/TimeEntry.js";
 import { isValidObjectId } from "mongoose";
 import { fenceWorkspace, supportsBusinessTransactions, withBusinessTransaction } from "../business-transaction.js";
+import { assertNoPrivateRunningTimer } from "../privacy/timer-state.js";
 import { entryOperationResultWorkspaceIds } from "./operation-scopes.js";
 import { assertStandardWorkspace } from "../privacy/access.js";
 import type { WorkspaceScope } from "../scope.js";
@@ -49,6 +50,9 @@ export async function withEntryOperation<T>(
   };
   try {
     return await withBusinessTransaction(async () => {
+      // Acquire account coordination before the receipt's workspace fence,
+      // including durable starts and manual reopen operations.
+      if (["entries.start", "api:entries.start"].includes(operation) || (["entries.update", "api:entries.update"].includes(operation) && (input as { end?: unknown }).end === null)) await assertNoPrivateRunningTimer(scope.userId);
       const prior = await read();
       if (prior) return prior.result;
       // Session clients may stop their timer while viewing another workspace.
