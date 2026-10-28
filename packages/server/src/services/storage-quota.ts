@@ -166,6 +166,22 @@ async function guardRunningEntries(model: ModelIdentity, rows: readonly { author
   for (const userId of ([...users] as string[]).sort()) await assertNoPrivateRunningTimer(userId);
 }
 
+function proposedTimerRows(before: readonly Row[], update: unknown, proposed: Record<string, unknown>, upsert: unknown) {
+  const patch = record(update), set = { ...patch, ...record(patch.$set) }, unset = record(patch.$unset);
+  // These two scalar fields determine account timer ownership. Refuse other
+  // modifiers rather than approximate their post-update value before fencing.
+  const protectedPath = (path: string) => ["end", "authorId"].includes(path.split(".")[0]!);
+  for (const [operator, fields] of Object.entries(patch)) {
+    if (!operator.startsWith("$") || ["$set", "$unset", "$setOnInsert"].includes(operator)) continue;
+    if (Object.keys(record(fields)).some(protectedPath) || (operator === "$rename" && Object.values(record(fields)).some(value => typeof value === "string" && protectedPath(value)))) throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported timer ownership update" });
+  }
+  const rows = before.length ? before : upsert ? [proposed] : [];
+  return rows.map(row => ({
+    authorId: Object.hasOwn(unset, "authorId") ? undefined : set.authorId === undefined ? row.authorId : set.authorId,
+    end: Object.hasOwn(unset, "end") ? null : set.end === undefined ? row.end : set.end,
+  }));
+}
+
 async function accountChange(before: Row[], after: Row[]): Promise<void> {
   const delta = new Map<string, number>();
   for (const [rows, sign] of [[before, -1], [after, 1]] as const) {
@@ -255,8 +271,7 @@ export function installStorageQuota(mongooseModel: ModelIdentity): void {
         ids.push(id);
       }
       if (!["deleteOne", "deleteMany", "findOneAndDelete"].includes(op)) {
-        const after = before.length ? before.map(row => ({ authorId: row.authorId, end: record(record(update).$set).end === undefined ? row.end : record(record(update).$set).end })) : options.upsert ? [proposed] : [];
-        await guardRunningEntries(model, after);
+        if (model.modelName === "TimeEntry") await guardRunningEntries(model, proposedTimerRows(before, update, proposed, options.upsert));
       }
       await prepare([...before.map((row) => row.workspaceId), ...(typeof proposed.workspaceId === "string" ? [proposed.workspaceId] : [])],
         model.modelName === "WorkspaceMember" ? [...before.map((row) => row.userId!), ...(typeof proposed.userId === "string" ? [proposed.userId] : [])] : [], privateData);

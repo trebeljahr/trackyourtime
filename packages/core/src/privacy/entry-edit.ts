@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createEntrySchema, entryIdInputSchema, intervalIntersects, projectBillableByDefault, resolveHourlyRate, updateEntrySchema, type PrivateKind, type TimeEntry } from "@starter/shared";
+import { createEntrySchema, entryIdInputSchema, intervalIntersects, projectBillableByDefault, resolveHourlyRate, startTimerSchema, continueEntrySchema, updateEntrySchema, type PrivateKind, type TimeEntry } from "@starter/shared";
 import { canonicalJson } from "./crypto.js";
 import { privateEntryReader } from "./entry-view.js";
 import { privateViewSource, type PrivateViewOptions } from "./view-source.js";
@@ -14,12 +14,12 @@ const invoiceFields = ["clientId", "projectId", "taskId", "billable", "start", "
 declare const privateEntryIntentBrand: unique symbol;
 export type VerifiedPrivateEntryIntent = Readonly<{ scope: PrivateViewOptions["scope"]; path: PrivateEntryEditPath; intentId: string; receiptId: string; request: string; requestHash: string; current: () => boolean }> & { readonly [privateEntryIntentBrand]: true };
 const intents = new WeakSet<object>();
-function entryArguments(scope: PrivateViewOptions["scope"], path: PrivateEntryEditPath, rawInput: unknown) {
+function entryArguments(scope: PrivateViewOptions["scope"], path: PrivateEntryEditPath, rawInput: unknown, timer = false) {
   if (!isPrivateEntryEdit(path)) throw new Error("Unsupported private entry edit");
   const raw = z.record(z.string(), z.unknown()).parse(rawInput ?? {});
   if (raw.workspaceId !== undefined && raw.workspaceId !== scope.workspaceId) throw new Error("Private entry intent belongs to another workspace");
   const { workspaceId: _workspace, ...input } = raw; void _workspace;
-  const args = (path === "entries.create" ? createEntrySchema.strict().parse(input) : path === "entries.update" ? updateEntrySchema.strict().parse(input) : entryIdInputSchema.strict().parse(input)) as Record<string, unknown>;
+  const args = (path === "entries.create" ? (timer ? z.object({ ...createEntrySchema.shape, end: instant.nullable() }) : createEntrySchema).strict().parse(input) : path === "entries.update" ? updateEntrySchema.strict().parse(input) : entryIdInputSchema.strict().parse(input)) as Record<string, unknown>;
   if (args.operationId !== undefined) throw new Error("Standard queued operations cannot be replayed into private storage");
   return args;
 }
@@ -36,9 +36,57 @@ export async function preparePrivateEntryIntent(options: { scope: PrivateViewOpt
 }
 /** Completed manual time only. Starting, stopping or reopening a timer needs
  * account-wide coordination across standard and encrypted workspaces. */
-export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEntryEditPath; input: unknown; now?: number; newId?: () => string; intent?: VerifiedPrivateEntryIntent }): { records: PlainPrivateRecord[]; remove: Pick<PlainPrivateRecord, "kind" | "id" | "authorId">[]; result: TimeEntry | { success: true; id: string } } {
+type EntryEditOptions = PrivateViewOptions & { path: PrivateEntryEditPath; input: unknown; now?: number; newId?: () => string; intent?: VerifiedPrivateEntryIntent };
+export function privateEntryEdit(options: EntryEditOptions) { return buildEntryEdit(options, null); }
+const timerCommandSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("start"), entryId: z.uuid(), input: startTimerSchema.strict() }).strict(),
+  z.object({ kind: z.literal("continue"), entryId: z.uuid(), input: continueEntrySchema.strict() }).strict(),
+  z.object({ kind: z.literal("stop"), id, end: instant }).strict(),
+  z.object({ kind: z.literal("discard"), id }).strict(),
+  z.object({ kind: z.literal("reopen"), id }).strict(),
+  z.object({ kind: z.literal("update"), input: updateEntrySchema.strict() }).strict(),
+]);
+export type PrivateTimerEntryCommand = z.infer<typeof timerCommandSchema>;
+/** Domain planning only, for the account timer coordinator. Never enqueue
+ * this result through an ordinary workspace-only edit: its pointer and record
+ * changes must share the signed account transaction and recovery checkpoint. */
+export function privateTimerEntryEdit(options: PrivateViewOptions & { command: PrivateTimerEntryCommand; expectedRunningId: string | null; now: number }) {
+  const source = privateViewSource(options), reader = privateEntryReader(source), command = timerCommandSchema.parse(options.command);
+  const running = reader.quick.filter(row => row.doc.authorId === options.scope.userId && row.doc.end === null);
+  if (running.length > 1 || (running[0]?.doc.id ?? null) !== options.expectedRunningId) throw new Error("Private timer differs from its account checkpoint");
+  const stamp = new Date(z.number().finite().parse(options.now)).toISOString();
+  let path: PrivateEntryEditPath, input: Record<string, unknown>, action: TimerAction, newId: string | undefined;
+  if (command.kind === "start" || command.kind === "continue") {
+    if (running.length) throw new Error("Stop the original private timer in the account transition before starting another");
+    path = "entries.create"; action = "start"; newId = command.entryId;
+    if (command.kind === "start") input = { ...command.input, start: command.input.start ?? stamp, end: null };
+    else {
+      const original = reader.quick.find(row => row.doc.id === command.input.id);
+      if (!original) throw new Error("Entry not found");
+      const entry = reader.detailed(original, false);
+      const tags = new Set(source.ofKind("tags").map(row => row.id));
+      input = { description: entry.description, clientId: entry.clientId, projectId: entry.projectId, taskId: entry.taskId, billable: entry.billable, source: entry.source, tagIds: entry.tagIds.filter(tag => tags.has(tag)), timeZone: command.input.timeZone, start: stamp, end: null };
+    }
+  } else if (command.kind === "reopen") {
+    if (running.length) throw new Error("Another private timer is already running");
+    path = "entries.update"; action = "reopen"; input = { id: command.id, end: null };
+  } else {
+    const target = command.kind === "update" ? command.input.id : command.id;
+    if (running.length !== 1 || running[0]!.doc.id !== target) throw new Error("The original private timer is not running");
+    action = command.kind;
+    path = command.kind === "discard" ? "entries.remove" : "entries.update";
+    input = command.kind === "update" ? { ...command.input } : command.kind === "stop" ? { id: command.id, end: command.end } : { id: command.id };
+    if (command.kind === "update" && command.input.end !== undefined) throw new Error("Use an account stop or reopen transition to change timer state");
+  }
+  const result = buildEntryEdit({ ...options, path, input, newId: newId ? () => newId! : undefined }, action);
+  const current = "end" in result.result && result.result.end === null ? { workspaceId: options.scope.workspaceId, entryId: result.result.id } : null;
+  source.check();
+  return { ...result, previous: options.expectedRunningId === null ? null : { workspaceId: options.scope.workspaceId, entryId: options.expectedRunningId }, current };
+}
+type TimerAction = "start" | "stop" | "update" | "reopen" | "discard";
+function buildEntryEdit(options: EntryEditOptions, timer: TimerAction | null): { records: PlainPrivateRecord[]; remove: Pick<PlainPrivateRecord, "kind" | "id" | "authorId">[]; result: TimeEntry | { success: true; id: string } } {
   const { scope } = options, source = privateViewSource(options), { check, ofKind, value, paired } = source;
-  const args = entryArguments(scope, options.path, options.input), intent = options.intent;
+  const args = entryArguments(scope, options.path, options.input, timer !== null), intent = options.intent;
   if (intent) {
     if (!intents.has(intent) || !intent.current() || intent.scope.server !== scope.server || intent.scope.userId !== scope.userId || intent.scope.workspaceId !== scope.workspaceId || intent.path !== options.path || intent.request !== canonicalJson(args)) throw new Error("Private entry intent differs from its original request");
     const existing = ofKind("imports").find(row => row.id === intent.receiptId);
@@ -72,7 +120,7 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
   const reader = privateEntryReader(source), oldRow = prior ? reader.quick.find((row) => row.doc.id === prior.id) : undefined;
   const old = oldRow ? reader.detailed(oldRow) : null;
   if (prior && (!old || old.authorId !== scope.userId)) throw new Error("Entry author differs from its signed record");
-  if (old?.end === null || args.end === null) throw new Error("Private timer changes require account-wide coordination");
+  if (timer === null && (old?.end === null || args.end === null)) throw new Error("Private timer changes require account-wide coordination");
   const stamp = new Date(options.now ?? Date.now()).toISOString();
   const approvals = ofKind("approvals").map((row) => {
     const fact = value(row);
@@ -83,20 +131,21 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
     if (Date.parse(approval.end) <= Date.parse(approval.start)) throw new Error("Invalid approval interval");
     return approval;
   });
-  const writable = (start: string, end: string) => {
-    if (approvals.some((approval) => !["draft", "rejected"].includes(approval.status) && intervalIntersects(new Date(start), new Date(end), new Date(approval.start), new Date(approval.end)))) throw new Error("Submitted or approved time cannot be edited");
+  const writable = (start: string, end: string | null) => {
+    if (approvals.some((approval) => !["draft", "rejected"].includes(approval.status) && intervalIntersects(new Date(start), end === null ? new Date(8640000000000000) : new Date(end), new Date(approval.start), new Date(approval.end)))) throw new Error("Submitted or approved time cannot be edited");
   };
-  if (old) writable(old.start, old.end!);
+  if (old) writable(old.start, timer === "stop" ? instant.parse(args.end) : old.end);
   if (options.path === "entries.remove") {
     if (old!.invoiceId) throw new Error("Invoiced time cannot be deleted");
     const remove = ["entries", "entryMoney"].map((kind) => ({ kind: kind as PrivateKind, id: prior!.id, authorId: scope.userId }));
     const result = { success: true as const, id: prior!.id }; check(); return { records: receipt(result), remove, result };
   }
   if (old?.invoiceId && invoiceFields.some((field) => args[field] !== undefined)) throw new Error("Invoiced time can only be relabelled or retagged");
-  const start = new Date(String(args.start ?? old?.start)).toISOString(), end = new Date(String(args.end ?? old?.end)).toISOString();
-  if (Date.parse(end) <= Date.parse(start)) throw new Error("End must be after start");
+  const start = new Date(String(args.start ?? old?.start)).toISOString(), rawEnd = args.end === undefined ? old?.end : args.end;
+  const end = rawEnd === null ? null : new Date(String(rawEnd)).toISOString();
+  if (end !== null && Date.parse(end) <= Date.parse(start)) throw new Error("End must be after start");
   writable(start, end);
-  const durationSec = Math.round((Date.parse(end) - Date.parse(start)) / 1000);
+  const durationSec = end === null ? 0 : Math.round((Date.parse(end) - Date.parse(start)) / 1000);
   if (!Number.isSafeInteger(durationSec) || durationSec < 0) throw new Error("Entry duration exceeds supported precision");
   const projectId = (args.projectId === undefined ? old?.projectId : args.projectId) as string | null | undefined ?? null;
   const taskId = (args.taskId === undefined ? old?.taskId : args.taskId) as string | null | undefined ?? null;
@@ -132,7 +181,7 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
   let billable = args.billable as boolean | undefined ?? old?.billable;
   let facts: ReturnType<typeof billing> | undefined;
   if (billable === undefined) { facts = billing(); billable = projectValue ? projectBillableByDefault({ billableDefault: z.boolean().parse(projectValue.billableDefault), hourlyRate: facts.projectRate }, facts.defaultRate, facts.memberRate) : false; }
-  const resnapshot = !old || billable !== old.billable || projectId !== old.projectId;
+  const resnapshot = !old || timer === "stop" || billable !== old.billable || projectId !== old.projectId;
   let financial: PlainPrivateRecord | null = null, currency = old?.currency;
   const entryId = prior?.id ?? z.uuid().parse(intent?.intentId ?? (options.newId ?? (() => crypto.randomUUID()))());
   if (!prior && [...ofKind("entries"), ...ofKind("entryMoney")].some((row) => row.id === entryId)) throw new Error("New entry identity already exists");
@@ -144,6 +193,7 @@ export function privateEntryEdit(options: PrivateViewOptions & { path: PrivateEn
     const stored = ofKind("entryMoney").find((row) => row.id === prior!.id)!;
     financial = { ...stored, value: { ...stored.value, hourlyRate: null } };
   }
+  if (timer === "reopen" && !financial) financial = ofKind("entryMoney").find(row => row.id === prior!.id)!;
   const correctedRunaway = old?.runaway && old.runaway.resolvedAt === null && (args.start !== undefined || args.end !== undefined) && durationSec <= old.runaway.limitSec;
   const body: Record<string, unknown> = prior ? { ...prior.value } : { _id: entryId, workspaceId: scope.workspaceId, authorId: scope.userId, source: args.source ?? "web", timeZone: args.timeZone ?? null, runaway: null, invoiceId: null, importId: null, createdAt: stamp };
   Object.assign(body, { description: args.description ?? old?.description ?? "", ...clientPatch, projectId, taskId, billable, start, end, durationSec, currency, ...tagPatch, updatedAt: stamp });

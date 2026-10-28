@@ -7,6 +7,7 @@ import { decryptPrivateRecord, type PlainPrivateRecord } from "./records.js";
 import { deriveRecoveryBackupKey } from "./recovery-backup.js";
 import { privateRecordDigest } from "./workspace-edits.js";
 import { RecoveryBackupPausedError, type RecoveryBackupFolder } from "./recovery-backup-job.js";
+import { privateTimerRecoveryStateSchema, verifyPrivateTimerRecoveryState, privateTimerRecoveryWorkspaceOverlay } from "./timer-recovery.js";
 
 export const PRIVATE_RECOVERY_MAX_BYTES = 80 * 1024 * 1024;
 export const PRIVATE_RECOVERY_MAX_FILE_BYTES = 160 * 1024 * 1024;
@@ -23,12 +24,13 @@ export type PrivateRecoveryBackupConfiguration = z.infer<typeof privateRecoveryB
 const privateKeySchema = publicEncryptionKeySchema.extend({ d: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 const secretsSchema = z.object({ v: z.literal(1), master: z.string().regex(/^[A-Za-z0-9_-]{43}$/), privateKey: privateKeySchema, signingPrivateKey: privateKeySchema }).strict();
 export type PrivateRecoverySecrets = { v: 1; master: string; privateKey: PublicKey; signingPrivateKey: PublicKey };
-const archiveSchema = scopeSchema.extend({
+const legacyArchiveSchema = scopeSchema.extend({
   format: z.literal("trackyourtime-private-workspace-recovery-v1"), createdAt: z.iso.datetime(), identity: identitySchema,
   inventory: privateInventoryRecoveryStateSchema,
   directory: z.object({ signed: signedPrivateDirectorySchema, digest: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict(),
   replica: privateReplicaRecoveryStateSchema,
 }).strict();
+const archiveSchema = z.discriminatedUnion("format", [legacyArchiveSchema, legacyArchiveSchema.extend({ format: z.literal("trackyourtime-private-workspace-recovery-v2"), accountTimer: privateTimerRecoveryStateSchema }).strict()]);
 export type PrivateWorkspaceRecoveryArchive = z.infer<typeof archiveSchema>;
 const headerSchema = scopeSchema.extend({ format: z.literal("trackyourtime-private-workspace-backup-v1"), createdAt: z.iso.datetime(), fileId: z.uuid(), parts: z.number().int().positive().max(MAX_PARTS) }).strict();
 const boxSchema = z.object({ v: z.literal(1), nonce: z.string().regex(/^[A-Za-z0-9_-]{16}$/), data: z.string().min(22).max(512 * 1024).regex(/^[A-Za-z0-9_-]+$/) }).strict();
@@ -80,6 +82,12 @@ export async function verifyPrivateWorkspaceRecoveryArchive(input: unknown, inpu
     for (const row of archive.replica.records) {
       if (!row.keyCommitment || row.revision > archive.replica.revision || !row.grants.some((grant) => grant.userId === scope.userId) || seen.has(address(row))) throw new Error("Private recovery contains duplicate, unrelated or unbound ciphertext");
       seen.add(address(row));
+    }
+    if (archive.format === "trackyourtime-private-workspace-recovery-v2") {
+      await verifyPrivateTimerRecoveryState(archive.accountTimer, { scope, signingPublicKey: archive.identity.signingPublicKey, current }); check();
+      const own = [];
+      for (const row of archive.replica.records.filter(row => ["entries", "entryMoney"].includes(row.kind) && row.authorId === scope.userId)) { own.push(await decryptPrivateRecord(scope.workspaceId, row, scope.userId, secrets.privateKey)); check(); }
+      await privateTimerRecoveryWorkspaceOverlay({ state: archive.accountTimer, replica: archive.replica, records: own, scope, privateKey: secrets.privateKey, current }); check();
     }
     check(); return archive;
   } finally { master.fill(0); }
@@ -160,11 +168,13 @@ export async function decryptPrivateWorkspaceBackup(input: unknown, recoveryKey:
       for (const row of pending.records) optimistic.set(address(row), row);
       for (const row of pending.remove) optimistic.delete(address(row));
     }
+    const records = checked.format === "trackyourtime-private-workspace-recovery-v2" ? await privateTimerRecoveryWorkspaceOverlay({ state: checked.accountTimer, replica: checked.replica, records: confirmed, scope, privateKey: secrets.privateKey, current }) : [...optimistic.values()]; check();
     return {
       format: "trackyourtime-private-workspace-export-v1" as const, ...scope, createdAt: checked.createdAt,
       checkpoint: { activationRoot: checked.replica.activationRoot!, revision: checked.replica.revision, head: checked.replica.head! },
       accountInventory: { localRevision: checked.inventory.local.inventory.revision, confirmedRevision: checked.inventory.confirmed.checkpoint.revision, pending: checked.inventory.pending.length, conflict: checked.inventory.conflict !== null },
-      confirmedRecords: confirmed, records: [...optimistic.values()], pending: checked.replica.pending,
+      confirmedRecords: confirmed, records, pending: checked.replica.pending,
+      ...(checked.format === "trackyourtime-private-workspace-recovery-v2" ? { accountTimer: checked.accountTimer } : {}),
     };
   } finally { key.fill(0); raw?.fill(0); }
 }

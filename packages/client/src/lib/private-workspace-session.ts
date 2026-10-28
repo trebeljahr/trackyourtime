@@ -3,7 +3,7 @@ import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
 import { privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
-import { privateAccountInventoryStorageHost, privateWorkspaceStorageHost } from "./private-replica";
+import { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, privateAccountTimerStorageHost, privateAccountTimerStore } from "./private-replica";
 
 export function privateWorkspaceProjectionTransport(userId: string, workspaceId: string): { directory: PrivateDirectoryTransport; projection: PrivateProjectionTransport } {
   const { rpc, supported } = privateScopedRpc(userId, "privacy.readerProjections");
@@ -159,8 +159,11 @@ export async function openPrivateWorkspaceSyncSession(userId: string, workspaceI
 export async function capturePrivateWorkspaceRecovery(userId: string, workspaceId: string, identity: PrivateRecoveryIdentity) {
   const binding = privateClientScope(userId), host = await privateAccountInventoryStorageHost(userId);
   let copy: Awaited<ReturnType<typeof openPrivateWorkspaceCopy>> | null = null;
+  let timerHost: Awaited<ReturnType<typeof privateAccountTimerStorageHost>> | null = null;
   try {
     binding.check();
+    timerHost = await privateAccountTimerStorageHost(userId); binding.check();
+    const timers = await privateAccountTimerStore(userId, timerHost.storage, timerHost.exclusive), timerBefore = await timers.exportRecovery(); binding.check();
     const inventories = await privateAccountWorkspaceInventorySync(userId, host.storage, host.exclusive), before = await inventories.exportRecovery(); binding.check();
     const row = before.local.inventory.workspaces.find((workspace) => workspace.workspaceId === workspaceId);
     if (!row || row.mode !== "encrypted") throw new Error("Private recovery needs this workspace's trusted encrypted policy");
@@ -168,6 +171,8 @@ export async function capturePrivateWorkspaceRecovery(userId: string, workspaceI
     const replica = await copy.exportRecovery(), inventory = await inventories.exportRecovery(); binding.check();
     const after = inventory.local.inventory.workspaces.find((workspace) => workspace.workspaceId === workspaceId);
     if (!after || after.mode !== "encrypted" || canonicalJson(after.signedPolicy.policy) !== canonicalJson(row.signedPolicy.policy)) throw new Error("Private workspace policy changed during recovery capture");
-    return await verifyPrivateWorkspaceRecoveryArchive({ format: "trackyourtime-private-workspace-recovery-v1", server: binding.server, userId, workspaceId, createdAt: new Date().toISOString(), identity: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey, recovery: identity.recovery }, inventory, directory: { signed: copy.directory.signed, digest: copy.directory.digest }, replica }, privateSession(userId)!, binding.current);
-  } finally { copy?.close(); host.close(); }
+    const timerAfter = await timers.exportRecovery(); binding.check();
+    if ((timerBefore?.digest ?? null) !== (timerAfter?.digest ?? null)) throw new Error("Account timer changed during recovery capture");
+    return await verifyPrivateWorkspaceRecoveryArchive({ ...(timerBefore ? { format: "trackyourtime-private-workspace-recovery-v2", accountTimer: timerBefore.state } : { format: "trackyourtime-private-workspace-recovery-v1" }), server: binding.server, userId, workspaceId, createdAt: new Date().toISOString(), identity: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey, recovery: identity.recovery }, inventory, directory: { signed: copy.directory.signed, digest: copy.directory.digest }, replica }, privateSession(userId)!, binding.current);
+  } finally { copy?.close(); timerHost?.close(); host.close(); }
 }

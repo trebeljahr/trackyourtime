@@ -1,8 +1,9 @@
-import { signPrivateAccountInventory } from "@starter/core";
+import { signPrivateAccountInventory, emptyPrivateTimerCheckpoint, privateRecordDigest } from "@starter/core";
 import { newPrivateIdentity, installVerifiedPrivateSession, privateAccountId, privateDataOrigin, privateSession, privateSessionVersion, whenPrivateAccountReady } from "./private-session";
 import { privateBoundRpc } from "./private-scoped-rpc";
 import { privateRoutingRequired, requirePrivateRouting } from "./private-routing-requirement";
 import { stagePrivateAccountInventory } from "./private-inventory-staging";
+import { stagePrivateAccountTimer } from "./private-timer-staging";
 type Draft = Awaited<ReturnType<typeof newPrivateIdentity>>;
 type Setup = Draft;
 const prepared = new WeakMap<Setup, { draft: Draft; scope: { server: string; userId: string }; signed: Awaited<ReturnType<typeof signPrivateAccountInventory>>; check: () => void; current: () => boolean }>();
@@ -35,5 +36,10 @@ export async function finishPrivateAccountSetup(value: Setup) {
   const sync = await stagePrivateAccountInventory(scope, draft.secrets, check);
   try { await sync.enroll(signed); check(); await requirePrivateRouting(scope, current); check(); }
   finally { sync.close(); }
+  const timers = await stagePrivateAccountTimer(scope, draft.secrets, check);
+  try {
+    const state = { v: 1 as const, confirmed: { checkpoint: emptyPrivateTimerCheckpoint(), signed: null }, pending: [], committed: [], conflict: null };
+    await timers.restore(state, await privateRecordDigest(state)); check();
+  } finally { timers.close(); }
   installVerifiedPrivateSession(scope.userId, draft.identity, draft.secrets); prepared.delete(value);
 }

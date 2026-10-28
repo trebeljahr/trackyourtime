@@ -4,6 +4,7 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { API_LEVEL } from "@starter/shared";
 import { createPrivateWorkspaceReplica, decodeSecret, privateInventoryVersionRoot, privateReplicaIdentityFromDirectory, encryptPrivateRecord, privateInitialSnapshotProjection, privateMemberKeyFingerprint, privateRecordDigest, signPrivateInitialProjectionRoot, signPrivateWorkspaceDirectory, verifyPrivateInitialProjection, verifyPrivateWorkspaceDirectory } from "@starter/core";
+import { emptyPrivateTimerCheckpoint, privateTimerEditBindings, signPrivateChainedWorkspaceEdit, signPrivateTimer, type PlainPrivateRecord } from "@starter/core";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null, level: 32 as number | null, token: null as string | null, ready: async () => {} }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; }, whenApiOriginReady: () => state.ready() }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
@@ -12,7 +13,7 @@ vi.mock("./native-session", () => ({ getNativeToken: () => state.token }));
 vi.mock("./shell", () => ({ clientId: () => "desktop", isCapacitor: () => false }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
-const { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, signPrivateAccountWorkspaceInventory, signPrivateWorkspaceDevicePolicy } = await import("./private-replica");
+const { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, signPrivateAccountWorkspaceInventory, signPrivateWorkspaceDevicePolicy, privateAccountTimerStorageHost, privateAccountTimerStore } = await import("./private-replica");
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
 const { openPrivateWorkspaceSession, capturePrivateWorkspaceRecovery } = await import("./private-workspace-session");
 beforeEach(() => {
@@ -156,6 +157,25 @@ it("captures a cached private copy offline, preserving signed submitted packets 
     expect(captured.replica).toEqual(before); expect(captured.replica.pending[0]!.submitted).not.toBeNull(); expect(captured.replica.pending[1]!.submitted).toBeNull();
     expect(await replica.exportRecovery()).toEqual(before); expect(f.fetcher).not.toHaveBeenCalled();
   } finally { master.fill(0); host.close(); }
+});
+it("captures a pinned account timer and its exact queued ciphertext in the versioned offline backup", async () => {
+  const f = await fixture(), opened = await openPrivateWorkspaceSession("owner", "workspace"); opened.close();
+  const host = await privateAccountTimerStorageHost("owner");
+  try {
+    const timers = await privateAccountTimerStore("owner", host.storage, host.exclusive), initial = { v: 1 as const, confirmed: { checkpoint: emptyPrivateTimerCheckpoint(), signed: null }, pending: [], committed: [], conflict: null };
+    await timers.restore(initial, await privateRecordDigest(initial));
+    const entryId = crypto.randomUUID(), records = [];
+    for (const row of [{ kind: "entries", id: entryId, authorId: "owner", value: { _id: entryId, workspaceId: "workspace", authorId: "owner", description: "Offline private timer", start: "2026-10-29T01:00:00.000Z", end: null } }, { kind: "entryMoney", id: entryId, authorId: "owner", value: { _id: entryId, hourlyRate: 60 } }] as PlainPrivateRecord[]) records.push(await encryptPrivateRecord("workspace", row, f.directory.signed.directory.members, 2));
+    const edit = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: "workspace", userId: "owner", operationId: crypto.randomUUID(), expectedRevision: 1, records, remove: [] }, directory: f.directory, previousRoot: f.snapshot.root, secrets: f.root.secrets, current: () => true });
+    const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", server: state.origin, userId: "owner", operationId: crypto.randomUUID(), revision: 1, previousRoot: null, previous: null, current: { workspaceId: "workspace", entryId }, standardStop: null, edits: await privateTimerEditBindings([edit]) }, f.root.secrets.signingPrivateKey, () => true);
+    const packet = { signed, edits: [edit] }; await timers.enqueue(packet);
+    const before = await timers.exportRecovery(); f.fetcher.mockClear(); f.fetcher.mockRejectedValue(new Error("Offline"));
+    const archive = await capturePrivateWorkspaceRecovery("owner", "workspace", f.root.identity);
+    expect(archive.format).toBe("trackyourtime-private-workspace-recovery-v2");
+    if (archive.format !== "trackyourtime-private-workspace-recovery-v2") throw new Error("Missing timer recovery format");
+    expect(archive.accountTimer.pending).toEqual([packet]); expect(archive.replica.pending).toEqual([]);
+    expect(await timers.exportRecovery()).toEqual(before); expect(f.fetcher).not.toHaveBeenCalled();
+  } finally { host.close(); }
 });
 it("backs up an inventory conflict while refusing to use that conflict for live routing", async () => {
   const f = await fixture(), opened = await openPrivateWorkspaceSession("owner", "workspace"); opened.close();

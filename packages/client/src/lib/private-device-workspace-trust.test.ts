@@ -3,6 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { createPrivateDeviceReceiver, encryptPrivateDeviceApproval, privateInventoryVersionRoot } from "@starter/core";
+import { emptyPrivateTimerCheckpoint, encodeSecret, randomSecret, privateRecordDigest, privateTimerRoot, signPrivateTimer, type PrivateTimerRecoveryState } from "@starter/core";
 import { API_LEVEL, type PrivateDeviceTransfer, type SignedPrivateInventoryVersion } from "@starter/shared";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null }));
@@ -14,7 +15,8 @@ vi.mock("./shell", () => ({ clientId: () => "web", isCapacitor: () => false }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
 const { createPrivateDeviceUnlock, sealPrivateDeviceUnlock } = await import("./private-device");
-const { privateAccountInventoryStorageHost } = await import("./private-replica");
+const { privateAccountInventoryStorageHost, privateAccountTimerStorageHost, privateAccountTimerStore } = await import("./private-replica");
+const { stagePrivateAccountTimer } = await import("./private-timer-staging");
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
 const { capturePrivateDeviceWorkspaceTrust, restorePrivateDeviceWorkspaceTrust } = await import("./private-device-workspace-trust");
 const { privateRoutingRequired } = await import("./private-routing-requirement");
@@ -50,6 +52,44 @@ async function freshReceiver(value: PrivateDeviceTransfer) {
   const receiver = await createPrivateDeviceUnlock("owner"), sealed = await encryptPrivateDeviceApproval(receiver.invite, value);
   await receiver.accept(sealed.approval); return { receiver, sealed };
 }
+async function timerState(f: Awaited<ReturnType<typeof fixture>>) {
+  const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", server: state.origin, userId: "owner", operationId: crypto.randomUUID(), revision: 1, previousRoot: null, previous: null, current: { workspaceId: "workspace", entryId: crypto.randomUUID() }, standardStop: null, edits: [{ workspaceId: "workspace", operationId: crypto.randomUUID(), expectedRevision: 1, head: encodeSecret(randomSecret()) }] }, f.secrets.signingPrivateKey, () => true);
+  return { v: 1, confirmed: { checkpoint: { revision: 1, root: await privateTimerRoot(signed), current: signed.header.current }, signed }, pending: [], committed: [], conflict: null } satisfies PrivateTimerRecoveryState;
+}
+async function seedTimer(f: Awaited<ReturnType<typeof fixture>>, timer: PrivateTimerRecoveryState) {
+  const staged = await stagePrivateAccountTimer({ server: state.origin, userId: "owner" }, f.secrets, () => {});
+  try { await staged.restore(timer, await privateRecordDigest(timer)); } finally { staged.close(); }
+}
+it("hands over the independently approved timer checkpoint before publishing the receiving keys", async () => {
+  const f = await fixture(), timer = await timerState(f); await seedTimer(f, timer);
+  const value = await approval(f); expect(value.v).toBe(3);
+  if (value.v !== 3) throw new Error("Missing timer transfer protocol");
+  expect(value.workspaceTrust.timer).toEqual({ ...timer.confirmed, digest: await privateRecordDigest(timer) });
+  const { receiver, sealed } = await freshReceiver(value); expect(session.privateSession("owner")).toBeNull();
+  await receiver.confirm(sealed.code); expect(session.privateSession("owner")).toEqual(f.secrets);
+  const host = await privateAccountTimerStorageHost("owner");
+  try { const timers = await privateAccountTimerStore("owner", host.storage, host.exclusive); expect((await timers.exportRecovery())!.state).toEqual(timer); } finally { host.close(); }
+});
+it("keeps the receiving device locked if its approved timer digest or signed coordinates differ", async () => {
+  const f = await fixture(), timer = await timerState(f); await seedTimer(f, timer);
+  const value = await approval(f); if (value.v !== 3) throw new Error("Missing timer transfer protocol");
+  value.workspaceTrust.timer.digest = "A".repeat(43);
+  const { receiver, sealed } = await freshReceiver(value); await expect(receiver.confirm(sealed.code)).rejects.toThrow("trusted recovery digest"); expect(session.privateSession("owner")).toBeNull();
+});
+it("refuses to erase a distinct local timer checkpoint during device restoration", async () => {
+  const f = await fixture(), timer = await timerState(f); await seedTimer(f, timer);
+  const value = await approval(f), { receiver, sealed } = await freshReceiver(value);
+  const local = await timerState(f); await seedTimer(f, local);
+  await expect(receiver.confirm(sealed.code)).rejects.toThrow("existing account timer"); expect(session.privateSession("owner")).toBeNull();
+  const staged = await stagePrivateAccountTimer({ server: state.origin, userId: "owner" }, f.secrets, () => {});
+  try { expect((await staged.exportRecovery())!.state).toEqual(local); } finally { staged.close(); }
+});
+it("preserves a timer conflict and refuses approving a device with only an empty checkpoint", async () => {
+  const f = await fixture(), timer = await timerState(f), conflict: PrivateTimerRecoveryState = { ...timer, confirmed: { checkpoint: emptyPrivateTimerCheckpoint(), signed: null }, conflict: timer.confirmed.signed };
+  await seedTimer(f, conflict); await expect(capturePrivateDeviceWorkspaceTrust("owner")).rejects.toThrow("pending timer work");
+  const host = await privateAccountTimerStorageHost("owner");
+  try { const timers = await privateAccountTimerStore("owner", host.storage, host.exclusive); expect((await timers.exportRecovery())!.state).toEqual(conflict); } finally { host.close(); }
+});
 it("publishes pending encrypted inventory, hands over only its anchor, and restores that exact version after confirmation", async () => {
   const f = await fixture(), value = await approval(f); expect(value.v).toBe(2); expect(value.workspaceTrust?.inventory.revision).toBe(1); expect(f.versions.size).toBe(1);
   expect(JSON.stringify(value.workspaceTrust)).not.toMatch(/workspaceId|signedPolicy|publicKey/);

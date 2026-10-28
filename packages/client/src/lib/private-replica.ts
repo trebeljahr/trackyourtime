@@ -1,6 +1,7 @@
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import { createPrivateAccountInventoryStore, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, PRIVATE_ACCOUNT_INVENTORY_SCOPE, privateReplicaIdentityFromDirectory, signPrivateAccountInventory, signPrivateWorkspacePolicy, type KeyValueStorage, type PrivateAccountWorkspace, type PrivateDirectoryTrust, type PrivateProjectionTransport, type PrivateWorkspacePolicyCheckpoint, type QueueExclusive, type VerifiedPrivateAccountInventory, type VerifiedPrivateDirectory, type VerifiedPrivateProjectionSnapshot } from "@starter/core";
 import { privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion, subscribePrivateSession } from "./private-session";
+import { createPrivateAccountTimerStore, PRIVATE_ACCOUNT_TIMER_SCOPE } from "@starter/core";
 function privateStorageAccess(userId: string, server: string) {
   const root = privateSession(userId);
   if (!root || privateDataOrigin() !== server) return null;
@@ -84,6 +85,17 @@ export function loadPrivateWorkspaceProjection(userId: string, workspaceId: stri
  * queued work. Reopen after unlocking; stale handles cannot resume a save. */
 export function privateWorkspaceStorageHost(userId: string, workspaceId: string) { return privateStorageHost(userId, workspaceId); }
 export function privateAccountInventoryStorageHost(userId: string) { return privateStorageHost(userId, PRIVATE_ACCOUNT_INVENTORY_SCOPE); }
+export function privateAccountTimerStorageHost(userId: string) { return privateStorageHost(userId, PRIVATE_ACCOUNT_TIMER_SCOPE); }
+/** No API response initializes this store. Enrollment/recovery must restore an
+ * independently authenticated timer digest before account timer access. */
+export async function privateAccountTimerStore(userId: string, storage: KeyValueStorage, exclusive: QueueExclusive) {
+  const root = privateSession(userId), server = privateDataOrigin(), captured = privateOperationScope(userId);
+  if (!root) throw new Error("Unlock private data before opening the account timer");
+  const check = () => { captured(); if (privateSession(userId) !== root || privateDataOrigin() !== server) throw new Error("Private data changed during this operation"); };
+  const { kty, crv, x, y } = root.signingPrivateKey;
+  const store = await createPrivateAccountTimerStore({ scope: { server, userId }, storage, exclusive, signingPublicKey: { kty, crv, x, y }, resolveStorageKey: () => privateStorageAccess(userId, server), capture: () => { check(); return check; } });
+  check(); return store;
+}
 async function privateStorageHost(userId: string, workspaceId: string) {
   if (!privateSession(userId)) throw new Error("Unlock private data before opening workspace storage");
   const version = privateSessionVersion();

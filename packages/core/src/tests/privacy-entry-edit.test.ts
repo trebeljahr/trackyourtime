@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
-import { privateEntryEdit, preparePrivateEntryIntent, type VerifiedPrivateEntryIntent, type PrivateEntryEditPath } from "../privacy/entry-edit.js";
+import { privateEntryEdit, privateTimerEntryEdit, preparePrivateEntryIntent, type VerifiedPrivateEntryIntent, type PrivateEntryEditPath, type PrivateTimerEntryCommand } from "../privacy/entry-edit.js";
 import { privateRecordsToRecovery, partitionPrivateRecovery, type PlainPrivateRecord } from "../privacy/records.js";
 import type { TimeEntry } from "@starter/shared";
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "author" }, stamp = "2026-10-27T00:00:00.000Z";
@@ -13,7 +13,7 @@ async function fixture() {
   const signed = await signPrivateWorkspaceDirectory({ v: 1, server: scope.server, workspaceId: scope.workspaceId, ownerId: "owner", revision: 1, previousDigest: null, members: [owner, author] }, signing.privateKey, null, new Map(await Promise.all([owner, author].map(async (row) => [row.userId, await privateMemberKeyFingerprint(scope.server, row)] as const))));
   const directory = await verifyPrivateWorkspaceDirectory(signed, scope, { ownerId: "owner", signingPublicKey: signing.publicKey, revision: 0, digest: null });
   const records: PlainPrivateRecord[] = [];
-  const add = (kind: PlainPrivateRecord["kind"], id: string, fields: Record<string, unknown>, authorId: string | null = null) => { const row = { kind, id, authorId, value: { _id: id, workspaceId: scope.workspaceId, ...fields } }; records.push(row); return row; };
+  const add = (kind: PlainPrivateRecord["kind"], id: string, fields: Record<string, unknown>, authorId: string | null = null) => { const row: PlainPrivateRecord = { kind, id, authorId, value: { _id: id, workspaceId: scope.workspaceId, ...fields } }; records.push(row); return row; };
   add("settings", "settings", { currency: "EUR" }); add("settingsMoney", "settings", { defaultHourlyRate: 80 });
   add("members", "member", { userId: scope.userId }, scope.userId); add("memberMoney", "member", { hourlyRate: 60 }, scope.userId);
   add("clients", "client", {}); add("clients", "other-client", {}); add("tasks", "task", {}); add("tags", "tag", {});
@@ -23,8 +23,71 @@ async function fixture() {
   const edit = (path: PrivateEntryEditPath, input: unknown, intent?: VerifiedPrivateEntryIntent) => { const result = plan(path, input, intent), changed = new Set([...result.records, ...result.remove].map((row) => `${row.kind}:${row.id}`)); records.splice(0, records.length, ...records.filter((row) => !changed.has(`${row.kind}:${row.id}`)), ...result.records); return result.result as TimeEntry; };
   const create = (fields: Record<string, unknown> = {}) => edit("entries.create", { ...span, projectId: "project", taskId: "task", tagIds: ["tag", "tag"], ...fields });
   const intent = (path: PrivateEntryEditPath, input: unknown, intentId: string = crypto.randomUUID()) => preparePrivateEntryIntent({ scope, path, input, intentId, current: () => open });
-  return { records, directory, add, plan, edit, create, intent, lock: () => { open = false; } };
+  const timer = (command: PrivateTimerEntryCommand, expectedRunningId: string | null) => privateTimerEntryEdit({ scope, directory, records, command, expectedRunningId, now: Date.parse(stamp), current: () => open });
+  const apply = (result: ReturnType<typeof privateTimerEntryEdit>) => { const changed = new Set([...result.records, ...result.remove].map(row => `${row.kind}:${row.id}`)); records.splice(0, records.length, ...records.filter(row => !changed.has(`${row.kind}:${row.id}`)), ...result.records); return result; };
+  return { records, directory, add, plan, edit, create, intent, timer, apply, lock: () => { open = false; } };
 }
+
+it("plans zero-duration running time and atomically stops with the current billing snapshot", async () => {
+  const f = await fixture(), entryId = crypto.randomUUID(), start = f.timer({ kind: "start", entryId, input: { projectId: "project", description: "Encrypted timer", start: span.start } }, null);
+  assert.equal(start.previous, null); assert.deepEqual(start.current, { workspaceId: scope.workspaceId, entryId });
+  assert.equal((start.result as TimeEntry).durationSec, 0); assert.equal((start.result as TimeEntry).end, null); assert.equal((start.result as TimeEntry).hourlyRate, 60); assert.equal(f.records.some(row => row.kind === "entries"), false); f.apply(start);
+  const body = f.records.find(row => row.kind === "entries")!, money = f.records.find(row => row.kind === "entryMoney")!;
+  body.value.unknown = { retained: true }; delete body.value.clientId; money.value.unknown = { financial: true };
+  f.records.find(row => row.kind === "memberMoney")!.value.hourlyRate = 100; f.records.find(row => row.kind === "settings")!.value.currency = "USD";
+  const edit = f.timer({ kind: "update", input: { id: entryId, description: "Renamed running time" } }, entryId);
+  assert.equal(edit.records.length, 1); assert.equal((edit.result as TimeEntry).hourlyRate, 60); assert.equal((edit.result as TimeEntry).currency, "EUR"); f.apply(edit);
+  const stop = f.timer({ kind: "stop", id: entryId, end: span.end }, entryId), result = stop.result as TimeEntry;
+  assert.equal(stop.current, null); assert.equal(stop.records.length, 2); assert.equal(result.durationSec, 3600); assert.equal(result.hourlyRate, 100); assert.equal(result.currency, "USD");
+  assert.deepEqual(stop.records[0]!.value.unknown, { retained: true }); assert.equal(Object.hasOwn(stop.records[0]!.value, "clientId"), false); assert.deepEqual(stop.records[1]!.value.unknown, { financial: true });
+});
+
+it("binds timer actions to the checkpoint and leaves manual running writes refused", async () => {
+  const f = await fixture(), entryId = crypto.randomUUID();
+  f.apply(f.timer({ kind: "start", entryId, input: { start: span.start } }, null));
+  assert.throws(() => f.timer({ kind: "stop", id: entryId, end: span.end }, null), /checkpoint/);
+  assert.throws(() => f.timer({ kind: "stop", id: crypto.randomUUID(), end: span.end }, entryId), /original/);
+  assert.throws(() => f.timer({ kind: "start", entryId: crypto.randomUUID(), input: {} }, entryId), /Stop/);
+  assert.throws(() => f.timer({ kind: "update", input: { id: entryId, end: span.end } }, entryId), /transition/);
+  assert.throws(() => f.plan("entries.update", { id: entryId, description: "ordinary edit" }), /coordination/);
+  assert.throws(() => f.timer({ kind: "stop", id: entryId, end: span.start }, entryId), /after start/);
+  const before = structuredClone(f.records), discard = f.timer({ kind: "discard", id: entryId }, entryId);
+  assert.equal(discard.remove.length, 2); assert.equal(discard.records.length, 0); assert.equal(discard.current, null); assert.deepEqual(f.records, before); f.apply(discard);
+  assert.equal(f.records.some(row => ["entries", "entryMoney"].includes(row.kind)), false);
+  f.lock(); assert.throws(() => f.timer({ kind: "start", entryId: crypto.randomUUID(), input: {} }, null), /changed/);
+});
+
+it("checks the unbounded running interval while allowing an actual stop before a future approval", async () => {
+  const f = await fixture(), entryId = crypto.randomUUID(), command = { kind: "start" as const, entryId, input: { start: span.start } };
+  const approval = f.add("approvals", "future", { authorId: scope.userId, start: "2026-10-26T12:00:00.000Z", end: "2026-10-26T13:00:00.000Z", status: "submitted" }, scope.userId);
+  assert.throws(() => f.timer(command, null), /approved/); approval.value.status = "draft"; f.apply(f.timer(command, null)); approval.value.status = "submitted";
+  assert.throws(() => f.timer({ kind: "update", input: { id: entryId, description: "Changed" } }, entryId), /approved/);
+  assert.throws(() => f.timer({ kind: "stop", id: entryId, end: "2026-10-26T12:30:00.000Z" }, entryId), /approved/);
+  const stopped = f.apply(f.timer({ kind: "stop", id: entryId, end: span.end }, entryId)); assert.equal(stopped.current, null);
+  assert.throws(() => f.timer({ kind: "reopen", id: entryId }, null), /approved/);
+});
+
+it("reopens own completed time without repricing and continues into a new identity with the caller's zone", async () => {
+  const f = await fixture(), old = f.create({ source: "desktop", timeZone: "Europe/Berlin" }), newId = crypto.randomUUID();
+  f.records.find(row => row.kind === "memberMoney")!.value.hourlyRate = 120;
+  const reopened = f.timer({ kind: "reopen", id: old.id }, null); assert.equal((reopened.result as TimeEntry).hourlyRate, 60); assert.equal(reopened.records.length, 2); assert.equal((reopened.result as TimeEntry).durationSec, 0);
+  const raw = f.records.find(row => row.kind === "entries")!; raw.value.invoiceId = "invoice";
+  assert.throws(() => f.timer({ kind: "reopen", id: old.id }, null), /Invoiced/);
+  raw.value.tagIds = ["tag", "deleted-tag"];
+  const continued = f.timer({ kind: "continue", entryId: newId, input: { id: old.id, timeZone: "Australia/Sydney" } }, null), result = continued.result as TimeEntry;
+  assert.equal(result.id, newId); assert.equal(result.hourlyRate, 120); assert.equal(result.timeZone, "Australia/Sydney"); assert.equal(result.start, stamp); assert.equal(result.invoiceId, null); assert.equal(result.source, "desktop"); assert.deepEqual(result.tagIds, ["tag"]);
+  assert.equal((f.records.find(row => row.kind === "entries")!.value.end), span.end); assert.equal(result.authorId, scope.userId);
+  assert.throws(() => f.timer({ kind: "start", entryId: newId, input: { operationId: crypto.randomUUID() } }, null), /Standard/);
+});
+
+it("refuses another author's timer and does not treat colleague visibility as edit authority", async () => {
+  const f = await fixture(), entry = f.create();
+  for (const row of f.records.filter(row => ["entries", "entryMoney"].includes(row.kind))) { row.authorId = "owner"; if (row.kind === "entries") row.value.authorId = "owner"; }
+  assert.throws(() => f.timer({ kind: "reopen", id: entry.id }, null), /not found/);
+  assert.throws(() => f.timer({ kind: "discard", id: entry.id }, null), /original/);
+  const next = f.timer({ kind: "continue", entryId: crypto.randomUUID(), input: { id: entry.id } }, null).result as TimeEntry;
+  assert.equal(next.authorId, scope.userId); assert.equal(next.timeZone, null);
+});
 it("creates author-owned completed time with separate rate snapshots, member defaults and explicit client attribution", async () => {
   const f = await fixture(), entry = f.create({ description: "Private manual time", source: "desktop", timeZone: "Europe/Berlin" });
   assert.equal(entry.authorId, scope.userId); assert.equal(entry.hourlyRate, 60); assert.equal(entry.currency, "EUR"); assert.equal(entry.durationSec, 3600); assert.equal(entry.clientId, "client"); assert.equal(entry.billable, true); assert.deepEqual(entry.tagIds, ["tag"]); assert.equal(entry.source, "desktop");

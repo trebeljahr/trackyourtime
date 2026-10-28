@@ -1,12 +1,13 @@
 import { canonicalJson, PrivateAccountInventoryMissingError } from "@starter/core";
 import { privateDeviceWorkspaceTrustSchema, type PrivateDeviceWorkspaceTrust } from "@starter/shared";
 import { privateClientScope } from "./private-client-scope";
-import { privateAccountInventoryStorageHost } from "./private-replica";
+import { privateAccountInventoryStorageHost, privateAccountTimerStorageHost, privateAccountTimerStore } from "./private-replica";
 import { privateAccountInventoryTransport, privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
 import { privateRoutingRequired } from "./private-routing-requirement";
 import { privateSession, type UnlockedIdentity } from "./private-session";
 import { privateBoundRpc } from "./private-scoped-rpc";
 import { stagePrivateAccountInventory } from "./private-inventory-staging";
+import { stagePrivateAccountTimer } from "./private-timer-staging";
 /** Approving an enrolled device publishes its exact pending encrypted inventory
  * before handing over a short checkpoint. No business data or keys are sent in
  * plaintext; conflicts retain their existing refusal and durable outbox. */
@@ -24,7 +25,12 @@ export async function capturePrivateDeviceWorkspaceTrust(userId: string): Promis
     }
     const profile = await sync.read(), state = await sync.exportRecovery(); binding.check();
     if (state.pending.length || state.conflict || !state.confirmed.version || !state.confirmed.checkpoint.root || canonicalJson(profile.inventory.signed) !== canonicalJson(state.local)) throw new Error("Keep or sync pending account inventory before approving this device");
-    return privateDeviceWorkspaceTrustSchema.parse({ inventory: profile.inventory.checkpoint, transport: state.confirmed.checkpoint });
+    const timerHost = await privateAccountTimerStorageHost(userId);
+    try {
+      const timers = await privateAccountTimerStore(userId, timerHost.storage, timerHost.exclusive), timer = await timers.exportRecovery(); binding.check();
+      if (timer && (timer.state.pending.length || timer.state.committed.length || timer.state.conflict)) throw new Error("Sync or export pending timer work before approving another device");
+      return privateDeviceWorkspaceTrustSchema.parse({ inventory: profile.inventory.checkpoint, transport: state.confirmed.checkpoint, ...(timer ? { timer: { digest: timer.digest, ...timer.state.confirmed } } : {}) });
+    } finally { timerHost.close(); }
   } finally { host.close(); }
 }
 /** The confirmation-authenticated device supplies the anchor, never the API.
@@ -42,4 +48,11 @@ export async function restorePrivateDeviceWorkspaceTrust(userId: string, input: 
     binding.check();
     await sync.restore(page.versions[0], trust); binding.check();
   } finally { sync.close(); }
+  if ("timer" in trust) {
+    const timers = await stagePrivateAccountTimer(binding, secrets, binding.check);
+    try {
+      const state = { v: 1 as const, confirmed: { checkpoint: trust.timer.checkpoint, signed: trust.timer.signed }, pending: [], committed: [], conflict: null };
+      await timers.restore(state, trust.timer.digest); binding.check();
+    } finally { timers.close(); }
+  }
 }

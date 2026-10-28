@@ -3,6 +3,7 @@ import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { API_LEVEL } from "@starter/shared";
+import { createPrivateStorage, emptyPrivateTimerCheckpoint, memoryStorage, PRIVATE_ACCOUNT_TIMER_SCOPE } from "@starter/core";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", level: null as number | null, rows: [{ id: "workspace", name: "Original workspace name" }] as unknown }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: async () => {} }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
@@ -12,7 +13,7 @@ vi.mock("./shell", () => ({ clientId: () => "web", isCapacitor: () => false }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
 const { preparePrivateAccountSetup, finishPrivateAccountSetup } = await import("./private-account-setup");
-const { privateAccountInventoryStorageHost } = await import("./private-replica");
+const { privateAccountInventoryStorageHost, privateAccountTimerStorageHost, privateAccountTimerStore } = await import("./private-replica");
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
 const { stagePrivateAccountInventory } = await import("./private-inventory-staging");
 const { workspaceContentRoute } = await import("./private-content-route");
@@ -37,8 +38,23 @@ it("prepares keys without activating them, then saves a signed standard inventor
   try { const sync = await privateAccountWorkspaceInventorySync("owner", host.storage, host.exclusive), profile = await sync.read(); expect(profile.inventory.signed.inventory.workspaces).toEqual([{ workspaceId: "workspace", mode: "standard" }]); expect(profile.pending).toBe(1); } finally { host.close(); }
   expect(f.enrollments).toHaveLength(1); expect(JSON.stringify(f.enrollments)).not.toMatch(/master|privateKey|Original workspace name/);
   expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("standard");
+  const timerHost = await privateAccountTimerStorageHost("owner");
+  try { const timers = await privateAccountTimerStore("owner", timerHost.storage, timerHost.exclusive); expect(await timers.read()).toEqual({ checkpoint: emptyPrivateTimerCheckpoint(), local: emptyPrivateTimerCheckpoint(), pending: 0, committed: 0, conflict: false }); } finally { timerHost.close(); }
   session.lockPrivateData(); await session.unlockPrivateRecovery("owner", draft.identity, draft.recoveryKey); expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("standard");
   await expect(finishPrivateAccountSetup(draft)).rejects.toThrow("original prepared");
+});
+it("keeps fresh keys inactive after a timer-checkpoint disk failure and retries without replacing the inventory", async () => {
+  fixture(); const draft = await preparePrivateAccountSetup("owner");
+  const encrypted = await createPrivateStorage({ storage: memoryStorage(), scope: { server: state.origin, userId: "owner", workspaceId: PRIVATE_ACCOUNT_TIMER_SCOPE }, resolveKey: () => null });
+  const original = IDBObjectStore.prototype.put;
+  const write = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value, key) {
+    if (typeof key === "string" && key.startsWith(encrypted.namespace)) throw new Error("Timer disk full");
+    return Reflect.apply(original, this, [value, key]);
+  });
+  await expect(finishPrivateAccountSetup(draft)).rejects.toThrow("Timer disk full"); expect(session.privateSession("owner")).toBeNull(); write.mockRestore();
+  const staged = await stagePrivateAccountInventory({ server: state.origin, userId: "owner" }, draft.secrets, draft.assertCurrent), before = await staged.exportRecovery(); staged.close();
+  await finishPrivateAccountSetup(draft); const host = await privateAccountInventoryStorageHost("owner");
+  try { const sync = await privateAccountWorkspaceInventorySync("owner", host.storage, host.exclusive); expect(await sync.exportRecovery()).toEqual(before); } finally { host.close(); }
 });
 it("retries the original identity after a lost enrollment reply without creating replacement keys", async () => {
   const f = fixture(), draft = await preparePrivateAccountSetup("owner"), base = f.fetcher.getMockImplementation()!;

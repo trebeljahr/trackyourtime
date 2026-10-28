@@ -71,8 +71,16 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     await TimeEntry.updateOne({ _id: completed._id }, { $set: { description: "Completed time stays editable", end: undefined } });
     assert.equal((await TimeEntry.findById(completed._id).lean())!.description, "Completed time stays editable");
     assert.notEqual((await TimeEntry.findById(completed._id).lean())!.end, null); assert.equal(await TimeEntry.countDocuments({ end: null }), 0);
+    await assert.rejects(TimeEntry.updateOne({ _id: completed._id }, { $unset: { end: 1 } }), { code: "CONFLICT" });
+    await assert.rejects(TimeEntry.updateOne({ _id: completed._id }, { $rename: { end: "legacyEnd" } }), { code: "BAD_REQUEST" });
+    await assert.rejects(TimeEntry.updateOne({ _id: completed._id }, { $rename: { description: "end" } }), { code: "BAD_REQUEST" });
+    const foreign = await TimeEntry.create({ workspaceId: standard, authorId: "another-author", description: "Another author", start: new Date(), end: null });
+    await assert.rejects(TimeEntry.updateOne({ _id: foreign._id }, { $set: { authorId: scope.userId } }), { code: "CONFLICT" });
+    const upsertId = crypto.randomUUID().replaceAll("-", "").slice(0, 24);
+    await assert.rejects(TimeEntry.updateOne({ _id: upsertId, workspaceId: standard, authorId: scope.userId, end: new Date(instant) }, { $setOnInsert: { start: new Date("2026-10-01T10:00:00.000Z") }, $unset: { end: 1 } }, { upsert: true }), { code: "CONFLICT" });
+    assert.equal(await TimeEntry.exists({ _id: upsertId }), null);
     await commitPrivateTimerTransition(scope, await prepare(pointer, null)); assert.equal((await readEntry(pointer)).value.end, instant); assert.equal((await privateTimerCheckpoint(scope.userId)).current, null);
-    await standardEntry(); assert.equal(await TimeEntry.countDocuments({ end: null }), 1);
+    await standardEntry(); assert.equal(await TimeEntry.countDocuments({ authorId: scope.userId, end: null }), 1);
   });
   it("atomically switches between encrypted workspaces and keeps old operation retries from reviving a timer", async () => {
     const first = point(a), second = point(b), start = await prepare(null, first); await commitPrivateTimerTransition(scope, start);

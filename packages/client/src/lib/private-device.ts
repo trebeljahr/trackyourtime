@@ -38,7 +38,7 @@ export async function sealPrivateDeviceUnlock(userId: string, invite: PrivateDev
   const current = checkedPrivateSession(userId, identity);
   const workspaceTrust = await capturePrivateDeviceWorkspaceTrust(userId); assertCurrent();
   if (privateSession(userId) !== current) throw new Error("Private data is locked");
-  const value = privateDeviceTransferSchema.parse({ v: 2, server: invite.server, userId, keys: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey }, secrets: current, workspaceTrust });
+  const value = privateDeviceTransferSchema.parse({ v: workspaceTrust && "timer" in workspaceTrust ? 3 : 2, server: invite.server, userId, keys: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey }, secrets: current, workspaceTrust });
   const result = await encryptPrivateDeviceApproval(invite, value);
   assertCurrent(); if (privateSession(userId) !== current) throw new Error("Private data is locked");
   return result;

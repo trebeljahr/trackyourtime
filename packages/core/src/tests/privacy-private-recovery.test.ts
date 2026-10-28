@@ -14,6 +14,10 @@ import { privateInventoryVersionRoot } from "../privacy/inventory-version.js";
 import { deriveRecoveryBackupKey } from "../privacy/recovery-backup.js";
 import { decryptPrivateWorkspaceBackup, encryptPrivateWorkspaceBackup, PRIVATE_RECOVERY_MAX_BYTES, writePrivateWorkspaceBackup, verifyPrivateRecoveryIdentity, verifyPrivateWorkspaceBackup, verifyPrivateWorkspaceRecoveryArchive } from "../privacy/private-recovery.js";
 import { memoryStorage } from "../storage.js";
+import { emptyPrivateTimerCheckpoint, type PrivateTimerRecoveryState } from "../privacy/timer-recovery.js";
+import { signPrivateChainedWorkspaceEdit } from "../privacy/history-chain.js";
+import { privateTimerEditBindings, privateTimerRoot, signPrivateTimer } from "../privacy/account-timer.js";
+import type { PlainPrivateRecord } from "../privacy/records.js";
 const scope = { server: "https://api.example.test", userId: "owner", workspaceId: "workspace" };
 async function fixture(padding = 0) {
   const pair = await createKeyPair(), signing = await createSigningPair(), master = randomSecret(), rawRecovery = randomSecret(), state = { open: true }, current = () => state.open;
@@ -38,8 +42,53 @@ async function fixture(padding = 0) {
   await replica.enqueue({ records: [{ kind: "tags", id: "another", authorId: null, value: { name: "Another unsent private tag" } }] });
   const capture = async () => verifyPrivateWorkspaceRecoveryArchive({ format: "trackyourtime-private-workspace-recovery-v1", ...scope, createdAt: new Date().toISOString(), identity, inventory: await inventory.exportRecovery(), directory: { signed: directory.signed, digest: directory.digest }, replica: await replica.exportRecovery() }, secrets, current);
   const archive = await capture(), key = await deriveRecoveryBackupKey(recoveryKey, scope);
-  return { secrets, master, identity, recoveryKey, state, current, inventory, inventoryOptions, enrollment, replica, archive, key, capture };
+  return { secrets, master, identity, recoveryKey, state, current, inventory, inventoryOptions, enrollment, replica, archive, key, capture, directory };
 }
+async function withTimer(f: Awaited<ReturnType<typeof fixture>>, committed = false) {
+  const entryId = crypto.randomUUID(), basedOn = f.archive.replica.revision + f.archive.replica.pending.length;
+  const records = [];
+  for (const row of [{ kind: "entries", id: entryId, authorId: scope.userId, value: { _id: entryId, workspaceId: scope.workspaceId, authorId: scope.userId, description: "Unsent private timer", start: "2026-10-29T01:00:00.000Z", end: null, durationSec: 0, billable: true, currency: "EUR", source: "desktop", createdAt: "2026-10-29T01:00:00.000Z", updatedAt: "2026-10-29T01:00:00.000Z" } }, { kind: "entryMoney", id: entryId, authorId: scope.userId, value: { _id: entryId, hourlyRate: 90 } }] as PlainPrivateRecord[]) records.push(await encryptPrivateRecord(scope.workspaceId, row, f.directory.signed.directory.members, basedOn + 1));
+  const edit = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: scope.workspaceId, userId: scope.userId, operationId: crypto.randomUUID(), expectedRevision: basedOn, records, remove: [] }, directory: f.directory, previousRoot: encodeSecret(randomSecret()), secrets: f.secrets, current: f.current });
+  const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", server: scope.server, userId: scope.userId, operationId: crypto.randomUUID(), revision: 1, previousRoot: null, previous: null, current: { workspaceId: scope.workspaceId, entryId }, standardStop: null, edits: await privateTimerEditBindings([edit]) }, f.secrets.signingPrivateKey, f.current);
+  const packet = { signed, edits: [edit] }, accountTimer: PrivateTimerRecoveryState = { v: 1, confirmed: committed ? { checkpoint: { revision: 1, root: await privateTimerRoot(signed), current: signed.header.current }, signed } : { checkpoint: emptyPrivateTimerCheckpoint(), signed: null }, pending: committed ? [] : [packet], committed: committed ? [packet] : [], conflict: null };
+  return { archive: { ...f.archive, format: "trackyourtime-private-workspace-recovery-v2" as const, accountTimer }, packet, entryId };
+}
+it("backs up pending and confirmed timer packets without losing ordinary edits or offline exports", async () => {
+  for (const committed of [false, true]) {
+    const f = await fixture(), { archive, packet, entryId } = await withTimer(f, committed);
+    const verified = await verifyPrivateWorkspaceRecoveryArchive(archive, f.secrets, f.current); assert.deepEqual(verified, archive);
+    const file = await encryptPrivateWorkspaceBackup(verified, f.key, f.secrets, f.current); assert.doesNotMatch(JSON.stringify(file), /Unsent private timer|hourlyRate/);
+    assert.deepEqual(await verifyPrivateWorkspaceBackup(file, f.key, f.secrets, f.current, scope), archive);
+    const opened = await decryptPrivateWorkspaceBackup(file, f.recoveryKey);
+    assert.equal(opened.records.find(row => row.id === entryId && row.kind === "entries")!.value.description, "Unsent private timer");
+    assert.equal(opened.records.find(row => row.id === entryId && row.kind === "entryMoney")!.value.hourlyRate, 90);
+    assert.equal(opened.records.find(row => row.kind === "tags" && row.id === "tag")!.value.name, "Unsent private rename");
+    assert.equal(opened.records.some(row => row.kind === "favorites"), false); assert.equal(opened.confirmedRecords.some(row => row.id === entryId), false);
+    assert.deepEqual(opened.accountTimer?.[committed ? "committed" : "pending"], [packet]);
+  }
+});
+it("refuses missing timer dependencies or account history while preserving the input archive", async () => {
+  const f = await fixture(), { archive } = await withTimer(f, true), before = canonicalJson(archive);
+  const missing = structuredClone(archive); missing.accountTimer.committed = [];
+  await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(missing, f.secrets, f.current), /missing confirmed timer/);
+  const gap = structuredClone(archive); gap.replica.pending.pop();
+  await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(gap, f.secrets, f.current), /dependencies/);
+  const wrong = structuredClone(archive); wrong.accountTimer.confirmed.checkpoint.current = null;
+  await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(wrong, f.secrets, f.current), /checkpoint/);
+  assert.equal(canonicalJson(archive), before);
+});
+it("does not replay already accepted timer packets over later workspace data or accept an orphan running body", async () => {
+  const f = await fixture(), { archive, packet, entryId } = await withTimer(f, true);
+  const body = await (await import("../privacy/records.js")).decryptPrivateRecord(scope.workspaceId, packet.edits[0]!.edit.records[0]!, scope.userId, f.secrets.privateKey);
+  const later = await encryptPrivateRecord(scope.workspaceId, { ...body, value: { ...body.value, description: "Later retained label" } }, f.directory.signed.directory.members, 5);
+  archive.replica = { ...archive.replica, revision: 5, head: encodeSecret(randomSecret()), pending: [], records: [...archive.replica.records, later, packet.edits[0]!.edit.records[1]!] };
+  const file = await encryptPrivateWorkspaceBackup(archive, f.key, f.secrets, f.current), opened = await decryptPrivateWorkspaceBackup(file, f.recoveryKey);
+  assert.equal(opened.records.find(row => row.id === entryId && row.kind === "entries")!.value.description, "Later retained label");
+  const orphan = structuredClone(archive); orphan.accountTimer = { v: 1, confirmed: { checkpoint: emptyPrivateTimerCheckpoint(), signed: null }, pending: [], committed: [], conflict: null };
+  await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(orphan, f.secrets, f.current), /account checkpoint/);
+  const missingMoney = structuredClone(archive); missingMoney.replica.records = missingMoney.replica.records.filter(row => row.kind !== "entryMoney");
+  await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(missingMoney, f.secrets, f.current), /financial snapshot/);
+});
 it("opens a complete private device copy offline and keeps exact submitted/unsent work separate from confirmed records", async () => {
   const f = await fixture();
   assert.deepEqual(await verifyPrivateRecoveryIdentity(f.identity, f.recoveryKey, f.secrets, scope, f.current), f.identity);
