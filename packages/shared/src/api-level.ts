@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 35;
+export const API_LEVEL = 36;
 
 export type ApiLevelChange = {
   level: number;
@@ -192,6 +192,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   { level: 33, release: "0.4.0", added: ["Read-only profile.displayPreferences for account rendering/idle preferences without plaintext workspace rates or currency. Private workspace conversion and writes remain disabled."] },
   { level: 34, release: "0.4.0", added: ["Read-only profile.workspaceMemberMetadata for existing account names, emails and membership ids without workspace rates or authority. Private conversion and writes remain disabled."] },
   { level: 35, release: "0.4.0", added: ["Optional clientWorkspaceId on workspaces.create binds standard workspace creation to a client-generated UUID. Private conversion and writes remain disabled."] },
+  { level: 36, release: "0.4.0", added: ["Authenticated privacy.timerVersions and guarded privacy.timerWrite coordinate signed account timer history with encrypted workspace edits. Conversion and private content writes remain disabled."] },
 ];
 
 /**

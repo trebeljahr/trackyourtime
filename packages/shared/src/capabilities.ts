@@ -17,6 +17,7 @@
  * Keep a capability for each added level so callers can gate the matching format.
  */
 export const REQUIRES_API_LEVEL = {
+  "privacy.accountTimer": 36,
   "workspaces.clientCreation": 35,
   "profile.workspaceMemberMetadata": 34,
   "profile.displayPreferences": 33,

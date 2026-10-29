@@ -10,6 +10,10 @@ import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { allModels } from "../models/registry.js";
 import { commitPrivateTimerTransition } from "../services/privacy/account-timer.js";
 import { privateTimerCheckpoint } from "../services/privacy/timer-state.js";
+import { privateTimerVersions } from "../services/privacy/timer-versions.js";
+import { privacyRouter } from "../trpc/routers/privacy.js";
+import type { Context } from "../trpc/context.js";
+import { env } from "../config/env.js";
 import { currentEntry, personReach, workspaceReach } from "../services/entries/timer.js";
 import { fencePrivateAccount } from "../services/privacy/account-erasure-fence.js";
 import { withBusinessTransaction } from "../services/business-transaction.js";
@@ -139,6 +143,49 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     assert.ok(used > 128 * 1024 * 1024 && used <= 128 * 1024 * 1024 + 64 * 1024);
     await assert.rejects(commitPrivateTimerTransition(scope, await prepare(null, point())), { code: "PRECONDITION_FAILED" }); assert.equal(await PrivateTimerVersion.countDocuments(), 2);
     await standardEntry(); assert.equal(await TimeEntry.countDocuments({ authorId: scope.userId, end: null }), 1);
+  });
+  it("serves only authenticated account metadata within an immutable requested history boundary", async () => {
+    assert.deepEqual(await privateTimerVersions(scope, 0), { through: 0, root: null, next: null, versions: [] });
+    const first = point(), second = point(b), start = await prepare(null, first); await commitPrivateTimerTransition(scope, start);
+    const change = await prepare(first, second); await commitPrivateTimerTransition(scope, change);
+    const stop = await prepare(second, null); await commitPrivateTimerTransition(scope, stop);
+    const page = await privateTimerVersions(scope, 0, 2);
+    assert.deepEqual(page.versions, [start.signed, change.signed]); assert.equal(page.root, await privateRecordDigest(change.signed.header)); assert.equal(page.next, null); assert.equal(page.through, 2);
+    assert.deepEqual(Object.keys(page).sort(), ["next", "root", "through", "versions"]);
+    assert.doesNotMatch(JSON.stringify(page), /Private account timer description|hourlyRate|2026-10-01|identity|recovery/);
+    assert.deepEqual((await privateTimerVersions(scope, 2)).versions, [stop.signed]); assert.deepEqual((await privateTimerVersions(scope, 3)).versions, []);
+    await assert.rejects(privateTimerVersions(scope, 4), { code: "CONFLICT" }); await assert.rejects(privateTimerVersions(scope, 0, 4), { code: "CONFLICT" });
+    await assert.rejects(privateTimerVersions(scope, 0.5), { code: "BAD_REQUEST" });
+    await assert.rejects(privateTimerVersions({ ...scope, userId: "other" }, 0), { code: "PRECONDITION_FAILED" });
+    await assert.rejects(privateTimerVersions({ ...scope, server: "https://other.test" }, 0), { code: "PRECONDITION_FAILED" });
+  });
+  it("keeps public timer writes closed and confines metadata reads to the authenticated account", async t => {
+    const originalOrigin = env.BETTER_AUTH_URL; Reflect.set(env, "BETTER_AUTH_URL", scope.server); t.after(() => { Reflect.set(env, "BETTER_AUTH_URL", originalOrigin); });
+    const caller = privacyRouter.createCaller({ user: { id: scope.userId }, session: { user: { id: scope.userId } } } as unknown as Context);
+    assert.deepEqual(await caller.timerVersions({ after: 0 }), { through: 0, root: null, next: null, versions: [] });
+    await assert.rejects(caller.timerWrite(await prepare(null, point())), { code: "NOT_IMPLEMENTED" });
+    assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 0);
+    const other = privacyRouter.createCaller({ user: { id: "other" }, session: { user: { id: "other" } } } as unknown as Context);
+    await assert.rejects(other.timerVersions({ after: 0 }), { code: "PRECONDITION_FAILED" });
+    const anonymous = privacyRouter.createCaller({ user: null, session: null } as unknown as Context);
+    await assert.rejects(anonymous.timerVersions({ after: 0 }), { code: "UNAUTHORIZED" });
+  });
+  it("paginates a fixed timer root without including later account operations", async () => {
+    const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer));
+    for (let revision = 2; revision <= 18; revision++) await commitPrivateTimerTransition(scope, await prepare(pointer, pointer));
+    const first = await privateTimerVersions(scope, 0); assert.equal(first.versions.length, 16); assert.equal(first.next, 16); assert.equal(first.through, 18);
+    await commitPrivateTimerTransition(scope, await prepare(pointer, null));
+    const last = await privateTimerVersions(scope, first.next!, first.through); assert.equal(last.through, 18); assert.equal(last.root, first.root); assert.equal(last.next, null); assert.deepEqual(last.versions.map(row => row.header.revision), [17, 18]);
+    assert.equal((await privateTimerVersions(scope, 18)).versions[0]!.header.revision, 19);
+  });
+  it("refuses missing or corrupted retained timer versions without publishing a partial page", async () => {
+    const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer)); await commitPrivateTimerTransition(scope, await prepare(pointer, pointer)); await commitPrivateTimerTransition(scope, await prepare(pointer, null));
+    const middle = (await PrivateTimerVersion.findOne({ userId: scope.userId, revision: 2 }).lean())!;
+    await PrivateTimerVersion.updateOne({ _id: middle._id }, { $set: { "signed.signature": "A".repeat(86) } });
+    await assert.rejects(privateTimerVersions(scope, 0), { code: "PRECONDITION_FAILED" });
+    await PrivateTimerVersion.updateOne({ _id: middle._id }, { $set: { signed: middle.signed } }); await PrivateTimerVersion.deleteOne({ _id: middle._id });
+    await assert.rejects(privateTimerVersions(scope, 0), { code: "PRECONDITION_FAILED" }); await assert.rejects(privateTimerVersions(scope, 2), { code: "PRECONDITION_FAILED" });
+    assert.equal((await privateTimerCheckpoint(scope.userId)).revision, 3); assert.equal(await PrivateTimerVersion.countDocuments(), 2);
   });
   it("serializes a private winner with a standard start sharing the same account fence", async () => {
     const pointer = point(), request = await prepare(null, pointer); let entered!: () => void, resume!: () => void; const ready = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { resume = resolve; });

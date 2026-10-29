@@ -1,5 +1,5 @@
 {
-  "apiLevel": 32,
+  "apiLevel": 36,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -6168,6 +6168,695 @@
       },
       "type": "query"
     },
+    "privacy.timerVersions": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "maximum": 9007199254740990,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "through": {
+            "maximum": 9007199254740990,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "after"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.timerWrite": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "edits": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "chain": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "header": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "directoryDigest": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "type": "string"
+                        },
+                        "expectedRevision": {
+                          "maximum": 9007199254740990,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "manifestDigest": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "type": "string"
+                        },
+                        "operationId": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "previousRoot": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "type": "string"
+                        },
+                        "protocol": {
+                          "const": "trackyourtime-private-workspace-chain-v1",
+                          "type": "string"
+                        },
+                        "readers": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "digest": {
+                                "pattern": "^[A-Za-z0-9_-]{43}$",
+                                "type": "string"
+                              },
+                              "userId": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "userId",
+                              "digest"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 200,
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "server": {
+                          "format": "uri",
+                          "maxLength": 2048,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "v": {
+                          "const": 1,
+                          "type": "number"
+                        },
+                        "workspaceId": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "v",
+                        "protocol",
+                        "server",
+                        "workspaceId",
+                        "userId",
+                        "operationId",
+                        "expectedRevision",
+                        "directoryDigest",
+                        "previousRoot",
+                        "manifestDigest",
+                        "readers"
+                      ],
+                      "type": "object"
+                    },
+                    "signature": {
+                      "pattern": "^[A-Za-z0-9_-]{86}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "header",
+                    "signature"
+                  ],
+                  "type": "object"
+                },
+                "edit": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "expectedRevision": {
+                      "maximum": 9007199254740990,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "operationId": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "records": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "authorId": {
+                            "anyOf": [
+                              {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "box": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "maxLength": 2000000,
+                                "minLength": 22,
+                                "pattern": "^[A-Za-z0-9_-]+$",
+                                "type": "string"
+                              },
+                              "nonce": {
+                                "pattern": "^[A-Za-z0-9_-]{16}$",
+                                "type": "string"
+                              },
+                              "v": {
+                                "const": 1,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "v",
+                              "nonce",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          "grants": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "envelope": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "box": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "maxLength": 2000000,
+                                          "minLength": 22,
+                                          "pattern": "^[A-Za-z0-9_-]+$",
+                                          "type": "string"
+                                        },
+                                        "nonce": {
+                                          "pattern": "^[A-Za-z0-9_-]{16}$",
+                                          "type": "string"
+                                        },
+                                        "v": {
+                                          "const": 1,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "v",
+                                        "nonce",
+                                        "data"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "ephemeral": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "crv": {
+                                          "const": "P-256",
+                                          "type": "string"
+                                        },
+                                        "ext": {
+                                          "type": "boolean"
+                                        },
+                                        "key_ops": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "kty": {
+                                          "const": "EC",
+                                          "type": "string"
+                                        },
+                                        "x": {
+                                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                                          "type": "string"
+                                        },
+                                        "y": {
+                                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kty",
+                                        "crv",
+                                        "x",
+                                        "y"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "v": {
+                                      "const": 1,
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "v",
+                                    "ephemeral",
+                                    "box"
+                                  ],
+                                  "type": "object"
+                                },
+                                "userId": {
+                                  "maxLength": 100,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "userId",
+                                "envelope"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 200,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "id": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "keyCommitment": {
+                            "pattern": "^[A-Za-z0-9_-]{43}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "entries",
+                              "entryMoney",
+                              "clients",
+                              "clientMoney",
+                              "projects",
+                              "projectMoney",
+                              "tasks",
+                              "tags",
+                              "favorites",
+                              "invoices",
+                              "settings",
+                              "businessProfile",
+                              "approvals",
+                              "approvalPolicy",
+                              "imports",
+                              "workspaceIdentity",
+                              "integrations",
+                              "members",
+                              "memberMoney",
+                              "settingsMoney"
+                            ],
+                            "type": "string"
+                          },
+                          "revision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "authorId",
+                          "revision",
+                          "box",
+                          "grants"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 100,
+                      "type": "array"
+                    },
+                    "remove": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "authorId": {
+                            "anyOf": [
+                              {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "entries",
+                              "entryMoney",
+                              "clients",
+                              "clientMoney",
+                              "projects",
+                              "projectMoney",
+                              "tasks",
+                              "tags",
+                              "favorites",
+                              "invoices",
+                              "settings",
+                              "businessProfile",
+                              "approvals",
+                              "approvalPolicy",
+                              "imports",
+                              "workspaceIdentity",
+                              "integrations",
+                              "members",
+                              "memberMoney",
+                              "settingsMoney"
+                            ],
+                            "type": "string"
+                          },
+                          "readers": {
+                            "items": {
+                              "maxLength": 100,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 200,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "id",
+                          "authorId",
+                          "readers"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 100,
+                      "type": "array"
+                    },
+                    "userId": {
+                      "maxLength": 100,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "v": {
+                      "const": 1,
+                      "type": "number"
+                    },
+                    "workspaceId": {
+                      "maxLength": 100,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "v",
+                    "workspaceId",
+                    "userId",
+                    "operationId",
+                    "expectedRevision",
+                    "records",
+                    "remove"
+                  ],
+                  "type": "object"
+                },
+                "readerSignatures": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "signature": {
+                        "pattern": "^[A-Za-z0-9_-]{86}$",
+                        "type": "string"
+                      },
+                      "userId": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "userId",
+                      "signature"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 200,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "signature": {
+                  "pattern": "^[A-Za-z0-9_-]{86}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "edit",
+                "signature",
+                "readerSignatures",
+                "chain"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
+          },
+          "signed": {
+            "additionalProperties": false,
+            "properties": {
+              "header": {
+                "additionalProperties": false,
+                "properties": {
+                  "current": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "entryId": {
+                            "anyOf": [
+                              {
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[a-f0-9]{24}$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "workspaceId": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "workspaceId",
+                          "entryId"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "edits": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "expectedRevision": {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740990,
+                          "type": "integer"
+                        },
+                        "head": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "type": "string"
+                        },
+                        "operationId": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "workspaceId": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "workspaceId",
+                        "operationId",
+                        "expectedRevision",
+                        "head"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 2,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "operationId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "previous": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "entryId": {
+                            "anyOf": [
+                              {
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "type": "string"
+                              },
+                              {
+                                "pattern": "^[a-f0-9]{24}$",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "workspaceId": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "workspaceId",
+                          "entryId"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "previousRoot": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "protocol": {
+                    "const": "trackyourtime-private-account-timer-v1",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740990,
+                    "type": "integer"
+                  },
+                  "server": {
+                    "maxLength": 2048,
+                    "pattern": "^https?:\\/\\/[^/?#]+$",
+                    "type": "string"
+                  },
+                  "standardStop": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "entryId": {
+                            "pattern": "^[a-f0-9]{24}$",
+                            "type": "string"
+                          },
+                          "workspaceId": {
+                            "maxLength": 100,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "workspaceId",
+                          "entryId"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "userId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "v",
+                  "protocol",
+                  "server",
+                  "userId",
+                  "operationId",
+                  "revision",
+                  "previousRoot",
+                  "previous",
+                  "current",
+                  "standardStop",
+                  "edits"
+                ],
+                "type": "object"
+              },
+              "signature": {
+                "pattern": "^[A-Za-z0-9_-]{86}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "header",
+              "signature"
+            ],
+            "type": "object"
+          },
+          "standardStopEnd": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signed",
+          "edits"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "privacy.updateIdentity": {
       "input": {
         "properties": {
@@ -6603,6 +7292,10 @@
       },
       "type": "mutation"
     },
+    "profile.displayPreferences": {
+      "input": null,
+      "type": "query"
+    },
     "profile.get": {
       "input": null,
       "type": "query"
@@ -6658,6 +7351,23 @@
         "type": "object"
       },
       "type": "mutation"
+    },
+    "profile.workspaceMemberMetadata": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "type": "query"
     },
     "projects.archive": {
       "input": {
@@ -8594,6 +9304,11 @@
     "workspaces.create": {
       "input": {
         "properties": {
+          "clientWorkspaceId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
           "currency": {
             "pattern": "^[A-Za-z]{3}$",
             "type": "string"

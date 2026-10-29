@@ -1,5 +1,7 @@
 "use client";
 import * as React from "react";
+import { PrivateTimerConflictError } from "@starter/core";
+import { syncPrivateAccountTimerIfPresent } from "@/lib/private-account-timer-sync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./use-auth";
 import { useActiveWorkspace } from "@/components/members/use-active-workspace";
@@ -25,18 +27,21 @@ export function usePrivateWorkspaceSync(): PrivateSyncState | null {
       try {
         do {
           queued = false;
+          const timer = await syncPrivateAccountTimerIfPresent(userId, current); if (!current()) return;
+          if (timer?.changed) void client.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey[0]) && isWorkspaceContentProcedure(query.queryKey[0].join(".")) });
+          if (timer && (!timer.caughtUp || timer.pending || timer.committed)) { publish({ phase: "pending", pending: timer.pending + timer.committed }); return; }
           const route = await currentWorkspaceContentRoute(workspaceId); if (!current()) return;
           if (route.mode === "standard") { publish(null); return; }
           route.check();
           const result = await syncPrivateWorkspace({ server, userId, workspaceId }, (value) => { route.check(); publish(value); }, current);
           if (result.changed && current()) void client.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey[0]) && isWorkspaceContentProcedure(query.queryKey[0].join(".")) });
         } while (queued && current());
-      } catch { publish({ phase: "unavailable", pending: null }); }
+      } catch (error) { publish({ phase: error instanceof PrivateTimerConflictError ? "conflict" : "unavailable", pending: null }); }
       finally { busy = false; }
     };
     const retry = () => { void run(); };
     const unsubscribe = subscribePrivateWorkspaceEdits((scope) => {
-      if (scope.server === server && scope.userId === userId && scope.workspaceId === workspaceId && current()) {
+      if (scope.server === server && scope.userId === userId && current()) {
         void client.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey[0]) && isWorkspaceContentProcedure(query.queryKey[0].join(".")) }); retry();
       }
     });

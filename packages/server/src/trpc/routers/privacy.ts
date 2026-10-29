@@ -1,4 +1,7 @@
 import { createStandardBackupChallenge, readStandardBackupOriginals } from "../../services/privacy/standard-backup.js";
+import { commitPrivateTimerTransition } from "../../services/privacy/account-timer.js";
+import { privateTimerVersions } from "../../services/privacy/timer-versions.js";
+import { privateTimerTransitionSchema, privateTimerVersionsInputSchema } from "@starter/shared";
 import { fencePrivateAccount } from "../../services/privacy/account-erasure-fence.js";
 import { commitPrivateDirectory, privateDirectoryPage } from "../../services/privacy/directories.js";
 import { privateInitialSnapshotManifest, privateInitialSnapshotPage } from "../../services/privacy/initial-snapshots.js";
@@ -66,6 +69,11 @@ function validateRecordAudience(record: EncryptedRecord, members: Awaited<Return
 }
 const allMembers = (workspaceId: string) => WorkspaceMember.find({ workspaceId }).lean();
 export const privacyRouter = router({
+  timerVersions: privateAccountProcedure.input(privateTimerVersionsInputSchema).mutation(({ ctx, input }) => privateTimerVersions({ server: privateServerOrigin(), userId: ctx.user.id }, input.after, input.through)),
+  timerWrite: privateAccountProcedure.input(privateTimerTransitionSchema).mutation(({ ctx, input }) => {
+    requirePrivateWorkspaceRollout();
+    return commitPrivateTimerTransition({ server: privateServerOrigin(), userId: ctx.user.id }, input);
+  }),
   inventoryWrite: privateAccountProcedure.input(z.object({ signed: signedPrivateInventoryVersionSchema })).mutation(({ ctx, input }) =>
     commitPrivateInventoryVersion({ server: privateServerOrigin(), userId: ctx.user.id }, input.signed)),
   inventoryVersions: privateAccountProcedure.input(z.object({ after: z.number().int().nonnegative().max(PRIVATE_INVENTORY_HISTORY_MAX_VERSIONS), through: z.number().int().nonnegative().max(PRIVATE_INVENTORY_HISTORY_MAX_VERSIONS).optional() })).mutation(({ ctx, input }) =>

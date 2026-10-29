@@ -25,3 +25,8 @@ export type PrivateTimerPointer = z.infer<typeof privateTimerPointerSchema>;
 export type PrivateTimerHeader = z.infer<typeof privateTimerHeaderSchema>;
 export type SignedPrivateTimer = z.infer<typeof signedPrivateTimerSchema>;
 export type PrivateTimerTransition = z.infer<typeof privateTimerTransitionSchema>;
+const timerRevision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - 1);
+export const privateTimerAckSchema = z.object({ revision: timerRevision.min(1), root }).strict();
+export const privateTimerVersionsInputSchema = z.object({ after: timerRevision, through: timerRevision.optional() }).strict().refine(input => input.through === undefined || input.through >= input.after, "Timer history range moved backward");
+export const privateTimerPageSchema = z.object({ through: timerRevision, root: root.nullable(), next: timerRevision.nullable(), versions: z.array(signedPrivateTimerSchema).max(16) }).strict().refine(page => (page.through === 0) === (page.root === null), "Timer history boundary is inconsistent");
+export type PrivateTimerPage = z.infer<typeof privateTimerPageSchema>;
