@@ -168,13 +168,14 @@ export async function decryptPrivateWorkspaceBackup(input: unknown, recoveryKey:
       for (const row of pending.records) optimistic.set(address(row), row);
       for (const row of pending.remove) optimistic.delete(address(row));
     }
-    const records = checked.format === "trackyourtime-private-workspace-recovery-v2" ? await privateTimerRecoveryWorkspaceOverlay({ state: checked.accountTimer, replica: checked.replica, records: confirmed, scope, privateKey: secrets.privateKey, current }) : [...optimistic.values()]; check();
+    const timerView = checked.format === "trackyourtime-private-workspace-recovery-v2" ? await privateTimerRecoveryWorkspaceOverlay({ state: checked.accountTimer, replica: checked.replica, records: confirmed, scope, privateKey: secrets.privateKey, current }) : null; check();
     return {
       format: "trackyourtime-private-workspace-export-v1" as const, ...scope, createdAt: checked.createdAt,
       checkpoint: { activationRoot: checked.replica.activationRoot!, revision: checked.replica.revision, head: checked.replica.head! },
       accountInventory: { localRevision: checked.inventory.local.inventory.revision, confirmedRevision: checked.inventory.confirmed.checkpoint.revision, pending: checked.inventory.pending.length, conflict: checked.inventory.conflict !== null },
-      confirmedRecords: confirmed, records, pending: checked.replica.pending,
+      confirmedRecords: confirmed, records: timerView?.records ?? [...optimistic.values()], pending: checked.replica.pending,
       ...(checked.format === "trackyourtime-private-workspace-recovery-v2" ? { accountTimer: checked.accountTimer } : {}),
+      ...(timerView?.conflict ? { recoveryConflict: true as const } : {}),
     };
   } finally { key.fill(0); raw?.fill(0); }
 }

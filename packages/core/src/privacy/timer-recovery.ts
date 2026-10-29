@@ -17,7 +17,8 @@ export const privateTimerRecoveryStateSchema = z.object({
   // Keep exact packets after server confirmation until the workspace replicas
   // have accepted their changes. A crash between these steps must lose no work.
   committed: z.array(privateTimerTransitionSchema).max(32), conflict: signedPrivateTimerSchema.nullable(),
-}).strict();
+  preparing: privateTimerTransitionSchema.optional(),
+}).strict().refine(state => !state.preparing || state.pending.length < 32, "Timer staging needs room in the account outbox");
 export type PrivateTimerRecoveryState = z.infer<typeof privateTimerRecoveryStateSchema>;
 export const PRIVATE_TIMER_STATE_MAX_BYTES = 64 * 1024 * 1024;
 export const emptyPrivateTimerCheckpoint = (): PrivateTimerCheckpoint => ({ revision: 0, root: null, current: null });
@@ -56,6 +57,7 @@ export async function verifyPrivateTimerRecoveryState(input: unknown, options: {
   for (const transition of state.pending) {
     const row = await verify(transition.signed, confirmed); await packet(transition); confirmed = point(row);
   }
+  if (state.preparing) { const row = await verify(state.preparing.signed, confirmed); await packet(state.preparing); confirmed = point(row); }
   if (state.conflict) await verify(state.conflict, state.confirmed.checkpoint);
   check(); return { state, local: confirmed };
 }
@@ -71,21 +73,34 @@ export async function privateTimerRecoveryWorkspaceOverlay(options: {
   const check = () => { if (!current()) throw new Error("Private account changed during timer recovery"); }; check();
   const address = (row: { kind: string; id: string }) => JSON.stringify([row.kind, row.id]);
   const records = new Map(options.records.map(row => [address(row), structuredClone(row)]));
-  const packets = [...state.committed, ...state.pending];
+  const packets = [...state.committed, ...state.pending, ...(state.preparing ? [state.preparing] : [])];
   const confirmedEdit = state.confirmed.signed?.header.edits.find(edit => edit.workspaceId === scope.workspaceId);
   if (confirmedEdit && confirmedEdit.expectedRevision >= replica.revision && !state.committed.some(packet => packet.signed.header.operationId === state.confirmed.signed!.header.operationId)) throw new Error("Private backup is missing confirmed timer workspace changes");
+  for (const node of replica.pending.filter(row => row.coordinatorId !== undefined)) {
+    const packet = packets.find(row => row.signed.header.operationId === node.coordinatorId), signed = packet?.edits.find(row => row.edit.workspaceId === scope.workspaceId && row.edit.operationId === node.operationId);
+    if (!signed || node.basedOn !== signed.edit.expectedRevision || !node.submitted || !node.chain || canonicalJson({ ...node.submitted, chain: node.chain }) !== canonicalJson(signed)) throw new Error("Private backup is missing its original coordinated timer packet");
+    const plain = [];
+    for (const row of signed.edit.records) { plain.push(await decryptPrivateRecord(scope.workspaceId, row, scope.userId, privateKey)); check(); }
+    const remove = signed.edit.remove.map(({ kind, id, authorId }) => ({ kind, id, authorId }));
+    if (canonicalJson(plain) !== canonicalJson(node.records) || canonicalJson(remove) !== canonicalJson(node.remove)) throw new Error("Private backup timer draft differs from its original ciphertext");
+  }
   const events = [
-    ...replica.pending.map(pending => ({ basedOn: pending.basedOn, plain: pending.records, encrypted: [], remove: pending.remove })),
+    ...replica.pending.filter(pending => pending.coordinatorId === undefined).map(pending => ({ basedOn: pending.basedOn, plain: pending.records, encrypted: [], remove: pending.remove })),
     ...packets.flatMap(packet => packet.edits.filter(edit => edit.edit.workspaceId === scope.workspaceId && edit.edit.expectedRevision >= replica.revision).map(({ edit }) => ({ basedOn: edit.expectedRevision, plain: [], encrypted: edit.records, remove: edit.remove }))),
   ].sort((a, b) => a.basedOn - b.basedOn);
-  let revision = replica.revision;
+  let revision = replica.revision, conflict = state.conflict !== null;
   for (const event of events) {
-    if (event.basedOn !== revision++) throw new Error("Private backup timer dependencies are missing or overlap");
+    if (event.basedOn > revision) throw new Error("Private backup timer dependencies are missing");
+    // A remote advance can leave a legitimate offline draft on an older base.
+    // Preserve its exact intent as a conflicted local preview, never as replay
+    // authority. The archive separately retains confirmed rows and raw packets.
+    if (event.basedOn < revision) conflict = true;
+    revision = Math.max(revision, event.basedOn + 1);
     for (const row of event.plain) records.set(address(row), row);
     for (const row of event.encrypted) { const opened = await decryptPrivateRecord(scope.workspaceId, row, scope.userId, privateKey); check(); records.set(address(opened), opened); }
     for (const row of event.remove) records.delete(address(row));
   }
-  const local = state.pending.length ? state.pending.at(-1)!.signed.header.current : state.confirmed.checkpoint.current;
+  const local = state.preparing ? state.preparing.signed.header.current : state.pending.length ? state.pending.at(-1)!.signed.header.current : state.confirmed.checkpoint.current;
   const ownRunning = [...records.values()].filter(row => {
     if (row.kind !== "entries" || row.authorId !== scope.userId) return false;
     const value = privateValue(row.value) as Record<string, unknown>;
@@ -93,7 +108,7 @@ export async function privateTimerRecoveryWorkspaceOverlay(options: {
     return value.end == null;
   });
   const expected = local?.workspaceId === scope.workspaceId ? local.entryId : null;
-  if (ownRunning.length !== (expected ? 1 : 0) || (expected && ownRunning[0]!.id !== expected)) throw new Error("Private backup timer differs from its account checkpoint");
+  if (!conflict && (ownRunning.length !== (expected ? 1 : 0) || (expected && ownRunning[0]!.id !== expected))) throw new Error("Private backup timer differs from its account checkpoint");
   if (expected && records.get(address({ kind: "entryMoney", id: expected }))?.authorId !== scope.userId) throw new Error("Private backup timer is missing its financial snapshot");
-  check(); return [...records.values()];
+  check(); return { records: [...records.values()], conflict };
 }

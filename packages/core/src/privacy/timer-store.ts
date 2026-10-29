@@ -1,4 +1,4 @@
-import { privateTimerTransitionSchema, signedPrivateTimerSchema } from "@starter/shared";
+import { privateTimerTransitionSchema, signedPrivateTimerSchema, type PrivateTimerTransition } from "@starter/shared";
 import { canonicalJson, type PublicKey } from "./crypto.js";
 import { createPrivateStorage, PrivateStorageIntegrityError, PrivateStorageLockedError, type PrivateStorageKey } from "./storage.js";
 import { segmentedPrivateStorage } from "./segmented-storage.js";
@@ -8,6 +8,13 @@ import { PRIVATE_TIMER_STATE_MAX_BYTES, verifyPrivateTimerRecoveryState, type Pr
 import type { KeyValueStorage } from "../storage.js";
 import type { QueueExclusive } from "../durable-entry.js";
 export const PRIVATE_ACCOUNT_TIMER_SCOPE = "trackyourtime:account-timer-v1";
+declare const stageBrand: unique symbol;
+export type PrivateTimerStagePermit = Readonly<{ scope: { server: string; userId: string }; transition: PrivateTimerTransition; current: () => boolean }> & { readonly [stageBrand]: true };
+const stagePermits = new WeakSet<object>();
+function freeze<T>(value: T): T { if (value && typeof value === "object") { for (const child of Object.values(value)) freeze(child); Object.freeze(value); } return value; }
+export function assertPrivateTimerStagePermit(permit: PrivateTimerStagePermit, scope: { server: string; userId: string }) {
+  if (!stagePermits.has(permit) || !permit.current() || permit.scope.server !== scope.server || permit.scope.userId !== scope.userId) throw new Error("Use this account's durable timer staging permit");
+}
 export class PrivateTimerCheckpointMissingError extends Error {
   constructor() { super("Restore the trusted account timer checkpoint before using private timers"); this.name = "PrivateTimerCheckpointMissingError"; }
 }
@@ -47,10 +54,14 @@ export async function createPrivateAccountTimerStore(options: {
     if (canonicalJson(saved.state) !== canonicalJson(value.state)) throw new PrivateStorageIntegrityError();
     return saved;
   };
+  const permit = (transition: PrivateTimerTransition, current: () => boolean) => {
+    const value = freeze({ scope: { ...scope }, transition: structuredClone(transition), current }) as PrivateTimerStagePermit;
+    stagePermits.add(value); return value;
+  };
   return {
     read: () => use(async (check, current) => {
       const value = await required(check, current);
-      return { checkpoint: structuredClone(value.state.confirmed.checkpoint), local: structuredClone(value.local), pending: value.state.pending.length, committed: value.state.committed.length, conflict: value.state.conflict !== null };
+      return { checkpoint: structuredClone(value.state.confirmed.checkpoint), local: structuredClone(value.local), pending: value.state.pending.length, committed: value.state.committed.length, conflict: value.state.conflict !== null, ...(value.state.preparing ? { preparing: true as const } : {}) };
     }),
     exportRecovery: () => use(async (check, current) => { const value = await load(check, current); return value ? { ...value, digest: await privateRecordDigest(value.state) } : null; }),
     /** expectedDigest must come from fresh local identity setup, a verified
@@ -65,11 +76,46 @@ export async function createPrivateAccountTimerStore(options: {
         return structuredClone((prior ?? await save(value.state, check, current)).local);
       });
     },
+    /** Persist the complete cross-workspace plan before publishing any local
+     * workspace node. A later coordinator repairs this phase after a crash. */
+    prepare: (input: unknown) => {
+      const transition = structuredClone(privateTimerTransitionSchema.parse(input));
+      return use(async (check, current) => {
+        const { state } = await required(check, current);
+        if (state.conflict) throw new PrivateTimerConflictError();
+        if (state.committed.length) throw new Error("Accept confirmed timer packets before staging another transition");
+        const prior = state.preparing ?? state.pending.find(row => row.signed.header.operationId === transition.signed.header.operationId);
+        if (prior) {
+          if (canonicalJson(prior) !== canonicalJson(transition)) throw new Error("Keep the original timer staging plan before starting another");
+          return permit(prior, current);
+        }
+        if (state.pending.length >= 32) throw new Error("Sync or export pending timer transitions before staging more work");
+        const saved = await save({ ...state, preparing: transition }, check, current);
+        return permit(saved.state.preparing!, current);
+      });
+    },
+    prepared: () => use(async (check, current) => { const { state } = await required(check, current); return state.preparing ? permit(state.preparing, current) : null; }),
+    stagingPermit: (operationId: string) => use(async (check, current) => {
+      const { state } = await required(check, current), packet = [...(state.preparing ? [state.preparing] : []), ...state.pending, ...state.committed].find(row => row.signed.header.operationId === operationId);
+      return packet ? permit(packet, current) : null;
+    }),
+    publish: (stage: PrivateTimerStagePermit) => {
+      assertPrivateTimerStagePermit(stage, scope);
+      return use(async (check, current) => {
+        assertPrivateTimerStagePermit(stage, scope); const { state } = await required(check, current);
+        const prior = state.pending.find(row => row.signed.header.operationId === stage.transition.signed.header.operationId);
+        if (prior && canonicalJson(prior) === canonicalJson(stage.transition) && !state.preparing) return;
+        if (!state.preparing || canonicalJson(state.preparing) !== canonicalJson(stage.transition)) throw new Error("Timer publication differs from the saved staging plan");
+        const { preparing, ...rest } = state;
+        await save({ ...rest, pending: [...state.pending, preparing] }, check, current);
+      });
+    },
     enqueue: (input: unknown) => {
       const transition = structuredClone(privateTimerTransitionSchema.parse(input));
       return use(async (check, current) => {
         const value = await required(check, current), state = value.state;
         if (state.conflict) throw new PrivateTimerConflictError();
+        if (state.preparing) throw new Error("Finish publishing the saved timer plan before adding more work");
         if (state.committed.length) throw new Error("Finish accepting confirmed timer packets before planning another transition");
         const prior = state.pending.find(row => row.signed.header.operationId === transition.signed.header.operationId);
         if (prior) {
@@ -83,6 +129,7 @@ export async function createPrivateAccountTimerStore(options: {
     nextPending: () => use(async (check, current) => {
       const value = await required(check, current);
       if (value.state.conflict) throw new PrivateTimerConflictError();
+      if (value.state.preparing) throw new Error("Finish publishing the saved timer plan before sending work");
       if (value.state.committed.length) throw new Error("Accept the confirmed timer packets before sending another transition");
       return structuredClone(value.state.pending[0] ?? null);
     }),
@@ -93,6 +140,7 @@ export async function createPrivateAccountTimerStore(options: {
       return use(async (check, current) => {
         const { state } = await required(check, current);
         if (state.conflict) throw new PrivateTimerConflictError();
+        if (state.preparing) throw new Error("Finish publishing the saved timer plan before advancing account history");
         if (state.committed.length) throw new Error("Accept the confirmed timer packets before advancing account history");
         const verified = await verifyPrivateTimer({ signed, scope, signingPublicKey, previous: state.confirmed.checkpoint, current });
         const pending = state.pending[0];

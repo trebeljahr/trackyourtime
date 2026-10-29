@@ -28,7 +28,7 @@ export async function capturePrivateDeviceWorkspaceTrust(userId: string): Promis
     const timerHost = await privateAccountTimerStorageHost(userId);
     try {
       const timers = await privateAccountTimerStore(userId, timerHost.storage, timerHost.exclusive), timer = await timers.exportRecovery(); binding.check();
-      if (timer && (timer.state.pending.length || timer.state.committed.length || timer.state.conflict)) throw new Error("Sync or export pending timer work before approving another device");
+      if (timer && (timer.state.pending.length || timer.state.committed.length || timer.state.conflict || timer.state.preparing)) throw new Error("Sync or export pending timer work before approving another device");
       return privateDeviceWorkspaceTrustSchema.parse({ inventory: profile.inventory.checkpoint, transport: state.confirmed.checkpoint, ...(timer ? { timer: { digest: timer.digest, ...timer.state.confirmed } } : {}) });
     } finally { timerHost.close(); }
   } finally { host.close(); }

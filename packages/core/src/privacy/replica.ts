@@ -11,9 +11,12 @@ import { assertPrivateProjectionSnapshot, type VerifiedPrivateProjectionSnapshot
 import { assertPrivateInitialSnapshot, type VerifiedPrivateInitialSnapshot } from "./initial-snapshot.js";
 import { privateWorkspaceChainRoot, signPrivateChainedWorkspaceEdit, verifyPrivateChainedWorkspaceChange } from "./history-chain.js";
 import type { VerifiedPrivateDirectory } from "./directory.js";
+import { assertPrivateTimerStagePermit, type PrivateTimerStagePermit } from "./timer-store.js";
 const plainSchema = privateRecordRefSchema.extend({ value: z.record(z.string(), z.json()) }).strict();
-const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable(), chain: privateWorkspaceChainSchema.nullable().default(null), directoryDigest: z.string().nullable().default(null) }).strict();
-const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), activationRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000) }).strict().refine((state) => state.revision !== 0 || (state.head === null && state.records.length === 0), "Private replica zero checkpoint contains committed data").refine((state) => !state.activationRoot || (!!state.head && state.revision >= 1 && (state.revision !== 1 || state.head === state.activationRoot)), "Private replica activation checkpoint is inconsistent");
+const pendingSchema = z.object({ operationId: z.uuid(), basedOn: z.number().int().nonnegative(), records: z.array(plainSchema).max(100), remove: z.array(privateRecordRefSchema).max(100), submitted: signedPrivateWorkspaceEditSchema.nullable(), chain: privateWorkspaceChainSchema.nullable().default(null), directoryDigest: z.string().nullable().default(null), coordinatorId: z.uuid().optional() }).strict();
+const coordinatedReceiptSchema = z.object({ coordinatorId: z.uuid(), operationId: z.uuid(), revision: z.number().int().positive(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
+const stateSchema = z.object({ v: z.literal(1), revision: z.number().int().nonnegative(), head: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), activationRoot: z.string().regex(/^[A-Za-z0-9_-]{43}$/).nullable().default(null), records: z.array(encryptedRecordSchema), pending: z.array(pendingSchema).max(1000), coordinatedReceipts: z.array(coordinatedReceiptSchema).max(1000).optional() }).strict().refine((state) => state.revision !== 0 || (state.head === null && state.records.length === 0), "Private replica zero checkpoint contains committed data").refine((state) => !state.activationRoot || (!!state.head && state.revision >= 1 && (state.revision !== 1 || state.head === state.activationRoot)), "Private replica activation checkpoint is inconsistent")
+  .refine(state => (state.coordinatedReceipts ?? []).every((row, index, rows) => row.revision <= state.revision && (row.revision !== state.revision || row.head === state.head) && (index === 0 || rows[index - 1]!.revision < row.revision)) && new Set((state.coordinatedReceipts ?? []).map(row => row.coordinatorId)).size === (state.coordinatedReceipts?.length ?? 0), "Coordinated receipts differ from the confirmed workspace history");
 export const privateReplicaRecoveryStateSchema = stateSchema;
 export type PrivateReplicaRecoveryState = z.infer<typeof stateSchema>;
 type State = PrivateReplicaRecoveryState;
@@ -24,6 +27,9 @@ export class PrivateReplicaConflictError extends Error {
 }
 export class PrivateReplicaDirectoryChangedError extends Error {
   constructor() { super("Workspace sharing keys changed. The queued edit was kept for review."); this.name = "PrivateReplicaDirectoryChangedError"; }
+}
+export class PrivateReplicaCoordinatedEditError extends Error {
+  constructor() { super("This timer packet must commit through the account coordinator"); this.name = "PrivateReplicaCoordinatedEditError"; }
 }
 export type PrivateReplicaIdentity = {
   directoryDigest: string;
@@ -99,6 +105,10 @@ export async function createPrivateWorkspaceReplica(options: {
       if (waiting) {
         if (waiting !== state.pending[0] || !waiting.submitted || canonicalJson(privateWorkspaceManifestForReader(await privateWorkspaceManifest(waiting.submitted.edit), userId)) !== canonicalJson(change.manifest)) throw new Error("Received edit does not match the durable outbox");
         if (chained && (!waiting.chain || canonicalJson(waiting.chain.header) !== canonicalJson(chained.chain.header))) throw new Error("Received history binding does not match the durable outbox");
+        if (waiting.coordinatorId) {
+          if (!chained) throw new PrivateReplicaCoordinatedEditError();
+          state.coordinatedReceipts = [...(state.coordinatedReceipts ?? []), { coordinatorId: waiting.coordinatorId, operationId: waiting.operationId, revision: change.revision, head: chained.head }].slice(-1000);
+        }
         state.pending.shift();
       }
       state.revision = change.revision;
@@ -129,7 +139,7 @@ export async function createPrivateWorkspaceReplica(options: {
     }
     access.check(); return { revision: state.revision, head: state.head, pending: state.pending.length, conflict: !!state.pending.length && (state.pending[0]!.basedOn !== state.revision || (!!state.pending[0]!.submitted && state.pending[0]!.directoryDigest !== access.directoryDigest)), records: structuredClone([...values.values()]) };
   };
-  const append = async (state: State, access: ReturnType<typeof identity>, snapshot: { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[] }) => {
+  const append = async (state: State, access: ReturnType<typeof identity>, snapshot: { records: PlainPrivateRecord[]; remove?: z.infer<typeof privateRecordRefSchema>[] }, coordinated?: { permit: PrivateTimerStagePermit; signed: SignedPrivateChainedEdit }) => {
     const records = z.array(plainSchema).max(100).parse(snapshot.records), remove = z.array(privateRecordRefSchema).max(100).parse(snapshot.remove ?? []);
     if (!records.length && !remove.length) throw new Error("Empty private workspace edit");
     const seen = new Set<string>();
@@ -145,9 +155,39 @@ export async function createPrivateWorkspaceReplica(options: {
       for (const row of [...records, ...remove]) if (known.has(address(row)) && known.get(address(row)) !== row.authorId) throw new Error("A private edit cannot replace another author's record");
     }
     if (state.pending.length >= 1000) throw new Error("Sync or export pending private edits before adding more");
-    const operationId = crypto.randomUUID();
-    state.pending.push({ operationId, basedOn: state.revision + state.pending.length, records, remove, submitted: null, chain: null, directoryDigest: null });
+    const operationId = coordinated?.signed.edit.operationId ?? crypto.randomUUID();
+    const signed = coordinated ? (({ chain: _chain, ...edit }) => { void _chain; return edit; })(coordinated.signed) : null;
+    state.pending.push({ operationId, basedOn: state.revision + state.pending.length, records, remove, submitted: signed, chain: coordinated?.signed.chain ?? null, directoryDigest: coordinated ? access.directoryDigest : null, ...(coordinated ? { coordinatorId: coordinated.permit.transition.signed.header.operationId } : {}) });
     access.check(); await save(state); access.check(); return operationId;
+  };
+  const sealPending = async (node: State["pending"][number], access: ReturnType<typeof identity>, revision: number, previousRoot: string | null) => {
+    if (node.basedOn !== revision) throw new PrivateReplicaConflictError();
+    if (node.submitted && node.directoryDigest !== access.directoryDigest) throw new PrivateReplicaDirectoryChangedError();
+    if (!node.submitted) {
+      const records = [];
+      for (const row of node.records) { records.push(await encryptPrivateRecord(workspaceId, row, access.recipients, revision + 1)); access.check(); }
+      const remove = node.remove.map(row => ({ ...row, readers: readersForPrivateRecord(row.kind, row.authorId, access.recipients).map(member => member.userId).sort() }));
+      const edit = { v: 1 as const, workspaceId, userId, operationId: node.operationId, expectedRevision: revision, records, remove };
+      if (previousRoot === null) node.submitted = await signPrivateWorkspaceEdit(edit, access.signingPrivateKey, access.recipients.map(member => member.userId));
+      else {
+        if (!access.directory) throw new Error("Private timer staging needs its verified directory");
+        const { chain, ...submitted } = await signPrivateChainedWorkspaceEdit({ edit, previousRoot, directory: access.directory, secrets: access, current: access.current });
+        node.submitted = submitted; node.chain = chain;
+      }
+      node.directoryDigest = access.directoryDigest; access.check();
+    }
+    if (node.submitted.edit.operationId !== node.operationId || node.submitted.edit.workspaceId !== workspaceId || node.submitted.edit.userId !== userId || node.submitted.edit.expectedRevision !== revision || (previousRoot !== null && (!node.chain || node.chain.header.previousRoot !== previousRoot))) throw new Error("Pending private packet differs from its original checkpoint");
+    return node.chain ? privateWorkspaceChainRoot(node.chain) : null;
+  };
+  const coordinatedReceipt = async (state: State, permit: PrivateTimerStagePermit) => {
+    assertPrivateTimerStagePermit(permit, scope);
+    const edit = permit.transition.edits.find(row => row.edit.workspaceId === workspaceId);
+    if (!edit) throw new Error("Timer staging does not include this workspace");
+    const expected = { coordinatorId: permit.transition.signed.header.operationId, operationId: edit.edit.operationId, revision: edit.edit.expectedRevision + 1, head: await privateWorkspaceChainRoot(edit.chain) };
+    if (state.pending.some(row => row.operationId === expected.operationId)) return null;
+    const found = state.coordinatedReceipts?.find(row => row.coordinatorId === expected.coordinatorId && row.operationId === expected.operationId);
+    if (found && canonicalJson(found) !== canonicalJson(expected)) throw new Error("Timer workspace receipt differs from its signed account binding");
+    return found ?? (state.revision === expected.revision && state.head === expected.head ? expected : null);
   };
   /** Capture before waiting: a queued read cannot revive after lock/re-unlock.
    * Narrow views decrypt only selected kinds, including their optimistic edits. */
@@ -210,29 +250,66 @@ export async function createPrivateWorkspaceReplica(options: {
     },
     read: () => readView(),
     readKinds: async (kinds: readonly PrivateKind[]) => readView(new Set(z.array(privateKindSchema).min(1).max(PRIVATE_KINDS.length).parse(kinds))),
+    /** Seal earlier local work without sending it, so a later account packet
+     * can bind its exact future workspace predecessor while still offline. */
+    prepareTail: () => withAccess(async access => {
+      const state = await load(); access.check();
+      if (!state.activationRoot || !state.head || !access.directory) throw new Error("Coordinated timers require an activated private workspace");
+      let revision = state.revision, head: string | null = state.head;
+      for (const node of state.pending) { head = await sealPending(node, access, revision++, head); access.check(); }
+      if (state.pending.length) { await save(state); access.check(); }
+      return { revision, head: head!, activationRoot: state.activationRoot, pending: state.pending.length, directoryDigest: access.directoryDigest };
+    }),
+    stageCoordinated: (permit: PrivateTimerStagePermit) => {
+      assertPrivateTimerStagePermit(permit, scope);
+      const signed = structuredClone(permit.transition.edits.find(row => row.edit.workspaceId === workspaceId));
+      if (!signed) throw new Error("Timer staging does not include this workspace");
+      return withAccess(async access => {
+        assertPrivateTimerStagePermit(permit, scope); const state = await load(); access.check();
+        if (!state.activationRoot || !state.head || !access.directory) throw new Error("Coordinated timers require an activated private workspace");
+        const prior = state.pending.find(row => row.operationId === signed.edit.operationId);
+        if (prior) {
+          if (prior.directoryDigest !== access.directoryDigest) throw new PrivateReplicaDirectoryChangedError();
+          if (prior.coordinatorId !== permit.transition.signed.header.operationId || !prior.submitted || !prior.chain || canonicalJson({ ...prior.submitted, chain: prior.chain }) !== canonicalJson(signed)) throw new Error("Timer staging conflicts with the existing workspace outbox");
+          return { operationId: prior.operationId, accepted: false };
+        }
+        if (await coordinatedReceipt(state, permit)) { access.check(); return { operationId: signed.edit.operationId, accepted: true }; }
+        let revision = state.revision, head: string | null = state.head;
+        for (const node of state.pending) { head = await sealPending(node, access, revision++, head); access.check(); }
+        if (signed.edit.expectedRevision !== revision || signed.chain.header.previousRoot !== head) throw new PrivateReplicaConflictError();
+        const { header } = permit.transition.signed;
+        const targets = [header.previous, header.current].filter(row => row?.workspaceId === workspaceId).map(row => row!.entryId);
+        if ([...signed.edit.records, ...signed.edit.remove].some(row => row.authorId !== userId || !["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id))) throw new Error("Timer staging contains unrelated records");
+        const manifest = await privateWorkspaceManifest(signed.edit), reader = signed.readerSignatures.find(row => row.userId === userId);
+        if (!reader) throw new Error("Timer staging is missing its author's signed projection");
+        await verifyPrivateChainedWorkspaceChange({ revision: revision + 1, manifest: privateWorkspaceManifestForReader(manifest, userId), signature: reader.signature, records: signed.edit.records.filter(row => row.grants.some(grant => grant.userId === userId)), chain: signed.chain }, { ...scope, after: revision, previousRoot: head!, directory: access.directory }); access.check();
+        const records = [];
+        for (const row of signed.edit.records) { records.push(await decryptPrivateRecord(workspaceId, row, userId, access.privateKey)); access.check(); }
+        const remove = signed.edit.remove.map(({ kind, id, authorId }) => ({ kind, id, authorId }));
+        const operationId = await append(state, access, { records, remove }, { permit, signed });
+        assertPrivateTimerStagePermit(permit, scope); return { operationId, accepted: false };
+      });
+    },
+    coordinatedReceipt: (permit: PrivateTimerStagePermit) => {
+      assertPrivateTimerStagePermit(permit, scope);
+      return withAccess(async access => { const state = await load(); access.check(); const receipt = await coordinatedReceipt(state, permit); access.check(); return receipt ? structuredClone(receipt) : null; });
+    },
     pull: (transport: PrivateReplicaTransport, through?: number) => withAccess((access) => pull(transport, through, access)),
     flushOne: (transport: PrivateReplicaTransport) => withAccess(async (access) => {
       const state = await load(); access.check();
       const first = state.pending[0]; if (!first) return { revision: state.revision, pending: 0 };
+      if (first.coordinatorId) throw new PrivateReplicaCoordinatedEditError();
       // No automatic rebasing: an offline edit must not silently overwrite
       // work made on another device. Keep the exact input for explicit repair.
       if (first.basedOn !== state.revision) throw new PrivateReplicaConflictError();
       if (first.submitted && first.directoryDigest !== access.directoryDigest) throw new PrivateReplicaDirectoryChangedError();
       if (state.head !== null && (!transport.chainedCommit || !transport.chainedChanges || !access.directory)) throw new Error("This workspace requires verified chained history; stored data was kept");
       if (!first.submitted) {
-        const records = [];
-        for (const row of first.records) { records.push(await encryptPrivateRecord(workspaceId, row, access.recipients, state.revision + 1)); access.check(); }
-        const remove = first.remove.map((row) => ({ ...row, readers: readersForPrivateRecord(row.kind, row.authorId, access.recipients).map((member) => member.userId).sort() }));
-        const edit = { v: 1 as const, workspaceId, userId, operationId: first.operationId, expectedRevision: state.revision, records, remove };
-        if (state.head === null) first.submitted = await signPrivateWorkspaceEdit(edit, access.signingPrivateKey, access.recipients.map((member) => member.userId));
-        else {
-          const { chain, ...submitted } = await signPrivateChainedWorkspaceEdit({ edit, previousRoot: state.head, directory: access.directory!, secrets: access, current: access.current });
-          first.submitted = submitted; first.chain = chain;
-        }
+        await sealPending(first, access, state.revision, state.head);
         access.check();
-        first.directoryDigest = access.directoryDigest;
         await save(state); access.check();
       }
+      if (!first.submitted) throw new Error("The pending private edit was not durably sealed");
       // An uncertain HTTP reply never drops the submitted edit. Its operation
       // ID, ciphertext, timestamps and signature are reused after restart.
       let reply: { revision: number; head?: string };
