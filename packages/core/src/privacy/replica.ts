@@ -294,7 +294,7 @@ export async function createPrivateWorkspaceReplica(options: {
         if (signed.edit.expectedRevision !== revision || signed.chain.header.previousRoot !== head) throw new PrivateReplicaConflictError();
         const { header } = permit.transition.signed;
         const targets = [header.previous, header.current].filter(row => row?.workspaceId === workspaceId).map(row => row!.entryId);
-        if ([...signed.edit.records, ...signed.edit.remove].some(row => row.authorId !== userId || !["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id))) throw new Error("Timer staging contains unrelated records");
+        if (signed.edit.records.some(row => row.authorId !== userId || !((row.kind === "imports" && row.id === `entryoperations:${header.operationId}`) || (["entries", "entryMoney"].includes(row.kind) && targets.includes(row.id)))) || signed.edit.remove.some(row => row.authorId !== userId || !["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id))) throw new Error("Timer staging contains unrelated records");
         const manifest = await privateWorkspaceManifest(signed.edit), reader = signed.readerSignatures.find(row => row.userId === userId);
         if (!reader) throw new Error("Timer staging is missing its author's signed projection");
         await verifyPrivateChainedWorkspaceChange({ revision: revision + 1, manifest: privateWorkspaceManifestForReader(manifest, userId), signature: reader.signature, records: signed.edit.records.filter(row => row.grants.some(grant => grant.userId === userId)), chain: signed.chain }, { ...scope, after: revision, previousRoot: head!, directory: access.directory }); access.check();

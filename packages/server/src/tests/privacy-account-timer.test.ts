@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
-import { canonicalJson, createKeyPair, createSigningPair, decryptPrivateRecord, encodeSecret, encryptPrivateRecord, privateMemberKeyFingerprint, privateRecordDigest, privateTimerEditBindings, randomSecret, seal, signPrivateChainedWorkspaceEdit, signPrivateTimer, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type VerifiedPrivateDirectory, type PlainPrivateRecord } from "@starter/core";
+import { canonicalJson, createKeyPair, createSigningPair, decryptPrivateRecord, encodeSecret, encryptPrivateRecord, privateMemberKeyFingerprint, privateRecordDigest, privateTimerEditBindings, privateTimerWitnessFromPacket, verifyPrivateTimerCurrentWitness, randomSecret, seal, signPrivateChainedWorkspaceEdit, signPrivateTimer, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type VerifiedPrivateDirectory, type PlainPrivateRecord } from "@starter/core";
 import type { PrivateTimerPointer, PrivateTimerTransition, SignedPrivateChainedEdit, PrivateStandardTimerStartInput } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../models/PrivateData.js";
 import { PrivateTimerVersion } from "../models/PrivateTimer.js";
@@ -61,6 +61,27 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     }
   });
   after(dropTestDatabase);
+  async function receiptPacket(request: PrivateTimerTransition, receiptOperationId = request.signed.header.operationId) {
+    const original = request.edits[0]!, directory = directories.get(original.edit.workspaceId)!;
+    const receipt = await encryptPrivateRecord(original.edit.workspaceId, { kind: "imports", id: `entryoperations:${receiptOperationId}`, authorId: scope.userId, value: { _id: receiptOperationId, workspaceId: original.edit.workspaceId, userId: scope.userId, protocol: "trackyourtime-private-timer-operation-v1", result: { description: "Encrypted original retry result" } } }, directory.signed.directory.members, original.edit.expectedRevision + 1);
+    const edit = await signPrivateChainedWorkspaceEdit({ edit: { ...original.edit, records: [...original.edit.records, receipt] }, directory, previousRoot: original.chain.header.previousRoot, secrets: { privateKey: encryption.privateKey, signingPrivateKey: signing.privateKey }, current: () => true });
+    const edits = request.edits.map(row => row === original ? edit : row), signed = await signPrivateTimer({ ...request.signed.header, edits: await privateTimerEditBindings(edits) }, signing.privateKey, () => true);
+    return { ...request, signed, edits };
+  }
+  it("atomically stores an encrypted author-owned retry receipt at the signed timer operation address", async () => {
+    const pointer = point(), request = await receiptPacket(await prepare(null, pointer));
+    await commitPrivateTimerTransition(scope, request);
+    assert.equal(await PrivateRecord.countDocuments({ workspaceId: a, kind: "imports", id: `entryoperations:${request.signed.header.operationId}`, authorId: scope.userId }), 1);
+    assert.doesNotMatch(JSON.stringify(await PrivateRecord.find().lean()), /Encrypted original retry result/);
+    const witness = await privateTimerWitnessFromPacket(request);
+    await verifyPrivateTimerCurrentWitness(witness, request.signed, { scope, signingPublicKey: signing.publicKey, current: () => true });
+    await commitPrivateTimerTransition(scope, request); assert.equal(await PrivateWorkspaceCommit.countDocuments(), 1);
+  });
+  it("refuses another operation's receipt address without advancing either history", async () => {
+    const request = await receiptPacket(await prepare(null, point()), crypto.randomUUID());
+    await assert.rejects(commitPrivateTimerTransition(scope, request), { code: "BAD_REQUEST" });
+    assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 0); assert.equal((await privateTimerCheckpoint(scope.userId)).revision, 0);
+  });
   it("keeps claim metadata and workspace time atomic while retaining only encrypted business content", async () => {
     const pointer = point(), request = await prepare(null, pointer), saved = await commitPrivateTimerTransition(scope, request);
     assert.equal(saved.revision, 1); assert.deepEqual((await privateTimerCheckpoint(scope.userId)).current, pointer); assert.equal((await readEntry(pointer)).value.end, null);

@@ -17,6 +17,7 @@
  * Keep a capability for each added level so callers can gate the matching format.
  */
 export const REQUIRES_API_LEVEL = {
+  "privacy.timerIntentReceipts": 39,
   "privacy.accountCurrentTimer": 38,
   "privacy.standardTimerHandoff": 37,
   "privacy.accountTimer": 36,

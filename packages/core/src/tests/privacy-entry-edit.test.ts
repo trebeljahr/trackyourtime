@@ -3,6 +3,7 @@ import { it } from "node:test";
 import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { privateEntryEdit, privateTimerEntryEdit, preparePrivateEntryIntent, type VerifiedPrivateEntryIntent, type PrivateEntryEditPath, type PrivateTimerEntryCommand } from "../privacy/entry-edit.js";
+import { preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord } from "../privacy/timer-intent.js";
 import { privateRecordsToRecovery, partitionPrivateRecovery, type PlainPrivateRecord } from "../privacy/records.js";
 import type { TimeEntry } from "@starter/shared";
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "author" }, stamp = "2026-10-27T00:00:00.000Z";
@@ -189,4 +190,35 @@ it("carries retained entry receipts through a lossless recovery round trip", asy
 });
 it("invalidates an asynchronous private intent preparation when the keys lock before hashing completes", async () => {
   const f = await fixture(), pending = f.intent("entries.create", { ...span }); f.lock(); await assert.rejects(pending, /changed/);
+});
+
+it("keeps timer retry results encrypted with workspace history after later stops and deletion", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(), input = { description: "Original private start", projectId: "project", start: span.start };
+  const options = { scope, directory: f.directory, records: f.records, current: () => true };
+  const intent = await preparePrivateTimerIntent({ scope, path: "entries.start", input, operationId, current: () => true });
+  assert.equal(readPrivateTimerIntent({ ...options, intent }), null);
+  const start = f.apply(f.timer({ kind: "start", entryId: operationId, input }, null));
+  f.records.push(privateTimerIntentRecord({ ...options, intent, result: start.result, now: Date.parse(stamp) }));
+  f.apply(f.timer({ kind: "stop", id: operationId, end: span.end }, operationId));
+  f.edit("entries.remove", { id: operationId });
+  const retry = await preparePrivateTimerIntent({ scope, path: "entries.start", input: { ...input, operationId }, operationId, current: () => true });
+  assert.deepEqual(readPrivateTimerIntent({ ...options, intent: retry }), start.result);
+  const snapshot = await privateRecordsToRecovery(scope.workspaceId, f.records.filter(row => ["entries", "entryMoney", "imports"].includes(row.kind)), stamp);
+  assert.deepEqual(readPrivateTimerIntent({ ...options, records: partitionPrivateRecovery(snapshot), intent: retry }), start.result);
+  const changed = await preparePrivateTimerIntent({ scope, path: "entries.start", input: { ...input, description: "Other start" }, operationId, current: () => true });
+  assert.throws(() => readPrivateTimerIntent({ ...options, intent: changed }), /different request/);
+  assert.throws(() => privateTimerIntentRecord({ ...options, intent, result: start.result, now: Date.now() }), /original timer receipt/);
+});
+it("preserves discard receipts and refuses changed targets, forged intent and stale keys", async () => {
+  const f = await fixture(), id = crypto.randomUUID(), operationId = crypto.randomUUID(), options = { scope, directory: f.directory, records: f.records, current: () => true };
+  f.apply(f.timer({ kind: "start", entryId: id, input: { start: span.start } }, null));
+  let open = true;
+  const intent = await preparePrivateTimerIntent({ scope, path: "entries.discard", input: { id }, operationId, current: () => open });
+  const discard = f.apply(f.timer({ kind: "discard", id }, id));
+  f.records.push(privateTimerIntentRecord({ ...options, intent, result: discard.result, now: Date.parse(stamp) }));
+  assert.deepEqual(readPrivateTimerIntent({ ...options, intent }), { success: true, id });
+  const changed = await preparePrivateTimerIntent({ scope, path: "entries.discard", input: { id: crypto.randomUUID() }, operationId, current: () => true });
+  assert.throws(() => readPrivateTimerIntent({ ...options, intent: changed }), /different request/);
+  assert.throws(() => readPrivateTimerIntent({ ...options, intent: { ...intent } }), /changed/);
+  open = false; assert.throws(() => readPrivateTimerIntent({ ...options, intent }), /changed/);
 });

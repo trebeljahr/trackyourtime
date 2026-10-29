@@ -22,6 +22,9 @@ import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
+import { mutatePrivateAccountTimer } from "./private-account-timer-mutation";
+import { capturePrivateTimerAction, type PrivateTimerAction } from "./private-timer-action";
+import { isPrivateTimerIntentPath } from "@starter/core";
 import { readPrivateAccountCurrent } from "./private-account-timer-current";
 import { readWorkspaceList } from "./private-workspace-list";
 import { capturePrivateRequestScope, checkPrivateRequestScope, privateRequestScopeHeaders } from "./private-request-scope";
@@ -90,7 +93,8 @@ export const PENDING_WORKSPACE = "trackyourtime:pending-workspace";
  */
 export const workspaceLink = (): TRPCLink<AppRouter> => () => ({ op, next }) => {
   const intent = op.type === "mutation" ? privateMutationIntent(op.path, op.input) : null;
-  if (intent) op = { ...op, input: intent.input, context: { ...op.context, privateMutationIntentScope: intent.scope } };
+  if (intent) op = { ...op, input: intent.input, context: { ...op.context, privateMutationIntentScope: intent.scope, privateTimerAction: intent.timerAction } };
+  if (op.type === "mutation" && isPrivateTimerIntentPath(op.path) && !op.context.privateTimerAction) op = { ...op, context: { ...op.context, privateTimerAction: capturePrivateTimerAction(op.input) } };
   assertEntryClientSupported(op.path, op.input, currentServerApiLevel());
   const input = isActiveWorkspaceReady()
     ? withWorkspaceId(op.input, getActiveWorkspaceId())
@@ -177,6 +181,10 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
         const current = await readPrivateAccountCurrent(originalScope.userId, addressed); checkPrivateRequestScope(originalScope);
         if (cancelled) return;
         if (current.handled) { observer.next({ result: { data: current.value } } as never); observer.complete(); return; }
+      }
+      if (op.type === "mutation" && isPrivateTimerIntentPath(op.path)) {
+        const saved = await mutatePrivateAccountTimer(originalScope.userId, op.path, addressed, op.context.privateTimerAction as PrivateTimerAction); checkPrivateRequestScope(originalScope);
+        if (saved.handled) { if (!cancelled) { observer.next({ result: { data: saved.value } } as never); observer.complete(); } return; }
       }
       const route = await currentWorkspaceContentRoute(workspaceId, abort.signal);
       if (cancelled) return;

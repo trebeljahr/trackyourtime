@@ -75,3 +75,15 @@ it("requires the newer handoff capability before sending a transient standard bo
   f.fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ result: { data: { revision: 2, root } } }), { headers: { "content-type": "application/json" } }));
   expect(await transport.commit(packet)).toEqual({ revision: 2, root }); expect(JSON.parse(String(f.fetcher.mock.calls[0]![1]!.body))).toEqual(packet);
 });
+
+it("requires receipt support before publishing even an otherwise compatible timer packet", async () => {
+  const f = await fixture(), original = f.packet.edits[0]!, directory = await verifyPrivateWorkspaceDirectory(f.archive.directory.signed, { server: state.origin, workspaceId: "workspace" }, { ownerId: "owner", signingPublicKey: f.identity.signingPublicKey, revision: 0, digest: null });
+  const operationId = f.packet.signed.header.operationId, row = await encryptPrivateRecord("workspace", { kind: "imports", id: `entryoperations:${operationId}`, authorId: "owner", value: { _id: operationId, userId: "owner", workspaceId: "workspace", result: "Private retry receipt" } }, directory.signed.directory.members, 2);
+  const edit = await signPrivateChainedWorkspaceEdit({ edit: { ...original.edit, records: [...original.edit.records, row] }, directory, previousRoot: original.chain.header.previousRoot, secrets: f.secrets, current: () => true });
+  const signed = await signPrivateTimer({ ...f.packet.signed.header, edits: await privateTimerEditBindings([edit]) }, f.secrets.signingPrivateKey, () => true), packet = { signed, edits: [edit] }, transport = privateAccountTimerTransport("owner");
+  state.level = 38; await expect(transport.commit(packet)).rejects.toThrow("Confirm this server supports"); expect(f.fetcher).not.toHaveBeenCalled();
+  state.level = API_LEVEL; const root = await privateTimerRoot(signed);
+  f.fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ result: { data: { revision: 1, root } } }), { headers: { "content-type": "application/json" } }));
+  expect(await transport.commit(packet)).toEqual({ revision: 1, root });
+  expect(String(f.fetcher.mock.calls[0]![1]!.body)).not.toContain("Private retry receipt");
+});

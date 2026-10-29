@@ -1,3 +1,5 @@
+vi.mock("./private-account-timer-current", () => ({ readPrivateAccountCurrent: async () => ({ handled: false }) }));
+vi.mock("./private-account-timer-mutation", () => ({ mutatePrivateAccountTimer: async () => ({ handled: false }) }));
 vi.mock("./private-workspace-mutation", () => ({ mutatePrivateWorkspace: async () => { throw new Error("Unexpected private edit"); } }));
 vi.mock("./private-workspace-list", () => ({ readWorkspaceList: (read: () => Promise<unknown>) => read() }));
 vi.mock("./private-workspace-creation", () => ({ preparePrivateWorkspaceCreation: async () => null }));

@@ -21,7 +21,7 @@ export async function verifyPrivateTimerCurrentWitness(input: unknown, signed: S
   const key = await crypto.subtle.importKey("jwk", signingPublicKey, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
   if (!await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, decodeSecret(change.chain.signature, 64), new TextEncoder().encode(canonicalJson(chain)))) throw new Error("Current timer history signature did not match"); check();
   const targets = [pointer, header.previous].filter(row => row?.workspaceId === pointer.workspaceId).map(row => row!.entryId);
-  if ([...verified.manifest.records, ...verified.manifest.remove].some(row => row.authorId !== scope.userId || !["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id)) || !verified.records.some(row => row.kind === "entries" && row.id === pointer.entryId && row.authorId === scope.userId)) throw new Error("Current timer witness is missing its exact author-owned body");
+  if (verified.manifest.records.some(row => row.authorId !== scope.userId || !((row.kind === "imports" && row.id === `entryoperations:${header.operationId}`) || (["entries", "entryMoney"].includes(row.kind) && targets.includes(row.id)))) || verified.manifest.remove.some(row => row.authorId !== scope.userId || !["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id)) || !verified.records.some(row => row.kind === "entries" && row.id === pointer.entryId && row.authorId === scope.userId)) throw new Error("Current timer witness is missing its exact author-owned body");
   check(); return change;
 }
 export async function privateTimerWitnessFromPacket(packet: PrivateTimerTransition): Promise<PrivateChainedWorkspaceChange | null> {

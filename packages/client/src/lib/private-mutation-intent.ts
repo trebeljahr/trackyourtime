@@ -4,7 +4,9 @@ import { getActiveWorkspaceId } from "./active-workspace";
 import { isWorkspaceContentProcedure } from "./private-content-route";
 import { PrivateContentUnavailableError } from "./private-content-error";
 import { capturePrivateRequestScope, checkPrivateRequestScope, type PrivateRequestScope } from "./private-request-scope";
-type Intent = { owner: object; variables: object; path: string; scope: PrivateRequestScope; activeWorkspaceId: string | null; input: unknown };
+import { capturePrivateTimerAction, type PrivateTimerAction } from "./private-timer-action";
+import { isPrivateTimerIntentPath } from "@starter/core";
+type Intent = { owner: object; variables: object; path: string; scope: PrivateRequestScope; activeWorkspaceId: string | null; input: unknown; timerAction?: PrivateTimerAction };
 const inputs = new WeakMap<object, Intent>(), owners = new WeakMap<object, Intent>();
 function pathOf(key: unknown): string | null {
   if (!Array.isArray(key) || !Array.isArray(key[0]) || !key[0].length || key[0].some((part: unknown) => typeof part !== "string" || !part)) return null;
@@ -22,7 +24,7 @@ export function beginPrivateMutationIntent(key: unknown, variables: unknown, own
   const scope = capturePrivateRequestScope({ policy: path !== "workspaces.create" }), workspaceId = getActiveWorkspaceId();
   const explicit = (variables as { workspaceId?: unknown }).workspaceId;
   if (path !== "workspaces.create" && workspaceId === null && typeof explicit !== "string") throw new PrivateContentUnavailableError("Choose a workspace before saving data");
-  const input = withWorkspaceId(structuredClone(variables), workspaceId), intent = { owner, variables, scope, path, input, activeWorkspaceId: workspaceId };
+  const input = withWorkspaceId(structuredClone(variables), workspaceId), intent = { owner, variables, scope, path, input, activeWorkspaceId: workspaceId, ...(isPrivateTimerIntentPath(path) ? { timerAction: capturePrivateTimerAction(variables) } : {}) };
   inputs.set(variables, intent); owners.set(owner, intent);
   registerPrivateMutationGuard(variables, () => { try { checkPrivateRequestScope(scope); return getActiveWorkspaceId() === workspaceId; } catch { return false; } }, (fields) => {
     checkPrivateRequestScope(scope);
@@ -36,7 +38,7 @@ export function privateMutationIntent(path: string, variables: unknown) {
   if (intent.path !== path) throw new PrivateContentUnavailableError("The original mutation procedure changed");
   checkPrivateRequestScope(intent.scope);
   if (intent.path.startsWith("entries.")) validateInternalFields(intent, intent.input as Record<string, unknown>);
-  return { scope: intent.scope, input: structuredClone(intent.input) };
+  return { scope: intent.scope, input: structuredClone(intent.input), timerAction: intent.timerAction };
 }
 /** Terminal cache events run after local callbacks. Removing a pending
  * mutation on lock does not erase its guard while its async hook still runs. */

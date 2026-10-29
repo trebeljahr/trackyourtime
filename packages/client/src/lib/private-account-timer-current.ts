@@ -25,7 +25,11 @@ export async function readPrivateAccountCurrent(userId: string, raw: unknown): P
   if (!privateSession(userId)) return { handled: false };
   const input = structuredClone(raw ?? {});
   const original = capturePrivateRequestScope(), binding = privateClientScope(userId);
-  return withPrivateAccountTimerGate(userId, async ({ timer, check: scopeCheck }) => {
+  return withPrivateAccountTimerGate(userId, context => readPrivateAccountCurrentInGate(userId, input, context, { original, binding }));
+}
+/** Internal: caller already owns the independent account timer gate. */
+export async function readPrivateAccountCurrentInGate(userId: string, input: unknown, { timer, check: scopeCheck }: Parameters<Parameters<typeof withPrivateAccountTimerGate>[1]>[0], captured = { original: capturePrivateRequestScope(), binding: privateClientScope(userId) }): Promise<CurrentResult> {
+    const { original, binding } = captured;
     const check = () => { scopeCheck(); checkPrivateRequestScope(original); };
     binding.check(); check(); if (!timer) return { handled: false };
     const snapshot = (await timer.exportRecovery())!; check();
@@ -87,5 +91,4 @@ export async function readPrivateAccountCurrent(userId: string, raw: unknown): P
       if (result.id !== pointer.entryId || result.authorId !== userId || result.end !== null || result.workspaceId !== pointer.workspaceId) throw new PrivateContentUnavailableError("The current private timer could not be verified");
       notePrivateView(binding); check(); return { handled: true, value: markPrivateLocalResult(result) };
     } finally { copy.close(); }
-  });
 }

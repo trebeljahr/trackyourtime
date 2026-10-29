@@ -28,7 +28,8 @@ function coverage(input: PrivateTimerTransition) {
     if (edit.userId !== header.userId) throw invalid();
     const targets = [header.previous, header.current].filter(pointer => pointer?.workspaceId === edit.workspaceId).map(pointer => pointer!.entryId);
     for (const row of edit.records) {
-      if (row.authorId !== header.userId || (!["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id))) throw invalid();
+      const receipt = row.kind === "imports" && row.id === `entryoperations:${header.operationId}`;
+      if (row.authorId !== header.userId || (!receipt && (!["entries", "entryMoney"].includes(row.kind) || !targets.includes(row.id)))) throw invalid();
     }
     for (const row of edit.remove) if (row.authorId !== header.userId || !["entries", "entryMoney"].includes(row.kind) || row.id !== header.previous?.entryId || edit.workspaceId !== header.previous.workspaceId || (header.current?.entryId === row.id && header.current.workspaceId === edit.workspaceId)) throw invalid();
   }

@@ -107,3 +107,5 @@ export * from "./privacy/timer-recovery.js";
 export * from "./privacy/timer-store.js";
 
 export * from "./privacy/timer-current-witness.js";
+
+export * from "./privacy/timer-intent.js";
