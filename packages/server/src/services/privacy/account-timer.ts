@@ -15,6 +15,9 @@ import { verifyPrivateChange } from "./signatures.js";
 import { privateTimerCheckpoint } from "./timer-state.js";
 import { commitPrivateChainedWorkspaceEdit } from "./workspace-edits.js";
 const MAX_HISTORY_BYTES = 128 * 1024 * 1024;
+// Reserve one bounded final close after normal metadata capacity is consumed.
+// Starting or switching timers cannot spend this completion allowance.
+const MAX_CLOSING_METADATA_BYTES = 64 * 1024;
 const conflict = () => new TRPCError({ code: "CONFLICT", message: "The account timer changed. Existing time and the pending transition were kept." });
 const invalid = () => new TRPCError({ code: "BAD_REQUEST", message: "Private timer ciphertext does not match its signed transition." });
 function coverage(input: PrivateTimerTransition) {
@@ -70,7 +73,8 @@ export async function commitPrivateTimerTransition(scope: { server: string; user
     }
     if (header.revision !== checkpoint.revision + 1 || header.previousRoot !== checkpoint.root || canonicalJson(header.previous) !== canonicalJson(checkpoint.current)) throw conflict();
     const bytes = Buffer.byteLength(JSON.stringify(signed)), used = account.timerBytes ?? 0;
-    if (!Number.isSafeInteger(used) || used < 0 || used + bytes > MAX_HISTORY_BYTES) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Account timer history reached its metadata budget. Existing history and pending work were kept." });
+    const closing = checkpoint.current !== null && header.current === null && bytes <= MAX_CLOSING_METADATA_BYTES;
+    if (!Number.isSafeInteger(used) || used < 0 || used + bytes > MAX_HISTORY_BYTES + (closing ? MAX_CLOSING_METADATA_BYTES : 0)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Account timer history reached its metadata budget. Existing history and pending work were kept." });
     const workspaces = new Set(header.edits.map(row => row.workspaceId)); if (header.standardStop) workspaces.add(header.standardStop.workspaceId);
     for (const workspaceId of [...workspaces].sort()) await fenceWorkspace(workspaceId);
     const standard = await TimeEntry.findOne({ authorId: scope.userId, end: null }).lean();

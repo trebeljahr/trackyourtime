@@ -128,6 +128,18 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     await assert.rejects(commitPrivateTimerTransition(scope, request), { code: "PRECONDITION_FAILED" }); assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 0);
     await PrivateAccount.updateOne({ userId: scope.userId }, { $set: { timerBytes: 0, timerRevision: 1 } }); await assert.rejects(standardEntry(), { code: "PRECONDITION_FAILED" }); assert.equal(await TimeEntry.countDocuments(), 0);
   });
+  it("keeps metadata headroom for one final stop while refusing a new start or switch", async () => {
+    const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer));
+    await PrivateAccount.updateOne({ userId: scope.userId }, { $set: { timerBytes: 128 * 1024 * 1024 } });
+    await assert.rejects(commitPrivateTimerTransition(scope, await prepare(pointer, point(b))), { code: "PRECONDITION_FAILED" });
+    assert.deepEqual((await privateTimerCheckpoint(scope.userId)).current, pointer); assert.equal(await PrivateTimerVersion.countDocuments(), 1);
+    await commitPrivateTimerTransition(scope, await prepare(pointer, null));
+    assert.equal((await privateTimerCheckpoint(scope.userId)).current, null); assert.equal((await readEntry(pointer)).value.end, instant);
+    const used = (await PrivateAccount.findOne({ userId: scope.userId }).lean())!.timerBytes;
+    assert.ok(used > 128 * 1024 * 1024 && used <= 128 * 1024 * 1024 + 64 * 1024);
+    await assert.rejects(commitPrivateTimerTransition(scope, await prepare(null, point())), { code: "PRECONDITION_FAILED" }); assert.equal(await PrivateTimerVersion.countDocuments(), 2);
+    await standardEntry(); assert.equal(await TimeEntry.countDocuments({ authorId: scope.userId, end: null }), 1);
+  });
   it("serializes a private winner with a standard start sharing the same account fence", async () => {
     const pointer = point(), request = await prepare(null, pointer); let entered!: () => void, resume!: () => void; const ready = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { resume = resolve; });
     const privateStart = withBusinessTransaction(async () => { await fencePrivateAccount(scope.userId); entered(); await gate; return commitPrivateTimerTransition(scope, request); });
