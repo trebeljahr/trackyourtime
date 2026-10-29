@@ -54,16 +54,17 @@ async function fixture() {
     return { replica, reopen: () => createPrivateWorkspaceReplica(replicaOptions), directory, transport, journal, ordinaryCalls, validate, replaceRecoveredState };
   }
   for (const workspaceId of ["a", "b"]) workspaces.set(workspaceId, await workspace(workspaceId));
-  async function packet(previous: PrivateTimerPointer | null, current: PrivateTimerPointer | null): Promise<PrivateTimerTransition> {
+  async function packet(previous: PrivateTimerPointer | null, current: PrivateTimerPointer | null, discard = false): Promise<PrivateTimerTransition> {
     const checkpoint = await store.read(), edits = [];
     for (const workspaceId of [...new Set([previous?.workspaceId, current?.workspaceId].filter((id): id is string => !!id))].sort()) {
-      const target = workspaces.get(workspaceId)!, tail = await target.replica.prepareTail(), records = [];
+      const target = workspaces.get(workspaceId)!, tail = await target.replica.prepareTail(), records = [], remove = [];
       const ids = new Set([previous, current].filter(row => row?.workspaceId === workspaceId).map(row => row!.entryId));
       for (const id of ids) {
+        if (discard && previous?.entryId === id && !current) { for (const kind of ["entries", "entryMoney"] as const) remove.push({ kind, id, authorId: scope.userId, readers: [scope.userId] }); continue; }
         const running = current?.workspaceId === workspaceId && current.entryId === id;
         for (const row of [{ kind: "entries", id, authorId: scope.userId, value: { _id: id, workspaceId, authorId: scope.userId, description: "Exact staged private timer", start: "2026-10-29T01:00:00.000Z", end: running ? null : stoppedAt } }, { kind: "entryMoney", id, authorId: scope.userId, value: { _id: id, hourlyRate: 80 } }] as PlainPrivateRecord[]) records.push(await encryptPrivateRecord(workspaceId, row, target.directory.signed.directory.members, tail.revision + 1));
       }
-      edits.push(await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId, userId: scope.userId, operationId: crypto.randomUUID(), expectedRevision: tail.revision, records, remove: [] }, directory: target.directory, previousRoot: tail.head, secrets: { privateKey: encryption.privateKey, signingPrivateKey: signing.privateKey }, current: () => true }));
+      edits.push(await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId, userId: scope.userId, operationId: crypto.randomUUID(), expectedRevision: tail.revision, records, remove }, directory: target.directory, previousRoot: tail.head, secrets: { privateKey: encryption.privateKey, signingPrivateKey: signing.privateKey }, current: () => true }));
     }
     const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", ...scope, operationId: crypto.randomUUID(), revision: checkpoint.local.revision + 1, previousRoot: checkpoint.local.root, previous, current, standardStop: null, edits: await privateTimerEditBindings(edits) }, signing.privateKey, () => true);
     return { signed, edits };
@@ -187,4 +188,28 @@ it("keeps all pinned older timer receipts when the rolling receipt tail reaches 
   await a.replica.pinCoordinatedReceipts([]);
   const next = await f.packet(pointer, pointer), nextPermit = await f.store.prepare(next); await a.replica.stageCoordinated(nextPermit); await f.store.publish(nextPermit); await f.finish(next, nextPermit);
   saved = await a.replica.exportRecovery(); assert.equal(saved.coordinatedReceipts!.length, 1000); assert.ok(!saved.coordinatedReceipts!.some(row => row.coordinatorId === pins[0])); assert.equal(saved.coordinatedReceiptPins, undefined);
+});
+
+it("backs up mixed-age account and workspace copies after a later stop or discard without resurrecting time", async () => {
+  for (const discard of [false, true]) {
+    const f = await fixture(), a = f.workspaces.get("a")!, pointer = point(), start = await f.packet(null, pointer), permit = await f.store.prepare(start);
+    const preparing = (await f.store.exportRecovery())!.state; await a.replica.stageCoordinated(permit); await f.store.publish(permit); const pending = (await f.store.exportRecovery())!.state;
+    await f.finish(start, permit); const confirmed = (await f.store.exportRecovery())!.state;
+    const stop = await f.packet(pointer, null, discard), stopping = await f.store.prepare(stop); await a.replica.stageCoordinated(stopping); await f.store.publish(stopping); await f.finish(stop, stopping);
+    const replica = await a.replica.exportRecovery(), records = (await a.replica.read()).records;
+    for (const state of [preparing, pending, confirmed]) {
+      const view = await privateTimerRecoveryWorkspaceOverlay({ state, replica, records, scope: { ...scope, workspaceId: "a" }, privateKey: f.encryption.privateKey, current: () => true });
+      assert.equal(view.conflict, true); assert.deepEqual(view.records, records);
+      assert.equal(view.records.some(row => row.kind === "entries" && row.value.end == null), false);
+    }
+    assert.equal((await a.replica.checkpoint()).revision, replica.revision); assert.equal(a.journal.length, 2);
+  }
+});
+it("keeps a missing financial counterpart or unexplained timer mismatch invalid at the same workspace checkpoint", async () => {
+  const f = await fixture(), a = f.workspaces.get("a")!, pointer = point(), start = await f.packet(null, pointer), permit = await f.store.prepare(start);
+  await a.replica.stageCoordinated(permit); await f.store.publish(permit); await f.finish(start, permit);
+  const state = (await f.store.exportRecovery())!.state, replica = await a.replica.exportRecovery(), records = (await a.replica.read()).records;
+  const options = { state, replica, records, scope: { ...scope, workspaceId: "a" }, privateKey: f.encryption.privateKey, current: () => true };
+  await assert.rejects(privateTimerRecoveryWorkspaceOverlay({ ...options, records: records.filter(row => row.kind !== "entryMoney") }), /financial snapshot/);
+  await assert.rejects(privateTimerRecoveryWorkspaceOverlay({ ...options, records: [] }), /account checkpoint/);
 });

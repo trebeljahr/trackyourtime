@@ -108,7 +108,18 @@ export async function privateTimerRecoveryWorkspaceOverlay(options: {
     return value.end == null;
   });
   const expected = local?.workspaceId === scope.workspaceId ? local.entryId : null;
-  if (!conflict && (ownRunning.length !== (expected ? 1 : 0) || (expected && ownRunning[0]!.id !== expected))) throw new Error("Private backup timer differs from its account checkpoint");
-  if (expected && records.get(address({ kind: "entryMoney", id: expected }))?.authorId !== scope.userId) throw new Error("Private backup timer is missing its financial snapshot");
+  const mismatch = ownRunning.length !== (expected ? 1 : 0) || !!(expected && ownRunning[0]?.id !== expected);
+  const known = [...(state.confirmed.signed ? [state.confirmed.signed] : []), ...packets.map(packet => packet.signed)];
+  const newestBinding = known.flatMap(signed => signed.header.edits.filter(edit => edit.workspaceId === scope.workspaceId)).reduce((revision, edit) => Math.max(revision, edit.expectedRevision + 1), 0);
+  // A mixed-age restore may contain a later stop/discard/start in the
+  // authenticated workspace copy. Preserve both originals as a conflict;
+  // neither this preview nor the older account pointer authorizes replay.
+  const olderAccountView = mismatch && newestBinding > 0 && newestBinding < replica.revision;
+  if (!conflict && mismatch) {
+    if (!olderAccountView) throw new Error("Private backup timer differs from its account checkpoint");
+    conflict = true;
+  }
+  const deletedInNewerCopy = olderAccountView && expected !== null && !records.has(address({ kind: "entries", id: expected }));
+  if (expected && !deletedInNewerCopy && records.get(address({ kind: "entryMoney", id: expected }))?.authorId !== scope.userId) throw new Error("Private backup timer is missing its financial snapshot");
   check(); return { records: [...records.values()], conflict };
 }

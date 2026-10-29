@@ -203,3 +203,22 @@ it("publishes private inventory only after the durable client routing fence succ
   allow = true; await sync.enroll(f.enrollment); const before = new Map(files); allow = false;
   await assert.rejects(sync.read(), /Routing storage denied/); assert.deepEqual(files, before); assert.ok(phases.includes("read"));
 });
+
+it("round-trips mixed-age backups after later stops and discards without reviving the older account timer", async () => {
+  for (const discard of [false, true]) {
+    const f = await fixture(), { archive, packet, entryId } = await withTimer(f, true);
+    const originalBody = await decryptPrivateRecord(scope.workspaceId, packet.edits[0]!.edit.records[0]!, scope.userId, f.secrets.privateKey);
+    const stopped = await encryptPrivateRecord(scope.workspaceId, { ...originalBody, value: { ...originalBody.value, end: "2026-10-29T02:00:00.000Z", durationSec: 3600 } }, f.directory.signed.directory.members, 5);
+    archive.replica = { ...archive.replica, revision: 5, head: encodeSecret(randomSecret()), pending: [], records: [...archive.replica.records, ...(discard ? [] : [stopped, packet.edits[0]!.edit.records[1]!])] };
+    const original = canonicalJson(archive), file = await encryptPrivateWorkspaceBackup(archive, f.key, f.secrets, f.current), opened = await decryptPrivateWorkspaceBackup(file, f.recoveryKey);
+    assert.equal(opened.recoveryConflict, true); assert.deepEqual(opened.accountTimer, archive.accountTimer); assert.deepEqual(opened.pending, []);
+    assert.equal(opened.records.some(row => row.kind === "entries" && row.value.end == null), false);
+    assert.equal(opened.records.filter(row => row.kind === "entries" && row.id === entryId).length, discard ? 0 : 1);
+    assert.deepEqual(await verifyPrivateWorkspaceBackup(file, f.key, f.secrets, f.current, scope), archive); assert.equal(canonicalJson(archive), original);
+    assert.doesNotMatch(JSON.stringify(file), /Unsent private timer|hourlyRate/);
+    if (!discard) {
+      const missing = structuredClone(archive); missing.replica.records = missing.replica.records.filter(row => row.kind !== "entryMoney");
+      await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(missing, f.secrets, f.current), /financial snapshot/);
+    }
+  }
+});
