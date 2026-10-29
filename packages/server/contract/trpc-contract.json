@@ -1,5 +1,5 @@
 {
-  "apiLevel": 37,
+  "apiLevel": 38,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -6151,6 +6151,14 @@
           "migrationId",
           "offset"
         ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.standardCurrentTimer": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {},
         "type": "object"
       },
       "type": "mutation"

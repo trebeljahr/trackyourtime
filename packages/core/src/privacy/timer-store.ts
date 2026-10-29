@@ -5,6 +5,7 @@ import { segmentedPrivateStorage } from "./segmented-storage.js";
 import { privateRecordDigest } from "./workspace-edits.js";
 import { verifyPrivateTimer } from "./account-timer.js";
 import { PRIVATE_TIMER_STATE_MAX_BYTES, verifyPrivateTimerRecoveryState, type PrivateTimerRecoveryState } from "./timer-recovery.js";
+import { privateTimerWitnessFromPacket, verifyPrivateTimerCurrentWitness } from "./timer-current-witness.js";
 import type { KeyValueStorage } from "../storage.js";
 import type { QueueExclusive } from "../durable-entry.js";
 export const PRIVATE_ACCOUNT_TIMER_SCOPE = "trackyourtime:account-timer-v1";
@@ -72,7 +73,8 @@ export async function createPrivateAccountTimerStore(options: {
         const value = await decode(snapshot, current);
         if (await privateRecordDigest(value.state) !== anchor) throw new Error("Account timer differs from its trusted recovery digest"); check();
         const prior = await load(check, current);
-        if (prior && canonicalJson(prior.state) !== canonicalJson(value.state)) throw new Error("Keep or export the existing account timer and pending time before restoration");
+        const withoutWitness = (state: PrivateTimerRecoveryState) => { const { currentWitness, ...rest } = state; void currentWitness; return rest; };
+        if (prior && canonicalJson(prior.state) !== canonicalJson(value.state) && canonicalJson(withoutWitness(prior.state)) !== canonicalJson(withoutWitness(value.state))) throw new Error("Keep or export the existing account timer and pending time before restoration");
         return structuredClone((prior ?? await save(value.state, check, current)).local);
       });
     },
@@ -133,6 +135,15 @@ export async function createPrivateAccountTimerStore(options: {
       if (value.state.committed.length) throw new Error("Accept the confirmed timer packets before sending another transition");
       return structuredClone(value.state.pending[0] ?? null);
     }),
+    saveCurrentWitness: (input: unknown) => {
+      const snapshot = structuredClone(input);
+      return use(async (check, current) => {
+        const { state } = await required(check, current);
+        if (!state.confirmed.signed || state.conflict) throw new Error("Current timer witness requires a verified nonconflicting account checkpoint");
+        const witness = await verifyPrivateTimerCurrentWitness(snapshot, state.confirmed.signed, { scope, signingPublicKey, current }); check();
+        await save({ ...state, currentWitness: witness }, check, current);
+      });
+    },
     /** Consume only a consecutive authenticated feed item. A matching HTTP
      * acknowledgement alone never removes a durable timer request. */
     accept: (input: unknown) => {
@@ -148,7 +159,8 @@ export async function createPrivateAccountTimerStore(options: {
           await save({ ...state, conflict: signed }, check, current); throw new PrivateTimerConflictError();
         }
         const checkpoint = { revision: signed.header.revision, root: verified.root, current: signed.header.current };
-        const next = await save({ ...state, confirmed: { signed, checkpoint }, pending: pending ? state.pending.slice(1) : [], committed: pending ? [pending] : [] }, check, current);
+        const { currentWitness: oldWitness, ...rest } = state; void oldWitness;
+        const next = await save({ ...rest, confirmed: { signed, checkpoint }, pending: pending ? state.pending.slice(1) : [], committed: pending ? [pending] : [] }, check, current);
         return structuredClone(next.state.confirmed.checkpoint);
       });
     },
@@ -164,7 +176,12 @@ export async function createPrivateAccountTimerStore(options: {
         captured(); const { state } = await required(check, current), first = state.committed[0];
         if (!first) return;
         if (canonicalJson(first) !== canonicalJson(packet)) throw new PrivateStorageLockedError();
-        await save({ ...state, committed: state.committed.slice(1) }, check, current);
+        const next = { ...state, committed: state.committed.slice(1) };
+        if (packet.signed.header.revision === state.confirmed.checkpoint.revision) {
+          const witness = await privateTimerWitnessFromPacket(packet); check();
+          if (witness) next.currentWitness = witness; else delete next.currentWitness;
+        }
+        await save(next, check, current);
       });
     },
   };

@@ -3,7 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { createPrivateDeviceReceiver, encryptPrivateDeviceApproval, privateInventoryVersionRoot } from "@starter/core";
-import { emptyPrivateTimerCheckpoint, encodeSecret, randomSecret, privateRecordDigest, privateTimerRoot, signPrivateTimer, type PrivateTimerRecoveryState } from "@starter/core";
+import { encryptPrivateRecord, signPrivateChainedWorkspaceEdit, privateTimerEditBindings, privateTimerWitnessFromPacket, emptyPrivateTimerCheckpoint, encodeSecret, randomSecret, privateRecordDigest, privateTimerRoot, signPrivateTimer, type PrivateTimerRecoveryState } from "@starter/core";
 import { API_LEVEL, type PrivateDeviceTransfer, type SignedPrivateInventoryVersion } from "@starter/shared";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null }));
@@ -69,6 +69,25 @@ it("hands over the independently approved timer checkpoint before publishing the
   await receiver.confirm(sealed.code); expect(session.privateSession("owner")).toEqual(f.secrets);
   const host = await privateAccountTimerStorageHost("owner");
   try { const timers = await privateAccountTimerStore("owner", host.storage, host.exclusive); expect((await timers.exportRecovery())!.state).toEqual(timer); } finally { host.close(); }
+});
+it("hands over a confirmed clock anchor without making the donor's optional body witness part of its digest", async () => {
+  const f = await fixture(), { openPrivateWorkspaceCoordinatorCopy } = await import("./private-workspace-session");
+  const copy = await openPrivateWorkspaceCoordinatorCopy("owner", "workspace");
+  let timer: PrivateTimerRecoveryState;
+  try {
+    const entryId = crypto.randomUUID(), tail = await copy.prepareTail();
+    const row = await encryptPrivateRecord("workspace", { kind: "entries", id: entryId, authorId: "owner", value: { _id: entryId, workspaceId: "workspace", authorId: "owner", end: null } }, copy.directory.signed.directory.members, tail.revision + 1);
+    const edit = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: "workspace", userId: "owner", operationId: crypto.randomUUID(), expectedRevision: tail.revision, records: [row], remove: [] }, directory: copy.directory, previousRoot: tail.head, secrets: f.secrets, current: () => true });
+    const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", server: state.origin, userId: "owner", operationId: crypto.randomUUID(), revision: 1, previousRoot: null, previous: null, current: { workspaceId: "workspace", entryId }, standardStop: null, edits: await privateTimerEditBindings([edit]) }, f.secrets.signingPrivateKey, () => true);
+    timer = { v: 1, confirmed: { checkpoint: { revision: 1, root: await privateTimerRoot(signed), current: signed.header.current }, signed }, pending: [], committed: [], conflict: null, currentWitness: (await privateTimerWitnessFromPacket({ signed, edits: [edit] }))! };
+  } finally { copy.close(); }
+  await seedTimer(f, timer);
+  const value = await approval(f); if (value.v !== 3) throw new Error("Missing timer transfer protocol");
+  const { currentWitness, ...anchor } = timer; expect(currentWitness).toBeTruthy();
+  expect(value.workspaceTrust.timer.digest).toBe(await privateRecordDigest(anchor));
+  const { receiver, sealed } = await freshReceiver(value); await receiver.confirm(sealed.code);
+  const host = await privateAccountTimerStorageHost("owner");
+  try { const timers = await privateAccountTimerStore("owner", host.storage, host.exclusive); expect((await timers.exportRecovery())!.state).toEqual(anchor); } finally { host.close(); }
 });
 it("keeps the receiving device locked if its approved timer digest or signed coordinates differ", async () => {
   const f = await fixture(), timer = await timerState(f); await seedTimer(f, timer);

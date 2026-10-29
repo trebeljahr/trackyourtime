@@ -10,6 +10,7 @@ import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { allModels } from "../models/registry.js";
 import { commitPrivateTimerTransition } from "../services/privacy/account-timer.js";
 import { privateTimerCheckpoint } from "../services/privacy/timer-state.js";
+import { standardAccountCurrentTimer } from "../services/privacy/standard-timer-current.js";
 import { privateTimerVersions } from "../services/privacy/timer-versions.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
 import type { Context } from "../trpc/context.js";
@@ -64,6 +65,7 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     const pointer = point(), request = await prepare(null, pointer), saved = await commitPrivateTimerTransition(scope, request);
     assert.equal(saved.revision, 1); assert.deepEqual((await privateTimerCheckpoint(scope.userId)).current, pointer); assert.equal((await readEntry(pointer)).value.end, null);
     assert.equal(await TimeEntry.countDocuments(), 0); assert.equal(await PrivateWorkspaceCommit.countDocuments(), 1); assert.equal(await PrivateTimerVersion.countDocuments(), 1);
+    await assert.rejects(standardAccountCurrentTimer(scope.userId), { code: "PRECONDITION_FAILED", message: "PRIVATE_WORKSPACE_REQUIRES_UNLOCK" });
     assert.doesNotMatch(JSON.stringify([await PrivateAccount.find().lean(), await PrivateRecord.find().lean(), await PrivateTimerVersion.find().lean(), await PrivateWorkspaceCommit.find().lean()]), new RegExp(privateDescription));
     await assert.rejects(currentEntry({ userId: scope.userId, workspaceId: standard, visibility: { userId: scope.userId, canViewOthersTime: true, canViewOthersMoney: true } }, personReach), { code: "PRECONDITION_FAILED", message: "PRIVATE_WORKSPACE_REQUIRES_UNLOCK" });
     assert.equal(await currentEntry({ userId: scope.userId, workspaceId: standard, visibility: { userId: scope.userId, canViewOthersTime: true, canViewOthersMoney: true } }, workspaceReach(standard)), null);

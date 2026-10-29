@@ -6,6 +6,9 @@ import { EntryOperation } from "../models/EntryOperation.js";
 import { PrivateWorkspace } from "../models/PrivateData.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { allModels } from "../models/registry.js";
+import { standardAccountCurrentTimer } from "../services/privacy/standard-timer-current.js";
+import { privacyRouter } from "../trpc/routers/privacy.js";
+import type { Context } from "../trpc/context.js";
 import { startCoordinatedStandardTimer } from "../services/privacy/standard-timer-start.js";
 import { withBusinessTransaction } from "../services/business-transaction.js";
 import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase, testDatabaseTransactions } from "./support/test-database.js";
@@ -54,5 +57,25 @@ describe("internal standard half of a private timer handoff", { skip: skipWithou
     await assert.rejects(startCoordinatedStandardTimer(scope, { description: "No timestamp" } as never, entryId(), crypto.randomUUID()));
     await assert.rejects(startCoordinatedStandardTimer(scope, { ...input, operationId: crypto.randomUUID() } as never, entryId(), crypto.randomUUID()));
     assert.equal(await TimeEntry.countDocuments(), 0); assert.equal(await EntryOperation.countDocuments(), 0);
+  });
+  it("reads only the authenticated person's actual standard timer regardless of the selected workspace", async () => {
+    assert.equal(await standardAccountCurrentTimer(scope.userId), null);
+    const saved = await startCoordinatedStandardTimer(scope, input, entryId(), crypto.randomUUID());
+    const caller = privacyRouter.createCaller({ user: { id: scope.userId }, session: { user: { id: scope.userId } }, activeWorkspaceId: "private-selected" } as unknown as Context);
+    assert.equal((await caller.standardCurrentTimer())!.id, saved.id);
+    const other = privacyRouter.createCaller({ user: { id: "other" }, session: { user: { id: "other" } } } as unknown as Context);
+    assert.equal(await other.standardCurrentTimer(), null);
+    await assert.rejects(other.standardCurrentTimer({ userId: scope.userId } as never), { code: "BAD_REQUEST" });
+    const anonymous = privacyRouter.createCaller({ user: null, session: null } as unknown as Context);
+    await assert.rejects(anonymous.standardCurrentTimer(), { code: "UNAUTHORIZED" });
+    await WorkspaceMember.deleteMany(scope); await assert.rejects(caller.standardCurrentTimer(), { code: "NOT_FOUND" });
+    assert.equal((await TimeEntry.findById(saved.id).lean())!.end, null);
+  });
+  it("refuses retained original bodies in a private actual workspace before runaway processing", async () => {
+    await PrivateWorkspace.create({ workspaceId: scope.workspaceId, ownerId: scope.userId, state: "encrypted", revision: 1, head: encodeSecret(randomSecret()), directoryDigest: encodeSecret(randomSecret()), migrationId: crypto.randomUUID(), sourceRevision: "retired", leaseUntil: new Date() });
+    const original = { workspaceId: scope.workspaceId, authorId: scope.userId, description: "Original retained text", start: new Date("2020-01-01T01:00:00.000Z"), end: null, createdAt: new Date(), updatedAt: new Date() };
+    const { insertedId } = await TimeEntry.collection.insertOne(original as never);
+    await assert.rejects(standardAccountCurrentTimer(scope.userId), { code: "PRECONDITION_FAILED", message: "PRIVATE_WORKSPACE_REQUIRES_UNLOCK" });
+    const after = await TimeEntry.collection.findOne({ _id: insertedId }); assert.equal(after!.end, null); assert.equal(after!.runaway, undefined); assert.equal(after!.reminderSentAt, undefined);
   });
 });

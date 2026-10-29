@@ -105,3 +105,5 @@ export * from "./privacy/member-rate-edit.js";
 export * from "./privacy/account-timer.js";
 export * from "./privacy/timer-recovery.js";
 export * from "./privacy/timer-store.js";
+
+export * from "./privacy/timer-current-witness.js";

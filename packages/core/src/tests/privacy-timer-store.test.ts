@@ -88,3 +88,22 @@ it("invalidates queued intent and reconciliation after lock/unlock, retaining pa
   f.fault(true); await assert.rejects(f.store.settle(async () => {}), /Disk full/); f.fault(false); assert.equal((await f.store.read()).committed, 1);
   assert.ok(canonicalJson((await f.store.exportRecovery())!.state).includes(first.signed.header.operationId));
 });
+it("keeps a signed current-body witness after settlement and clears it on the next account head", async () => {
+  const f = await fixture(); await f.enroll(); const first = await f.packet(); await f.store.enqueue(first); await f.store.accept(first.signed);
+  await f.store.settle(async () => {}); const saved = (await f.store.exportRecovery())!;
+  assert.ok(saved.state.currentWitness); assert.equal(saved.state.currentWitness.manifest.operationId, first.edits[0]!.edit.operationId);
+  assert.doesNotMatch(JSON.stringify([...f.files.values()]), /Private timer secret|hourlyRate/);
+  const base = structuredClone(saved.state); delete base.currentWitness;
+  await f.store.restore(base, await privateRecordDigest(base)); assert.deepEqual((await f.store.exportRecovery())!.state.currentWitness, saved.state.currentWitness);
+  const changed = structuredClone(saved.state.currentWitness!); changed.records[0]!.box.data = "A".repeat(24);
+  await assert.rejects(f.store.saveCurrentWitness(changed)); assert.equal((await f.store.exportRecovery())!.digest, saved.digest);
+  const stop = await f.packet(first, true); await f.store.enqueue(stop); await f.store.accept(stop.signed);
+  assert.equal((await f.store.exportRecovery())!.state.currentWitness, undefined); await f.store.settle(async () => {}); assert.equal((await f.store.exportRecovery())!.state.currentWitness, undefined);
+});
+it("refuses a body witness for another signed account timer and keeps the exact saved state", async () => {
+  const f = await fixture(); await f.enroll(); const own = await f.packet(), other = await f.packet(); await f.store.enqueue(own); await f.store.accept(own.signed);
+  await f.store.settle(async () => {}); const before = (await f.store.exportRecovery())!;
+  const { privateTimerWitnessFromPacket } = await import("../privacy/timer-current-witness.js");
+  await assert.rejects(f.store.saveCurrentWitness(await privateTimerWitnessFromPacket(other)), /account binding/);
+  assert.equal((await f.store.exportRecovery())!.digest, before.digest);
+});

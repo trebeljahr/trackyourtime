@@ -22,6 +22,7 @@ import { currentServerApiLevel, noteClientTooOld } from "@/lib/server-level";
 import { submitDurableEntry } from "@/lib/offline";
 import { fetchSyncSnapshot, trackSyncQuery } from "@/lib/sync-reconciliation";
 import { assertStandardContentRequest, currentWorkspaceContentRoute, isWorkspaceContentProcedure, readPrivateWorkspaceQuery } from "./private-content-route";
+import { readPrivateAccountCurrent } from "./private-account-timer-current";
 import { readWorkspaceList } from "./private-workspace-list";
 import { capturePrivateRequestScope, checkPrivateRequestScope, privateRequestScopeHeaders } from "./private-request-scope";
 import { privateMutationIntent } from "./private-mutation-intent";
@@ -172,6 +173,11 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
       const input = originalInput !== null && typeof originalInput === "object" && !Array.isArray(originalInput) ? originalInput as Record<string, unknown> : null;
       const workspaceId = input && typeof input.workspaceId === "string" && input.workspaceId !== PENDING_WORKSPACE ? input.workspaceId : getActiveWorkspaceId();
       const addressed = input?.workspaceId === PENDING_WORKSPACE ? (workspaceId === null ? Object.fromEntries(Object.entries(input).filter(([key]) => key !== "workspaceId")) : { ...input, workspaceId }) : originalInput;
+      if (op.path === "entries.current" && op.type === "query") {
+        const current = await readPrivateAccountCurrent(originalScope.userId, addressed); checkPrivateRequestScope(originalScope);
+        if (cancelled) return;
+        if (current.handled) { observer.next({ result: { data: current.value } } as never); observer.complete(); return; }
+      }
       const route = await currentWorkspaceContentRoute(workspaceId, abort.signal);
       if (cancelled) return;
       checkPrivateRequestScope(originalScope);

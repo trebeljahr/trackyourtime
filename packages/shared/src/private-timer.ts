@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { startTimerSchema } from "./schemas.js";
+import { startTimerSchema, entrySourceSchema } from "./schemas.js";
 import { privateSignatureSchema, signedPrivateChainedEditSchema } from "./private-workspace.js";
 const id = z.string().min(1).max(100), root = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const privateTimerPointerSchema = z.object({ workspaceId: id, entryId: z.union([z.uuid(), z.string().regex(/^[a-f0-9]{24}$/)]) }).strict();
@@ -37,3 +37,12 @@ export const privateTimerAckSchema = z.object({ revision: timerRevision.min(1), 
 export const privateTimerVersionsInputSchema = z.object({ after: timerRevision, through: timerRevision.optional() }).strict().refine(input => input.through === undefined || input.through >= input.after, "Timer history range moved backward");
 export const privateTimerPageSchema = z.object({ through: timerRevision, root: root.nullable(), next: timerRevision.nullable(), versions: z.array(signedPrivateTimerSchema).max(16) }).strict().refine(page => (page.through === 0) === (page.root === null), "Timer history boundary is inconsistent");
 export type PrivateTimerPage = z.infer<typeof privateTimerPageSchema>;
+
+const currentInstant = z.iso.datetime({ offset: true }), currentId = z.string().min(1).max(100);
+export const standardCurrentTimerSchema = z.object({
+  id: currentId, workspaceId: currentId, authorId: currentId, description: z.string().max(500),
+  clientId: currentId.nullable().optional(), projectId: currentId.nullable(), taskId: currentId.nullable(), billable: z.boolean(),
+  start: currentInstant, end: z.null(), durationSec: z.number().finite().nonnegative(), hourlyRate: z.number().finite().nonnegative().nullable(), currency: z.string().regex(/^[A-Z]{3}$/),
+  source: entrySourceSchema, timeZone: z.string().max(100).nullable(), tagIds: z.array(currentId).max(1000), invoiceId: currentId.nullable(), importId: currentId.nullable(), createdAt: currentInstant, updatedAt: currentInstant,
+  runaway: z.object({ detectedAt: currentInstant, elapsedSec: z.number().finite().nonnegative(), limitSec: z.number().finite().nonnegative(), action: z.enum(["flagged", "capped", "stopped"]), resolvedAt: currentInstant.nullable() }).strict().nullable(),
+}).strict();

@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { privateTimerPointerSchema, privateTimerTransitionSchema, signedPrivateTimerSchema } from "@starter/shared";
+import { privateTimerPointerSchema, privateTimerTransitionSchema, signedPrivateTimerSchema, privateChainedWorkspaceChangeSchema } from "@starter/shared";
 import { canonicalJson, type PublicKey } from "./crypto.js";
 import { privateTimerEditBindings, verifyPrivateTimer } from "./account-timer.js";
 import { decryptPrivateRecord, privateValue, type PlainPrivateRecord } from "./records.js";
+import { verifyPrivateTimerCurrentWitness } from "./timer-current-witness.js";
 import type { PrivateReplicaRecoveryState } from "./replica.js";
 
 export const privateTimerCheckpointSchema = z.object({
@@ -18,6 +19,7 @@ export const privateTimerRecoveryStateSchema = z.object({
   // have accepted their changes. A crash between these steps must lose no work.
   committed: z.array(privateTimerTransitionSchema).max(32), conflict: signedPrivateTimerSchema.nullable(),
   preparing: privateTimerTransitionSchema.optional(),
+  currentWitness: privateChainedWorkspaceChangeSchema.optional(),
 }).strict().refine(state => !state.preparing || state.pending.length < 32, "Timer staging needs room in the account outbox");
 export type PrivateTimerRecoveryState = z.infer<typeof privateTimerRecoveryStateSchema>;
 export const PRIVATE_TIMER_STATE_MAX_BYTES = 64 * 1024 * 1024;
@@ -40,6 +42,10 @@ export async function verifyPrivateTimerRecoveryState(input: unknown, options: {
     if (!signed) throw new Error("Timer recovery is missing its signed checkpoint");
     const row = await verify(signed, { revision: signed.header.revision - 1, root: signed.header.previousRoot, current: signed.header.previous });
     if (canonicalJson(point(row)) !== canonicalJson(confirmed)) throw new Error("Timer recovery differs from its authenticated checkpoint");
+  }
+  if (state.currentWitness) {
+    if (!state.confirmed.signed) throw new Error("Current timer witness has no confirmed account checkpoint");
+    await verifyPrivateTimerCurrentWitness(state.currentWitness, state.confirmed.signed, { scope, signingPublicKey, current }); check();
   }
   const operations = new Set<string>();
   const packet = async (transition: PrivateTimerRecoveryState["pending"][number]) => {
