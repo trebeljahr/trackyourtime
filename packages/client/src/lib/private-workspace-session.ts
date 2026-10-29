@@ -4,6 +4,8 @@ import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
 import { privateAccountWorkspaceInventorySync } from "./private-inventory-sync";
 import { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, privateAccountTimerStorageHost, privateAccountTimerStore } from "./private-replica";
+import type { PrivateTimerStagePermit } from "@starter/core";
+import { assertPrivateWorkspaceTimerPin, withPrivateAccountTimerGate, withPrivateWorkspaceTimerGate } from "./private-account-timer-coordinator";
 
 export function privateWorkspaceProjectionTransport(userId: string, workspaceId: string): { directory: PrivateDirectoryTransport; projection: PrivateProjectionTransport } {
   const { rpc, supported } = privateScopedRpc(userId, "privacy.readerProjections");
@@ -75,12 +77,15 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
     const ownedHost = host;
     const close = () => { closed = true; ownedHost.close(); };
     return {
-      scope, policy, directory: verifiedDirectory, current, close,
+      scope, policy, directory: verifiedDirectory, current, check: assertPolicy, close,
       exportRecovery: async () => { assertPolicy(); const value = await replica.exportRecovery(); assertPolicy(); return value; },
       read: async () => { assertPolicy(); const value = await replica.read(); assertPolicy(); return value; },
       readKinds: async (kinds: readonly PrivateKind[]) => { assertPolicy(); const value = await replica.readKinds(kinds); assertPolicy(); return value; },
       checkpoint: async () => { assertPolicy(); const value = await replica.checkpoint(); assertPolicy(); return value; },
       status: async () => { assertPolicy(); const value = await replica.status(); assertPolicy(); return value; },
+      prepareTail: async () => { assertPolicy(); const value = await replica.prepareTail(); assertPolicy(); return value; },
+      stageCoordinated: async (permit: PrivateTimerStagePermit) => { assertPolicy(); const value = await replica.stageCoordinated(permit); assertPolicy(); return value; },
+      coordinatedReceipt: async (permit: PrivateTimerStagePermit) => { assertPolicy(); const value = await replica.coordinatedReceipt(permit); assertPolicy(); return value; },
       editFavorite: async (path: PrivateFavoriteEditPath, input: unknown) => {
         const frozen = structuredClone(input); assertPolicy();
         const result = await replica.transact(PRIVATE_FAVORITE_EDIT_KINDS, ({ records, directory }) => {
@@ -125,11 +130,29 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
   finally { inventoryHost?.close(); }
 }
 
+/** Internal only: the caller holds the independent account timer gate. Recovery
+ * may supply an authenticated local policy even while inventory sync conflicts.
+ * Ordinary SDK views and edits must use the guarded public sessions below. */
+export function openPrivateWorkspaceCoordinatorCopy(userId: string, workspaceId: string, policy?: SignedPrivateWorkspacePolicy) {
+  return openPrivateWorkspaceCopy(userId, workspaceId, policy);
+}
+function openGuardedCopy(userId: string, workspaceId: string) {
+  return withPrivateAccountTimerGate(userId, async ({ timer }) => {
+    const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
+    try { await assertPrivateWorkspaceTimerPin(copy, timer); return copy; }
+    catch (error) { copy.close(); throw error; }
+  });
+}
+
 /** Active reads retain inventory conflict refusal. Raw recovery capture is a
  * separate path and cannot be used to select an active plaintext adapter. */
 export async function openPrivateWorkspaceSession(userId: string, workspaceId: string) {
-  const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
-  return { scope: copy.scope, policy: copy.policy, directory: copy.directory, current: copy.current, close: copy.close, read: copy.read, readKinds: copy.readKinds, checkpoint: copy.checkpoint };
+  const copy = await openGuardedCopy(userId, workspaceId);
+  return { scope: copy.scope, policy: copy.policy, directory: copy.directory, current: copy.current, close: copy.close,
+    read: () => withPrivateWorkspaceTimerGate(copy, copy.read),
+    readKinds: (kinds: readonly PrivateKind[]) => { const captured = [...kinds]; return withPrivateWorkspaceTimerGate(copy, () => copy.readKinds(captured)); },
+    checkpoint: () => withPrivateWorkspaceTimerGate(copy, copy.checkpoint),
+  };
 }
 /** This transport carries signed ciphertext only and never falls back to the
  * old unchained routes. Public server write/rollout guards remain independent. */
@@ -144,19 +167,29 @@ export function privateWorkspaceJournalTransport(userId: string, workspaceId: st
 /** Separate write/sync facade. Domain intent is validated and durably saved
  * inside the replica lock. A local result is not a server sync receipt. */
 export async function openPrivateWorkspaceSyncSession(userId: string, workspaceId: string) {
-  const copy = await openPrivateWorkspaceCopy(userId, workspaceId);
+  const copy = await openGuardedCopy(userId, workspaceId);
   try {
     const transport = privateWorkspaceJournalTransport(userId, workspaceId);
-    return { scope: copy.scope, current: copy.current, close: copy.close, checkpoint: copy.checkpoint, status: copy.status,
-      editFavorite: copy.editFavorite, editCatalog: copy.editCatalog, editEntry: copy.editEntry, editSettings: copy.editSettings, editBusinessProfile: copy.editBusinessProfile, editMemberRate: copy.editMemberRate,
-      pull: (through?: number) => copy.pull(transport, through), flushOne: () => copy.flushOne(transport),
+    const run = <T>(work: () => Promise<T>) => withPrivateWorkspaceTimerGate(copy, work);
+    return { scope: copy.scope, current: copy.current, close: copy.close, checkpoint: () => run(copy.checkpoint), status: () => run(copy.status),
+      editFavorite: (path: PrivateFavoriteEditPath, input: unknown) => { const captured = structuredClone(input); return run(() => copy.editFavorite(path, captured)); },
+      editCatalog: (path: PrivateCatalogEditPath, input: unknown) => { const captured = structuredClone(input); return run(() => copy.editCatalog(path, captured)); },
+      editEntry: (path: PrivateEntryEditPath, input: unknown, intentId?: string) => { const captured = structuredClone(input); return run(() => copy.editEntry(path, captured, intentId)); },
+      editSettings: (input: unknown, preferences: unknown) => { const captured = structuredClone(input), display = structuredClone(preferences); return run(() => copy.editSettings(captured, display)); },
+      editBusinessProfile: (path: PrivateBusinessProfileEditPath, input: unknown) => { const captured = structuredClone(input); return run(() => copy.editBusinessProfile(path, captured)); },
+      editMemberRate: (input: unknown) => { const captured = structuredClone(input); return run(() => copy.editMemberRate(captured)); },
+      pull: (through?: number) => run(() => copy.pull(transport, through)), flushOne: () => run(() => copy.flushOne(transport)),
     };
   } catch (error) { copy.close(); throw error; }
 }
 /** Capture includes exact pending packets and inventory conflicts without
  * replaying them. Private pins are immutable, so a profile reread can be paired
  * with the workspace snapshot only while its activation policy stays identical. */
-export async function capturePrivateWorkspaceRecovery(userId: string, workspaceId: string, identity: PrivateRecoveryIdentity) {
+export function capturePrivateWorkspaceRecovery(userId: string, workspaceId: string, identity: PrivateRecoveryIdentity) {
+  const captured = structuredClone(identity);
+  return withPrivateAccountTimerGate(userId, () => capturePrivateWorkspaceRecoveryCopy(userId, workspaceId, captured), { repair: false });
+}
+async function capturePrivateWorkspaceRecoveryCopy(userId: string, workspaceId: string, identity: PrivateRecoveryIdentity) {
   const binding = privateClientScope(userId), host = await privateAccountInventoryStorageHost(userId);
   let copy: Awaited<ReturnType<typeof openPrivateWorkspaceCopy>> | null = null;
   let timerHost: Awaited<ReturnType<typeof privateAccountTimerStorageHost>> | null = null;
@@ -169,6 +202,7 @@ export async function capturePrivateWorkspaceRecovery(userId: string, workspaceI
     if (!row || row.mode !== "encrypted") throw new Error("Private recovery needs this workspace's trusted encrypted policy");
     copy = await openPrivateWorkspaceCopy(userId, workspaceId, row.signedPolicy); binding.check();
     const replica = await copy.exportRecovery(), inventory = await inventories.exportRecovery(); binding.check();
+    await assertPrivateWorkspaceTimerPin(copy, timerBefore ? timers : null); binding.check();
     const after = inventory.local.inventory.workspaces.find((workspace) => workspace.workspaceId === workspaceId);
     if (!after || after.mode !== "encrypted" || canonicalJson(after.signedPolicy.policy) !== canonicalJson(row.signedPolicy.policy)) throw new Error("Private workspace policy changed during recovery capture");
     const timerAfter = await timers.exportRecovery(); binding.check();

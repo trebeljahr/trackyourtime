@@ -15,6 +15,12 @@ function locks(): LockManager {
   if (typeof navigator === "undefined" || !navigator.locks) throw new Error("Encrypted workspace storage requires Web Locks");
   return navigator.locks;
 }
+/** No account shared-lock parent: recovery opens workspace hosts inside this
+ * mutex, while account erasure may already be queued for its exclusive lock. */
+export async function privateAccountTimerCoordinatorExclusive(scope: AccountScope): Promise<QueueExclusive> {
+  const name = await privateDatabaseName({ ...scope }), manager = locks();
+  return task => manager.request(`${name}:timer-coordinator`, task);
+}
 function validateKey(key: string): void {
   if (!/^trackyourtime\.private\.[A-Za-z0-9_-]{43}\..+/.test(key) || key.length > 4096) throw new Error("Invalid encrypted storage key");
 }
