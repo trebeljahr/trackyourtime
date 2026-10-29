@@ -39,3 +39,13 @@ it("captures the verifier's original guard before waiting for crypto", async () 
   const options = { scope: { ...scope }, signed, signingPublicKey: pair.publicKey, previous: { revision: 0, root: null, current: null }, current: () => active };
   const pending = verifyPrivateTimer(options); active = false; options.current = () => true; options.scope.userId = "later-user"; await assert.rejects(pending, /scope changed/);
 });
+
+it("binds standard-start coordinates without signing its plaintext body and rejects undeclared handoffs", async () => {
+  const pair = await createSigningPair(), original = header(), initial = await signPrivateTimer(original, pair.privateKey, () => true);
+  const next: PrivateTimerHeader = { ...original, operationId: crypto.randomUUID(), revision: 2, previousRoot: await privateTimerRoot(initial), previous: pointer, current: null, standardStart: { workspaceId: "standard", entryId: "a".repeat(24) } };
+  const signed = await signPrivateTimer(next, pair.privateKey, () => true); assert.doesNotMatch(canonicalJson(signed), /description|startTime|hourlyRate/);
+  await assert.rejects(signPrivateTimer({ ...next, current: pointer }, pair.privateKey, () => true));
+  await assert.rejects(signPrivateTimer({ ...next, standardStart: { ...next.standardStart!, workspaceId: pointer.workspaceId } }, pair.privateKey, () => true));
+  await assert.rejects(signPrivateTimer({ ...next, standardStart: { ...next.standardStart!, description: "Must stay outside metadata" } } as PrivateTimerHeader, pair.privateKey, () => true));
+  assert.equal(privateTimerTransitionSchema.safeParse({ signed, edits: [], standardStartInput: { description: "Missing captured start" } }).success, false);
+});

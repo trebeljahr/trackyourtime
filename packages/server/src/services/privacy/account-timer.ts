@@ -12,6 +12,7 @@ import { emitWebhookEvent } from "../webhooks/emit.js";
 import { fencePrivateAccount } from "./account-erasure-fence.js";
 import { assertStandardWorkspace } from "./access.js";
 import { verifyPrivateChange } from "./signatures.js";
+import { startCoordinatedStandardTimer } from "./standard-timer-start.js";
 import { privateTimerCheckpoint } from "./timer-state.js";
 import { commitPrivateChainedWorkspaceEdit } from "./workspace-edits.js";
 const MAX_HISTORY_BYTES = 128 * 1024 * 1024;
@@ -69,13 +70,14 @@ export async function commitPrivateTimerTransition(scope: { server: string; user
       if (prior.root !== root || canonicalJson(prior.signed.header) !== canonicalJson(header) || prior.revision !== header.revision) throw conflict();
       await verifyPrivateChange(account.identity.signingPublicKey, prior.signed.header, prior.signed.signature);
       if (header.standardStop) await withEntryOperation({ userId: scope.userId, workspaceId: header.standardStop.workspaceId }, "private:timer:standardStop", standardStopInput!, async () => { throw conflict(); });
+      if (header.standardStart) await startCoordinatedStandardTimer({ userId: scope.userId, workspaceId: header.standardStart.workspaceId }, input.standardStartInput!, header.standardStart.entryId, header.operationId, true);
       return { revision: prior.revision, root: prior.root };
     }
     if (header.revision !== checkpoint.revision + 1 || header.previousRoot !== checkpoint.root || canonicalJson(header.previous) !== canonicalJson(checkpoint.current)) throw conflict();
     const bytes = Buffer.byteLength(JSON.stringify(signed)), used = account.timerBytes ?? 0;
-    const closing = checkpoint.current !== null && header.current === null && bytes <= MAX_CLOSING_METADATA_BYTES;
+    const closing = checkpoint.current !== null && header.current === null && !header.standardStart && bytes <= MAX_CLOSING_METADATA_BYTES;
     if (!Number.isSafeInteger(used) || used < 0 || used + bytes > MAX_HISTORY_BYTES + (closing ? MAX_CLOSING_METADATA_BYTES : 0)) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Account timer history reached its metadata budget. Existing history and pending work were kept." });
-    const workspaces = new Set(header.edits.map(row => row.workspaceId)); if (header.standardStop) workspaces.add(header.standardStop.workspaceId);
+    const workspaces = new Set(header.edits.map(row => row.workspaceId)); if (header.standardStop) workspaces.add(header.standardStop.workspaceId); if (header.standardStart) workspaces.add(header.standardStart.workspaceId);
     for (const workspaceId of [...workspaces].sort()) await fenceWorkspace(workspaceId);
     const standard = await TimeEntry.findOne({ authorId: scope.userId, end: null }).lean();
     if (header.standardStop) {
@@ -96,6 +98,7 @@ export async function commitPrivateTimerTransition(scope: { server: string; user
     }
     await PrivateTimerVersion.create({ userId: scope.userId, operationId: header.operationId, revision: header.revision, root, signed });
     await PrivateAccount.updateOne({ _id: account._id }, { $set: { timerRevision: header.revision, timerRoot: root, timerSigned: signed }, $inc: { timerBytes: bytes } });
+    if (header.standardStart) await startCoordinatedStandardTimer({ userId: scope.userId, workspaceId: header.standardStart.workspaceId }, input.standardStartInput!, header.standardStart.entryId, header.operationId);
     return { revision: header.revision, root };
   });
 }

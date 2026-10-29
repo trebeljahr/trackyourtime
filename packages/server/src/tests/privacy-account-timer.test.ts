@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
 import { canonicalJson, createKeyPair, createSigningPair, decryptPrivateRecord, encodeSecret, encryptPrivateRecord, privateMemberKeyFingerprint, privateRecordDigest, privateTimerEditBindings, randomSecret, seal, signPrivateChainedWorkspaceEdit, signPrivateTimer, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type VerifiedPrivateDirectory, type PlainPrivateRecord } from "@starter/core";
-import type { PrivateTimerPointer, PrivateTimerTransition, SignedPrivateChainedEdit } from "@starter/shared";
+import type { PrivateTimerPointer, PrivateTimerTransition, SignedPrivateChainedEdit, PrivateStandardTimerStartInput } from "@starter/shared";
 import { PrivateAccount, PrivateDirectory, PrivateRecord, PrivateWorkspace, PrivateWorkspaceCommit } from "../models/PrivateData.js";
 import { PrivateTimerVersion } from "../models/PrivateTimer.js";
 import { TimeEntry } from "../models/TimeEntry.js";
@@ -22,7 +22,7 @@ const scope = { server: "https://api.example.test", userId: "owner" }, standard 
 const instant = "2026-10-01T12:00:00.000Z", privateDescription = "Private account timer description";
 let encryption: Awaited<ReturnType<typeof createKeyPair>>, signing: Awaited<ReturnType<typeof createSigningPair>>;
 let directories: Map<string, VerifiedPrivateDirectory>;
-async function prepare(previous: PrivateTimerPointer | null, current: PrivateTimerPointer | null, standardStop?: { workspaceId: string; entryId: string }) {
+async function prepare(previous: PrivateTimerPointer | null, current: PrivateTimerPointer | null, standardStop?: { workspaceId: string; entryId: string }, standardStart?: { workspaceId: string; entryId: string; input: PrivateStandardTimerStartInput }) {
   const checkpoint = await privateTimerCheckpoint(scope.userId), edits: SignedPrivateChainedEdit[] = [];
   const workspaces = [...new Set([previous?.workspaceId, current?.workspaceId].filter((id): id is string => !!id))].sort();
   for (const workspaceId of workspaces) {
@@ -35,8 +35,8 @@ async function prepare(previous: PrivateTimerPointer | null, current: PrivateTim
     }
     edits.push(await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId, userId: scope.userId, operationId: crypto.randomUUID(), expectedRevision: mode.revision, records, remove: [] }, directory, previousRoot: mode.head!, secrets: { privateKey: encryption.privateKey, signingPrivateKey: signing.privateKey }, current: () => true }));
   }
-  const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", ...scope, operationId: crypto.randomUUID(), revision: checkpoint.revision + 1, previousRoot: checkpoint.root, previous, current, standardStop: standardStop ?? null, edits: await privateTimerEditBindings(edits) }, signing.privateKey, () => true);
-  return { signed, edits, ...(standardStop ? { standardStopEnd: instant } : {}) } satisfies PrivateTimerTransition;
+  const signed = await signPrivateTimer({ v: 1, protocol: "trackyourtime-private-account-timer-v1", ...scope, operationId: crypto.randomUUID(), revision: checkpoint.revision + 1, previousRoot: checkpoint.root, previous, current, standardStop: standardStop ?? null, ...(standardStart ? { standardStart: { workspaceId: standardStart.workspaceId, entryId: standardStart.entryId } } : {}), edits: await privateTimerEditBindings(edits) }, signing.privateKey, () => true);
+  return { signed, edits, ...(standardStop ? { standardStopEnd: instant } : {}), ...(standardStart ? { standardStartInput: standardStart.input } : {}) } satisfies PrivateTimerTransition;
 }
 const point = (workspaceId = a): PrivateTimerPointer => ({ workspaceId, entryId: crypto.randomUUID() });
 const standardEntry = (end: Date | null = null) => TimeEntry.create({ workspaceId: standard, authorId: scope.userId, description: "Ordinary standard work", start: new Date("2026-10-01T10:00:00.000Z"), end });
@@ -103,6 +103,38 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     await assert.rejects(commitPrivateTimerTransition(scope, { ...request, standardStopEnd: "2026-10-01T13:00:00.000Z" }), { code: "CONFLICT", message: "OPERATION_ID_REUSED" });
     await commitPrivateTimerTransition(scope, request); assert.equal(await PrivateTimerVersion.countDocuments(), 1);
   });
+  it("atomically closes private time and starts a fixed-identity standard timer without retaining standard content in account metadata", async () => {
+    const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer));
+    const target = { workspaceId: standard, entryId: crypto.randomUUID().replaceAll("-", "").slice(0, 24), input: { description: "Standard transition content", start: instant, source: "desktop" as const, timeZone: "UTC" } };
+    const packet = await prepare(pointer, null, undefined, target);
+    const missingBody = structuredClone(packet); delete missingBody.standardStartInput; await assert.rejects(commitPrivateTimerTransition(scope, missingBody), { code: "BAD_REQUEST" });
+    await assert.rejects(commitPrivateTimerTransition(scope, { ...packet, standardStartInput: { description: "Missing timestamp" } }), { code: "BAD_REQUEST" });
+    assert.deepEqual((await privateTimerCheckpoint(scope.userId)).current, pointer);
+    const saved = await commitPrivateTimerTransition(scope, packet);
+    assert.equal(saved.revision, 2); assert.equal((await privateTimerCheckpoint(scope.userId)).current, null); assert.equal((await readEntry(pointer)).value.end, instant);
+    const row = (await TimeEntry.findById(target.entryId).lean())!; assert.equal(row.description, target.input.description); assert.equal(row.end, null); assert.equal(row.start.toISOString(), instant);
+    const metadata = JSON.stringify([await PrivateAccount.find().lean(), await PrivateTimerVersion.find().lean()]); assert.doesNotMatch(metadata, /Standard transition content|2026-10-01T12:00:00|standardStartInput/);
+    const receipt = (await EntryOperation.findOne({ userId: scope.userId, operation: "private:timer:standardStart" }).lean())!; assert.equal(receipt.workspaceId, standard); assert.match(JSON.stringify(receipt.result), /Standard transition content/);
+    assert.deepEqual(await commitPrivateTimerTransition(scope, packet), saved); assert.equal(await TimeEntry.countDocuments(), 1);
+    await assert.rejects(commitPrivateTimerTransition(scope, { ...packet, standardStartInput: { ...target.input, description: "Changed standard content" } }), { code: "CONFLICT" });
+    await TimeEntry.updateOne({ _id: target.entryId }, { $set: { end: new Date(Date.parse(instant) + 60_000) } });
+    assert.deepEqual(await commitPrivateTimerTransition(scope, packet), saved); assert.notEqual((await TimeEntry.findById(target.entryId).lean())!.end, null);
+    await EntryOperation.deleteOne({ _id: receipt._id });
+    await assert.rejects(commitPrivateTimerTransition(scope, packet), { code: "CONFLICT" }); assert.notEqual((await TimeEntry.findById(target.entryId).lean())!.end, null); assert.equal(await PrivateTimerVersion.countDocuments(), 2);
+  });
+  it("rolls the private close and account head back when standard references, membership, identity or storage mode refuse the handoff", async () => {
+    const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer)); const before = await privateTimerCheckpoint(scope.userId);
+    for (const failure of ["references", "membership", "identity", "private"] as const) {
+      const target = { workspaceId: failure === "private" ? b : standard, entryId: crypto.randomUUID().replaceAll("-", "").slice(0, 24), input: { description: "Standard transition content", start: instant, ...(failure === "references" ? { projectId: "f".repeat(24) } : {}) } };
+      if (failure === "membership") await WorkspaceMember.deleteOne({ workspaceId: standard, userId: scope.userId });
+      if (failure === "identity") await TimeEntry.create({ _id: target.entryId, workspaceId: "foreign", authorId: "other", description: "Unrelated completed time", start: new Date("2026-10-01T10:00:00.000Z"), end: new Date(instant) });
+      const packet = await prepare(pointer, null, undefined, target);
+      await assert.rejects(commitPrivateTimerTransition(scope, packet), { code: failure === "private" ? "PRECONDITION_FAILED" : failure === "identity" ? "CONFLICT" : "NOT_FOUND" });
+      if (failure === "membership") await WorkspaceMember.create({ workspaceId: standard, userId: scope.userId, role: "owner", name: "Owner" });
+      const after = await privateTimerCheckpoint(scope.userId); assert.equal(after.root, before.root); assert.deepEqual(after.current, pointer); assert.equal((await readEntry(pointer)).value.end, null);
+      assert.equal(await TimeEntry.countDocuments({ authorId: scope.userId }), 0); assert.equal(await EntryOperation.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 1); assert.equal(await PrivateWorkspaceCommit.countDocuments(), 1);
+    }
+  });
   it("rolls a standard stop and its durable receipt back when the encrypted edit fails", async () => {
     const running = await standardEntry(), request = await prepare(null, point(), { workspaceId: standard, entryId: String(running._id) }); request.edits[0]!.signature = "A".repeat(86);
     await assert.rejects(commitPrivateTimerTransition(scope, request), { code: "FORBIDDEN" }); assert.equal((await TimeEntry.findById(running._id).lean())!.end, null); assert.equal(await EntryOperation.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 0); assert.equal((await privateTimerCheckpoint(scope.userId)).current, null);
@@ -137,6 +169,7 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     await PrivateAccount.updateOne({ userId: scope.userId }, { $set: { timerBytes: 128 * 1024 * 1024 } });
     await assert.rejects(commitPrivateTimerTransition(scope, await prepare(pointer, point(b))), { code: "PRECONDITION_FAILED" });
     assert.deepEqual((await privateTimerCheckpoint(scope.userId)).current, pointer); assert.equal(await PrivateTimerVersion.countDocuments(), 1);
+    await assert.rejects(commitPrivateTimerTransition(scope, await prepare(pointer, null, undefined, { workspaceId: standard, entryId: crypto.randomUUID().replaceAll("-", "").slice(0, 24), input: { start: instant } })), { code: "PRECONDITION_FAILED" });
     await commitPrivateTimerTransition(scope, await prepare(pointer, null));
     assert.equal((await privateTimerCheckpoint(scope.userId)).current, null); assert.equal((await readEntry(pointer)).value.end, instant);
     const used = (await PrivateAccount.findOne({ userId: scope.userId }).lean())!.timerBytes;

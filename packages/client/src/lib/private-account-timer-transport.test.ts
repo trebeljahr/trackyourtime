@@ -66,3 +66,12 @@ it("rejects malformed acknowledgements and pages without accepting them as timer
   f.fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ result: { data: { through: 1, root: null, next: null, versions: [] } } }), { headers: { "content-type": "application/json" } }));
   await expect(transport.versions({ after: 0 })).rejects.toThrow();
 });
+
+it("requires the newer handoff capability before sending a transient standard body", async () => {
+  const f = await fixture(), signed = await signPrivateTimer({ ...f.packet.signed.header, operationId: crypto.randomUUID(), revision: 2, previousRoot: f.root, previous: f.packet.signed.header.current, current: null, standardStart: { workspaceId: "standard", entryId: "a".repeat(24) } }, f.secrets.signingPrivateKey, () => true);
+  const packet = { ...f.packet, signed, standardStartInput: { description: "Standard target label", start: "2026-10-29T02:00:00.000Z" } }, transport = privateAccountTimerTransport("owner");
+  state.level = 36; await expect(transport.commit(packet)).rejects.toThrow("Confirm this server supports"); expect(f.fetcher).not.toHaveBeenCalled();
+  state.level = API_LEVEL; const root = await privateTimerRoot(signed);
+  f.fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ result: { data: { revision: 2, root } } }), { headers: { "content-type": "application/json" } }));
+  expect(await transport.commit(packet)).toEqual({ revision: 2, root }); expect(JSON.parse(String(f.fetcher.mock.calls[0]![1]!.body))).toEqual(packet);
+});

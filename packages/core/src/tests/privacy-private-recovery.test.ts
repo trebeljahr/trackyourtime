@@ -15,7 +15,7 @@ import { deriveRecoveryBackupKey } from "../privacy/recovery-backup.js";
 import { decryptPrivateWorkspaceBackup, encryptPrivateWorkspaceBackup, PRIVATE_RECOVERY_MAX_BYTES, writePrivateWorkspaceBackup, verifyPrivateRecoveryIdentity, verifyPrivateWorkspaceBackup, verifyPrivateWorkspaceRecoveryArchive } from "../privacy/private-recovery.js";
 import { memoryStorage } from "../storage.js";
 import { emptyPrivateTimerCheckpoint, type PrivateTimerRecoveryState } from "../privacy/timer-recovery.js";
-import { signPrivateChainedWorkspaceEdit } from "../privacy/history-chain.js";
+import { signPrivateChainedWorkspaceEdit, privateWorkspaceChainRoot } from "../privacy/history-chain.js";
 import { privateTimerEditBindings, privateTimerRoot, signPrivateTimer } from "../privacy/account-timer.js";
 import type { PlainPrivateRecord } from "../privacy/records.js";
 const scope = { server: "https://api.example.test", userId: "owner", workspaceId: "workspace" };
@@ -221,4 +221,20 @@ it("round-trips mixed-age backups after later stops and discards without revivin
       await assert.rejects(verifyPrivateWorkspaceRecoveryArchive(missing, f.secrets, f.current), /financial snapshot/);
     }
   }
+});
+
+it("keeps a pending standard handoff body encrypted in the user-held backup and restores its exact retry packet", async () => {
+  const f = await fixture(), { archive, packet: start, entryId } = await withTimer(f, true), revision = start.edits[0]!.edit.expectedRevision + 1, root = await privateWorkspaceChainRoot(start.edits[0]!.chain);
+  const body = await decryptPrivateRecord(scope.workspaceId, start.edits[0]!.edit.records[0]!, scope.userId, f.secrets.privateKey);
+  const stopped = await encryptPrivateRecord(scope.workspaceId, { ...body, value: { ...body.value, end: "2026-10-29T02:00:00.000Z", durationSec: 3600 } }, f.directory.signed.directory.members, revision + 1);
+  const money = await encryptPrivateRecord(scope.workspaceId, { kind: "entryMoney", id: entryId, authorId: scope.userId, value: { _id: entryId, hourlyRate: 90 } }, f.directory.signed.directory.members, revision + 1);
+  const edit = await signPrivateChainedWorkspaceEdit({ edit: { v: 1, workspaceId: scope.workspaceId, userId: scope.userId, operationId: crypto.randomUUID(), expectedRevision: revision, records: [stopped, money], remove: [] }, directory: f.directory, previousRoot: root, secrets: f.secrets, current: f.current });
+  const signed = await signPrivateTimer({ ...start.signed.header, operationId: crypto.randomUUID(), revision: 2, previousRoot: await privateTimerRoot(start.signed), previous: start.signed.header.current, current: null, standardStart: { workspaceId: "standard", entryId: "a".repeat(24) }, edits: await privateTimerEditBindings([edit]) }, f.secrets.signingPrivateKey, f.current);
+  const handoff = { signed, edits: [edit], standardStartInput: { description: "Standard target waiting for delivery", start: "2026-10-29T02:00:00.000Z" } };
+  archive.replica = { ...archive.replica, revision, head: root, pending: [], records: [...archive.replica.records, ...start.edits[0]!.edit.records] };
+  archive.accountTimer.committed = []; archive.accountTimer.pending = [handoff];
+  const original = canonicalJson(archive), file = await encryptPrivateWorkspaceBackup(archive, f.key, f.secrets, f.current), opened = await decryptPrivateWorkspaceBackup(file, f.recoveryKey);
+  assert.doesNotMatch(JSON.stringify(file), /Standard target waiting for delivery|Unsent private timer|hourlyRate/);
+  assert.deepEqual(opened.accountTimer!.pending, [handoff]); assert.equal(opened.records.some(row => row.kind === "entries" && row.value.end == null), false);
+  assert.deepEqual(await verifyPrivateWorkspaceBackup(file, f.key, f.secrets, f.current, scope), archive); assert.equal(canonicalJson(archive), original);
 });

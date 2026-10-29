@@ -202,6 +202,8 @@ const stopRunningEntryImpl = async (
 };
 
 export type StartArgs = {
+  /** Internal coordinated starts only; requires an enclosing transaction. */
+  entryId?: string;
   workspaceId: string;
   authorId: string;
   description: string;
@@ -240,6 +242,11 @@ export type StartedEntry = {
 };
 
 const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
+  const entryId = args.entryId;
+  if (entryId !== undefined) {
+    if (!/^[a-f0-9]{24}$/.test(entryId)) throw badRequest("Invalid coordinated timer identity");
+    if (!transactionSession()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "A coordinated timer identity requires a transaction" });
+  }
   await assertNoPrivateRunningTimer(args.authorId);
   const refs = await resolveRefs(args.workspaceId, args.projectId, args.taskId);
   const clientId = await resolveClientId(
@@ -264,6 +271,7 @@ const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
 
   const insert = async (): Promise<TimeEntryWire> => {
     const created = await TimeEntry.create({
+      ...(entryId === undefined ? {} : { _id: entryId }),
       workspaceId: args.workspaceId,
       authorId: args.authorId,
       description: args.description,
