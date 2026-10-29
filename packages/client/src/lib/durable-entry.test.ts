@@ -121,3 +121,18 @@ it("a live caller-supplied operation ID still passes through durable storage", a
     expect(stored).toBe(true);
   } finally { globalThis.fetch = original; }
 });
+
+it("keeps standard recording working when the WebView has secure randomness but no randomUUID", async () => {
+  const { getTRPCClient } = await import("./trpc"), originalCrypto = globalThis.crypto, originalFetch = globalThis.fetch;
+  vi.stubGlobal("crypto", { getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto) });
+  let captured: Record<string, unknown> | undefined;
+  globalThis.fetch = vi.fn(async (_url, init) => {
+    captured = JSON.parse(String(init?.body))["0"];
+    return new Response(JSON.stringify([{ result: { data: { id: "entry-fallback" } } }]), { headers: { "content-type": "application/json" } });
+  });
+  try {
+    const api = getTRPCClient({ streamQueries: false });
+    expect(await api.entries.start.mutate({ description: "Standard WebView clock", source: "web", timeZone: "UTC" })).toMatchObject({ id: "entry-fallback" });
+    expect(captured?.operationId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+  } finally { globalThis.fetch = originalFetch; vi.unstubAllGlobals(); }
+});

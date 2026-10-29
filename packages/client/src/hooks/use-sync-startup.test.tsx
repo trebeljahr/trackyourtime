@@ -1,3 +1,11 @@
+// Private adapters are covered separately; these tests exercise legacy sync startup.
+vi.mock("@/lib/private-account-timer-current", () => ({ readPrivateAccountCurrent: async () => ({ handled: false }) }));
+vi.mock("@/lib/private-account-timer-mutation", () => ({ mutatePrivateAccountTimer: async () => ({ handled: false }) }));
+vi.mock("@/lib/private-workspace-mutation", () => ({ mutatePrivateWorkspace: async () => { throw new Error("Unexpected private edit"); } }));
+vi.mock("@/lib/private-workspace-list", () => ({ readWorkspaceList: (read: () => Promise<unknown>) => read() }));
+vi.mock("@/lib/private-workspace-creation", () => ({ preparePrivateWorkspaceCreation: async () => null }));
+vi.mock("@/lib/private-content-route", () => ({ assertStandardWorkspaceContent: async () => () => {}, isWorkspaceContentProcedure: () => false, assertStandardContentRequest: async () => () => {} }));
+vi.mock("@/lib/private-request-scope", () => ({ privateRequestScopeHeaders: () => ({}), capturePrivateRequestScope: () => ({}), checkPrivateRequestScope: () => {} }));
 // @vitest-environment jsdom
 import * as React from "react";
 import { initTRPC } from "@trpc/server";
@@ -13,7 +21,9 @@ vi.mock("@/hooks/use-api-origin", () => ({ useApiOrigin: () => ({ choice: null }
 vi.mock("@/lib/native-session", () => ({ getNativeToken: () => null }));
 vi.mock("@/lib/auth-client", () => ({ onSignOut: () => () => {} }));
 vi.mock("@/lib/running-mirror", () => ({ writeRunningMirror: async () => {} }));
-vi.mock("@/lib/idle-watcher", () => ({ idleWatcher: { noteRemoteActivity: vi.fn(), reset: vi.fn() } }));
+const privateBoundary = vi.hoisted(() => ({ listeners: new Set<() => void>(), resetIdle: vi.fn() }));
+vi.mock("@/lib/idle-watcher", () => ({ idleWatcher: { noteRemoteActivity: vi.fn(), reset: privateBoundary.resetIdle } }));
+vi.mock("@/lib/private-view-lifecycle", () => ({ subscribePrivateViewEpoch: (fn: () => void) => { privateBoundary.listeners.add(fn); return () => { privateBoundary.listeners.delete(fn); }; } }));
 vi.mock("@/lib/revoke-this-device", () => ({ revokeThisDevice: vi.fn() }));
 vi.mock("@/lib/api-origin", () => ({ getApiOrigin: () => "", whenApiOriginReady: async () => {}, rebaseApiUrl: (url: string) => url }));
 let workspace = "ws-a";
@@ -150,4 +160,10 @@ it("Redis recovery catches missed writes before returning to healthy cadence", a
   sockets[0]!.state(false); value = "missed-during-gap";
   sockets[0]!.state(true); await advance();
   expect(count).toBe(2); expect(client.getQueryCache().getAll()[0]?.state.data).toBe("missed-during-gap");
+});
+
+it("clears held idle data when the private view epoch changes", async () => {
+  const { timerStore } = await import("./use-sync"); privateBoundary.resetIdle.mockClear();
+  for (const listener of privateBoundary.listeners) listener();
+  expect(privateBoundary.resetIdle).toHaveBeenCalledTimes(1); expect(timerStore.getState().running).toBeNull();
 });
