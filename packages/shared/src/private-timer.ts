@@ -5,6 +5,8 @@ const id = z.string().min(1).max(100), root = z.string().regex(/^[A-Za-z0-9_-]{4
 export const privateTimerPointerSchema = z.object({ workspaceId: id, entryId: z.union([z.uuid(), z.string().regex(/^[a-f0-9]{24}$/)]) }).strict();
 const standardPointer = z.object({ workspaceId: id, entryId: z.string().regex(/^[a-f0-9]{24}$/) }).strict();
 export const privateStandardTimerStartInputSchema = startTimerSchema.omit({ operationId: true }).extend({ start: z.iso.datetime({ offset: true }) }).strict();
+export const privateStandardTimerResultInputSchema = z.object({ operationId: z.uuid(), workspaceId: id, entryId: z.string().regex(/^[a-f0-9]{24}$/), input: privateStandardTimerStartInputSchema }).strict();
+export type PrivateStandardTimerResultInput = z.infer<typeof privateStandardTimerResultInputSchema>;
 export type PrivateStandardTimerStartInput = z.infer<typeof privateStandardTimerStartInputSchema>;
 export const privateTimerHeaderSchema = z.object({
   v: z.literal(1), protocol: z.literal("trackyourtime-private-account-timer-v1"),

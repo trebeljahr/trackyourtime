@@ -109,7 +109,8 @@ export const writeRunningMirror = async (
   }
   try {
     const check = await assertStandardWorkspaceContent(entry.authorId, entry.workspaceId); check();
-    await store().setItem(MIRROR_KEY, encodeVersioned(MIRROR_SPEC.version, entry)); check();
+    const { replaced, ...mirrored } = entry as TimeEntry & { replaced?: unknown }; void replaced;
+    await store().setItem(MIRROR_KEY, encodeVersioned(MIRROR_SPEC.version, mirrored)); check();
   } catch (error) {
     if (!isPrivateContentRefusal(error)) throw error;
     await store().removeItem(MIRROR_KEY);

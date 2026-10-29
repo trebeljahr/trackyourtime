@@ -3,8 +3,8 @@ import { it } from "node:test";
 import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { privateEntryEdit, privateTimerEntryEdit, preparePrivateEntryIntent, type VerifiedPrivateEntryIntent, type PrivateEntryEditPath, type PrivateTimerEntryCommand } from "../privacy/entry-edit.js";
-import { preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord } from "../privacy/timer-intent.js";
-import { privateRecordsToRecovery, partitionPrivateRecovery, type PlainPrivateRecord } from "../privacy/records.js";
+import { preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord, openPrivateTimerActorReceipt } from "../privacy/timer-intent.js";
+import { encryptPrivateRecord, decryptPrivateRecord, privateRecordsToRecovery, partitionPrivateRecovery, type PlainPrivateRecord } from "../privacy/records.js";
 import type { TimeEntry } from "@starter/shared";
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "author" }, stamp = "2026-10-27T00:00:00.000Z";
 const span = { start: "2026-10-26T10:00:00.000Z", end: "2026-10-26T11:00:00.000Z" };
@@ -26,7 +26,7 @@ async function fixture() {
   const intent = (path: PrivateEntryEditPath, input: unknown, intentId: string = crypto.randomUUID()) => preparePrivateEntryIntent({ scope, path, input, intentId, current: () => open });
   const timer = (command: PrivateTimerEntryCommand, expectedRunningId: string | null) => privateTimerEntryEdit({ scope, directory, records, command, expectedRunningId, now: Date.parse(stamp), current: () => open });
   const apply = (result: ReturnType<typeof privateTimerEntryEdit>) => { const changed = new Set([...result.records, ...result.remove].map(row => `${row.kind}:${row.id}`)); records.splice(0, records.length, ...records.filter(row => !changed.has(`${row.kind}:${row.id}`)), ...result.records); return result; };
-  return { records, directory, add, plan, edit, create, intent, timer, apply, lock: () => { open = false; } };
+  return { privateKey: pair.privateKey, ownerPrivateKey: ownerPair.privateKey, records, directory, add, plan, edit, create, intent, timer, apply, lock: () => { open = false; } };
 }
 
 it("plans zero-duration running time and atomically stops with the current billing snapshot", async () => {
@@ -194,31 +194,51 @@ it("invalidates an asynchronous private intent preparation when the keys lock be
 
 it("keeps timer retry results encrypted with workspace history after later stops and deletion", async () => {
   const f = await fixture(), operationId = crypto.randomUUID(), input = { description: "Original private start", projectId: "project", start: span.start };
-  const options = { scope, directory: f.directory, records: f.records, current: () => true };
+  const options = { scope, directory: f.directory, records: f.records, current: () => true, privateKey: f.privateKey };
   const intent = await preparePrivateTimerIntent({ scope, path: "entries.start", input, operationId, current: () => true });
-  assert.equal(readPrivateTimerIntent({ ...options, intent }), null);
+  assert.equal(await readPrivateTimerIntent({ ...options, intent }), null);
   const start = f.apply(f.timer({ kind: "start", entryId: operationId, input }, null));
-  f.records.push(privateTimerIntentRecord({ ...options, intent, result: start.result, now: Date.parse(stamp) }));
+  f.records.push(await privateTimerIntentRecord({ ...options, intent, result: start.result, now: Date.parse(stamp) }));
   f.apply(f.timer({ kind: "stop", id: operationId, end: span.end }, operationId));
   f.edit("entries.remove", { id: operationId });
   const retry = await preparePrivateTimerIntent({ scope, path: "entries.start", input: { ...input, operationId }, operationId, current: () => true });
-  assert.deepEqual(readPrivateTimerIntent({ ...options, intent: retry }), start.result);
+  assert.deepEqual(await readPrivateTimerIntent({ ...options, intent: retry }), start.result);
   const snapshot = await privateRecordsToRecovery(scope.workspaceId, f.records.filter(row => ["entries", "entryMoney", "imports"].includes(row.kind)), stamp);
-  assert.deepEqual(readPrivateTimerIntent({ ...options, records: partitionPrivateRecovery(snapshot), intent: retry }), start.result);
+  assert.deepEqual(await readPrivateTimerIntent({ ...options, records: partitionPrivateRecovery(snapshot), intent: retry }), start.result);
   const changed = await preparePrivateTimerIntent({ scope, path: "entries.start", input: { ...input, description: "Other start" }, operationId, current: () => true });
-  assert.throws(() => readPrivateTimerIntent({ ...options, intent: changed }), /different request/);
-  assert.throws(() => privateTimerIntentRecord({ ...options, intent, result: start.result, now: Date.now() }), /original timer receipt/);
+  await assert.rejects(readPrivateTimerIntent({ ...options, intent: changed }), /different request/);
+  await assert.rejects(privateTimerIntentRecord({ ...options, intent, result: start.result, now: Date.now() }), /original timer receipt/);
 });
 it("preserves discard receipts and refuses changed targets, forged intent and stale keys", async () => {
-  const f = await fixture(), id = crypto.randomUUID(), operationId = crypto.randomUUID(), options = { scope, directory: f.directory, records: f.records, current: () => true };
+  const f = await fixture(), id = crypto.randomUUID(), operationId = crypto.randomUUID(), options = { scope, directory: f.directory, records: f.records, current: () => true, privateKey: f.privateKey };
   f.apply(f.timer({ kind: "start", entryId: id, input: { start: span.start } }, null));
   let open = true;
   const intent = await preparePrivateTimerIntent({ scope, path: "entries.discard", input: { id }, operationId, current: () => open });
   const discard = f.apply(f.timer({ kind: "discard", id }, id));
-  f.records.push(privateTimerIntentRecord({ ...options, intent, result: discard.result, now: Date.parse(stamp) }));
-  assert.deepEqual(readPrivateTimerIntent({ ...options, intent }), { success: true, id });
+  f.records.push(await privateTimerIntentRecord({ ...options, intent, result: discard.result, now: Date.parse(stamp) }));
+  assert.deepEqual(await readPrivateTimerIntent({ ...options, intent }), { success: true, id });
   const changed = await preparePrivateTimerIntent({ scope, path: "entries.discard", input: { id: crypto.randomUUID() }, operationId, current: () => true });
-  assert.throws(() => readPrivateTimerIntent({ ...options, intent: changed }), /different request/);
-  assert.throws(() => readPrivateTimerIntent({ ...options, intent: { ...intent } }), /changed/);
-  open = false; assert.throws(() => readPrivateTimerIntent({ ...options, intent }), /changed/);
+  await assert.rejects(readPrivateTimerIntent({ ...options, intent: changed }), /different request/);
+  await assert.rejects(readPrivateTimerIntent({ ...options, intent: { ...intent } }), /changed/);
+  open = false; await assert.rejects(readPrivateTimerIntent({ ...options, intent }), /changed/);
+});
+
+it("seals cross-workspace retry notices to the author even when the workspace owner can open the outer record", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(), options = { scope, directory: f.directory, records: f.records, current: () => true, privateKey: f.privateKey };
+  const input = { start: span.start, description: "Private original intent" }, intent = await preparePrivateTimerIntent({ scope, path: "entries.start", input, operationId, current: () => true });
+  const start = f.timer({ kind: "start", entryId: operationId, input }, null), result = { ...(start.result as TimeEntry), replaced: { entryId: crypto.randomUUID(), workspaceId: "another-team", workspaceName: "Other confidential workspace", end: span.start } };
+  const receipt = await privateTimerIntentRecord({ ...options, intent, result, now: Date.parse(stamp) });
+  assert.doesNotMatch(JSON.stringify(receipt.value), /Other confidential workspace|Private original intent/);
+  const wrapped = await encryptPrivateRecord(scope.workspaceId, receipt, f.directory.signed.directory.members, 2), ownerView = await decryptPrivateRecord(scope.workspaceId, wrapped, "owner", f.ownerPrivateKey);
+  assert.doesNotMatch(JSON.stringify(ownerView.value), /Other confidential workspace|Private original intent/);
+  await assert.rejects(openPrivateTimerActorReceipt({ ...options, record: ownerView, privateKey: f.ownerPrivateKey }));
+  const moved = structuredClone(receipt), other = crypto.randomUUID(); moved.id = `entryoperations:${other}`; moved.value._id = other;
+  await assert.rejects(openPrivateTimerActorReceipt({ ...options, record: moved }));
+  f.records.push(receipt); assert.deepEqual(await readPrivateTimerIntent({ ...options, intent }), result);
+});
+it("keeps legacy timer receipts readable while new receipts use the author-only envelope", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(), input = { start: span.start }, options = { scope, directory: f.directory, records: f.records, current: () => true, privateKey: f.privateKey };
+  const intent = await preparePrivateTimerIntent({ scope, path: "entries.start", input, operationId, current: () => true }), start = f.timer({ kind: "start", entryId: operationId, input }, null);
+  f.records.push({ kind: "imports", id: intent.receiptId, authorId: scope.userId, value: { _id: operationId, workspaceId: scope.workspaceId, userId: scope.userId, protocol: "trackyourtime-private-timer-operation-v1", operation: intent.path, requestHash: intent.requestHash, result: start.result } });
+  assert.deepEqual(await readPrivateTimerIntent({ ...options, intent }), start.result);
 });

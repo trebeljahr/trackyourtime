@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 39;
+export const API_LEVEL = 40;
 
 export type ApiLevelChange = {
   level: number;
@@ -196,6 +196,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   { level: 37, release: "0.4.0", added: ["Optional signed standardStart coordinates and transient standardStartInput extend guarded account timer writes for atomic private-to-standard handoffs. Conversion and private content writes remain disabled."] },
   { level: 38, release: "0.4.0", added: ["Account-scoped privacy.standardCurrentTimer checks the actual timer workspace and membership before returning standard time, independent of workspace selection. Private timers remain client-only; conversion and private content writes remain disabled."] },
   { level: 39, release: "0.4.0", added: ["Encrypted author-owned entryoperations receipts may accompany guarded account timer transitions, bound to the signed operation UUID. Public conversion and private content writes remain disabled."] },
+  { level: 40, release: "0.4.0", added: ["Account-scoped privacy.standardTimerResult reads the original standard result of a previously committed private timer handoff, with fresh membership/mode and original request checks. It cannot start or reopen time. Private rollout guards remain closed."] },
 ];
 
 /**

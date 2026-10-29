@@ -1,5 +1,5 @@
 {
-  "apiLevel": 39,
+  "apiLevel": 40,
   "minClientApiLevel": 1,
   "procedures": {
     "apiTokens.create": {
@@ -6159,6 +6159,116 @@
       "input": {
         "additionalProperties": false,
         "properties": {},
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "privacy.standardTimerResult": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "entryId": {
+            "pattern": "^[a-f0-9]{24}$",
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "billable": {
+                "type": "boolean"
+              },
+              "clientId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "description": {
+                "maxLength": 500,
+                "type": "string"
+              },
+              "originId": {
+                "maxLength": 64,
+                "type": "string"
+              },
+              "projectId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "enum": [
+                  "web",
+                  "desktop",
+                  "mobile",
+                  "extension",
+                  "api",
+                  "import"
+                ],
+                "type": "string"
+              },
+              "start": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "tagIds": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              "taskId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timeZone": {
+                "maxLength": 64,
+                "type": "string"
+              }
+            },
+            "required": [
+              "start"
+            ],
+            "type": "object"
+          },
+          "operationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "workspaceId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "workspaceId",
+          "entryId",
+          "input"
+        ],
         "type": "object"
       },
       "type": "mutation"

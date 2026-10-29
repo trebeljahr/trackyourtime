@@ -1,5 +1,7 @@
-import { canonicalJson, readersForPrivateRecord, encryptPrivateRecord, isPrivateTimerIntentPath, preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord, privateTimerEntryEdit, privateEntryEdit, PRIVATE_ENTRY_EDIT_KINDS, privateTimerEditBindings, signPrivateChainedWorkspaceEdit, signPrivateTimer, type PlainPrivateRecord, type PrivateTimerEntryCommand } from "@starter/core";
-import type { SignedPrivateChainedEdit, TimeEntry } from "@starter/shared";
+import { openPrivateTimerActorReceipt, isPrivateStandardHandoffPayload, verifyPrivateStandardHandoffIntent, canonicalJson, readersForPrivateRecord, encryptPrivateRecord, isPrivateTimerIntentPath, preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord, privateTimerEntryEdit, privateEntryEdit, PRIVATE_ENTRY_EDIT_KINDS, privateTimerEditBindings, signPrivateChainedWorkspaceEdit, signPrivateTimer, type PlainPrivateRecord, type PrivateTimerEntryCommand } from "@starter/core";
+import { workspaceNameFor } from "./active-workspace";
+import { privateTimerReplacement, stagePrivateStandardHandoff, finishPrivateStandardHandoff } from "./private-standard-timer-handoff";
+import type { SignedPrivateChainedEdit, TimeEntry, StartTimerReplaced } from "@starter/shared";
 import { capturePrivateRequestScope, checkPrivateRequestScope } from "./private-request-scope";
 import { privateClientScope } from "./private-client-scope";
 import { privateSession } from "./private-session";
@@ -16,7 +18,7 @@ import { notifyPrivateWorkspaceEdit } from "./private-workspace-sync";
 import { PrivateContentUnavailableError } from "./private-content-error";
 import type { PrivateTimerAction } from "./private-timer-action";
 type Copy = Awaited<ReturnType<typeof openPrivateWorkspaceCoordinatorCopy>>;
-type Result = TimeEntry | { success: true; id: string };
+type Result = (TimeEntry & { replaced?: StartTimerReplaced | null }) | { success: true; id: string };
 /** Actual SDK adapter. One durable preparing packet precedes all workspace
  * publication. Retried intents return their encrypted original result; no
  * timer body can enter the ordinary HTTP queue or plaintext running mirror. */
@@ -26,7 +28,7 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
   if (!input || typeof input !== "object" || Array.isArray(input) || typeof input.workspaceId !== "string") throw new PrivateContentUnavailableError("Choose the original timer workspace before saving time");
   if (input.__privateIntentId !== undefined) return { handled: false as const };
   const workspaceId = input.workspaceId, captured = Object.freeze({ ...action });
-  return withPrivateAccountTimerGate(userId, async context => {
+  const outcome = await withPrivateAccountTimerGate(userId, async context => {
     const check = () => { context.check(); checkPrivateRequestScope(original); }; check();
     if (!context.timer) return { handled: false as const };
     const snapshot = (await context.timer.exportRecovery())!; check();
@@ -46,9 +48,21 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
       for (const id of candidates) {
         const copy = await copyFor(id), intent = await preparePrivateTimerIntent({ scope: copy.scope, path, input: body, operationId: captured.operationId, current: binding.current }); check();
         const view = await copy.readKinds(["imports"]); check();
-        const receipt = readPrivateTimerIntent({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent });
+        const stored = view.records.find(row => row.kind === "imports" && row.id === `entryoperations:${captured.operationId}`);
+        if (stored?.value.protocol === "trackyourtime-private-timer-operation-v2") {
+          const payload = await openPrivateTimerActorReceipt({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, record: stored, privateKey: privateSession(userId)!.privateKey }); check();
+          if (isPrivateStandardHandoffPayload(payload)) {
+            if (route.mode !== "standard") throw new PrivateContentUnavailableError("The original standard timer workspace is now private. Its saved handoff was kept.");
+            const targetIntent = await preparePrivateTimerIntent({ scope: { ...copy.scope, workspaceId }, path, input: body, operationId: captured.operationId, current: binding.current }); check();
+            const verified = verifyPrivateStandardHandoffIntent({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent: targetIntent, payload });
+            return { handoff: { operationId: captured.operationId, payload: verified } };
+          }
+        }
+        const receipt = await readPrivateTimerIntent({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent, privateKey: privateSession(userId)!.privateKey });
         if (receipt) { if (id !== workspaceId && !["entries.stop", "entries.discard"].includes(path)) throw new PrivateContentUnavailableError("Private timer operation identity was reused for another workspace"); notePrivateView(binding); check(); return { handled: true as const, value: markPrivateLocalResult(receipt) }; }
       }
+      const unresolvedStandard = [...snapshot.state.pending, ...snapshot.state.committed, ...(snapshot.state.preparing ? [snapshot.state.preparing] : [])].filter(packet => packet.signed.header.standardStart);
+      if (unresolvedStandard.length && (["entries.start", "entries.continue", "entries.stop", "entries.discard"].includes(path) || (path === "entries.update" && input.end === null) || unresolvedStandard.some(packet => packet.signed.header.standardStart?.entryId === input.id))) throw new PrivateContentUnavailableError("Confirm the saved timer handoff before changing time");
       if (["entries.update", "entries.remove"].includes(path) && !(path === "entries.update" && input.end === null && snapshot.local.current?.entryId !== input.id) && !(snapshot.local.current?.workspaceId === workspaceId && snapshot.local.current.entryId === input.id)) return { handled: false as const };
       if (route.mode === "standard" && !snapshot.local.current) return { handled: false as const };
       const current = await readPrivateAccountCurrentInGate(userId, {}, context, { original, binding }); check();
@@ -56,6 +70,10 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
       const pointer = snapshot.local.current, targetId = path === "entries.stop" || path === "entries.discard" ? pointer?.workspaceId ?? workspaceId : workspaceId;
       const targetRoute = targetId === workspaceId ? route : await workspaceContentRoute(userId, targetId, binding.server); check(); targetRoute.check();
       if (targetRoute.mode === "standard") {
+        if (pointer && path === "entries.start") {
+          const source = await copyFor(pointer.workspaceId);
+          return { handoff: await stagePrivateStandardHandoff({ userId, workspaceId, body, action: captured, timer: context.timer, local: snapshot.local, copy: source, check }) };
+        }
         if (pointer && ["entries.start", "entries.continue"].includes(path)) throw new PrivateContentUnavailableError("Private-to-standard timer starts are not available in this client yet. Current time was kept.");
         return { handled: false as const };
       }
@@ -95,7 +113,15 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
       }
       const plan = privateTimerEntryEdit({ scope: copy.scope, directory: copy.directory, records: views.get(targetId)!, current: binding.current, command, expectedRunningId: starting ? null : pointer!.entryId, now: captured.now });
       apply(targetId, copy, plan); check();
-      const receipt = privateTimerIntentRecord({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent, result: plan.result as Result, now: captured.now });
+      let result: Result = plan.result;
+      if (["entries.start", "entries.continue"].includes(path) && "end" in result) {
+        let replaced: StartTimerReplaced | null = null;
+        if (pointer && pointer.workspaceId !== targetId) replaced = await privateTimerReplacement(await copyFor(pointer.workspaceId), pointer.entryId, switchingEnd);
+        else if (!pointer && current.value && current.value.workspaceId !== targetId) replaced = { entryId: current.value.id, workspaceId: current.value.workspaceId, workspaceName: workspaceNameFor(current.value.workspaceId), end: switchingEnd };
+        result = { ...result, replaced };
+      }
+      check();
+      const receipt = await privateTimerIntentRecord({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent, result: result as Result, now: captured.now });
       plans.get(targetId)!.records.push(receipt);
       const secrets = privateSession(userId)!, edits: SignedPrivateChainedEdit[] = [];
       for (const [id, draft] of [...plans].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
@@ -109,7 +135,10 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
       for (const draft of plans.values()) { await draft.copy.stageCoordinated(permit); check(); }
       await context.timer.publish(permit); check(); notePrivateView(binding); check();
       for (const draft of plans.values()) notifyPrivateWorkspaceEdit(draft.copy.scope);
-      return { handled: true as const, value: markPrivateLocalResult(plan.result) };
+      return { handled: true as const, value: markPrivateLocalResult(result) };
     } finally { for (const copy of copies.values()) copy.close(); }
   });
+  if ("handoff" in outcome && outcome.handoff) return finishPrivateStandardHandoff(userId, outcome.handoff, original);
+  if ("handled" in outcome && outcome.handled) return outcome;
+  return { handled: false as const };
 }

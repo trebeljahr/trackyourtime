@@ -223,3 +223,10 @@ describe("seedRunningFromMirror", () => {
     expect(isRunningProvisional()).toBe(false);
   });
 });
+
+it("never persists a replacement notice that can name another private workspace", async () => {
+  const result = { ...running, replaced: { entryId: "old-entry", workspaceId: "private-other", workspaceName: "Confidential workspace name", end: running.start } };
+  await writeRunningMirror(result);
+  expect(JSON.stringify([...backing.values()])).not.toContain("Confidential workspace name");
+  expect(await readRunningMirror()).toEqual(running);
+});

@@ -1,7 +1,8 @@
+import { privateStandardTimerResult } from "../../services/privacy/standard-timer-result.js";
 import { createStandardBackupChallenge, readStandardBackupOriginals } from "../../services/privacy/standard-backup.js";
 import { commitPrivateTimerTransition } from "../../services/privacy/account-timer.js";
 import { standardAccountCurrentTimer } from "../../services/privacy/standard-timer-current.js";
-import { standardCurrentTimerSchema } from "@starter/shared";
+import { privateStandardTimerResultInputSchema, standardCurrentTimerSchema } from "@starter/shared";
 import { privateTimerVersions } from "../../services/privacy/timer-versions.js";
 import { privateTimerTransitionSchema, privateTimerVersionsInputSchema } from "@starter/shared";
 import { fencePrivateAccount } from "../../services/privacy/account-erasure-fence.js";
@@ -71,6 +72,7 @@ function validateRecordAudience(record: EncryptedRecord, members: Awaited<Return
 }
 const allMembers = (workspaceId: string) => WorkspaceMember.find({ workspaceId }).lean();
 export const privacyRouter = router({
+  standardTimerResult: privateAccountProcedure.input(privateStandardTimerResultInputSchema).output(standardCurrentTimerSchema).mutation(({ ctx, input }) => privateStandardTimerResult({ server: privateServerOrigin(), userId: ctx.user.id }, input)),
   standardCurrentTimer: privateAccountProcedure.input(z.object({}).strict().optional()).output(standardCurrentTimerSchema.nullable()).mutation(({ ctx }) => standardAccountCurrentTimer(ctx.user.id)),
   timerVersions: privateAccountProcedure.input(privateTimerVersionsInputSchema).mutation(({ ctx, input }) => privateTimerVersions({ server: privateServerOrigin(), userId: ctx.user.id }, input.after, input.through)),
   timerWrite: privateAccountProcedure.input(privateTimerTransitionSchema).mutation(({ ctx, input }) => {

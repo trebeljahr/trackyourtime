@@ -10,6 +10,7 @@ import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { allModels } from "../models/registry.js";
 import { commitPrivateTimerTransition } from "../services/privacy/account-timer.js";
 import { privateTimerCheckpoint } from "../services/privacy/timer-state.js";
+import { privateStandardTimerResult } from "../services/privacy/standard-timer-result.js";
 import { standardAccountCurrentTimer } from "../services/privacy/standard-timer-current.js";
 import { privateTimerVersions } from "../services/privacy/timer-versions.js";
 import { privacyRouter } from "../trpc/routers/privacy.js";
@@ -81,6 +82,32 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     const request = await receiptPacket(await prepare(null, point()), crypto.randomUUID());
     await assert.rejects(commitPrivateTimerTransition(scope, request), { code: "BAD_REQUEST" });
     assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 0); assert.equal((await privateTimerCheckpoint(scope.userId)).revision, 0);
+  });
+  it("reads the exact original standard handoff result after later stops without creating any time", async () => {
+    const pointer = point(), entryId = crypto.randomUUID().replaceAll("-", "").slice(0, 24), input = { start: instant, description: "Original standard handoff result", source: "desktop" as const };
+    await commitPrivateTimerTransition(scope, await prepare(null, pointer));
+    const request = await prepare(pointer, null, undefined, { workspaceId: standard, entryId, input }); await commitPrivateTimerTransition(scope, request);
+    const lookup = { workspaceId: standard, entryId, operationId: request.signed.header.operationId, input }, original = await privateStandardTimerResult(scope, lookup);
+    assert.equal(original.id, entryId); assert.equal(original.description, input.description); assert.equal(original.end, null);
+    await TimeEntry.updateOne({ _id: entryId }, { $set: { end: new Date("2026-10-01T13:00:00.000Z") } });
+    await commitPrivateTimerTransition(scope, await prepare(null, point(b)));
+    const before = { entries: await TimeEntry.countDocuments(), versions: await PrivateTimerVersion.countDocuments(), receipts: await EntryOperation.countDocuments() };
+    assert.deepEqual(await privateStandardTimerResult(scope, lookup), original); assert.notEqual((await TimeEntry.findById(entryId).lean())!.end, null);
+    await assert.rejects(privateStandardTimerResult(scope, { ...lookup, input: { ...input, description: "Changed request" } }), { code: "CONFLICT" });
+    await assert.rejects(privateStandardTimerResult({ ...scope, userId: "other" }, lookup), { code: "NOT_FOUND" });
+    await assert.rejects(privateStandardTimerResult(scope, { ...lookup, entryId: "b".repeat(24) }), { code: "NOT_FOUND" });
+    await WorkspaceMember.deleteMany({ workspaceId: standard, userId: scope.userId }); await assert.rejects(privateStandardTimerResult(scope, lookup), { code: "NOT_FOUND" });
+    assert.deepEqual({ entries: await TimeEntry.countDocuments(), versions: await PrivateTimerVersion.countDocuments(), receipts: await EntryOperation.countDocuments() }, before);
+  });
+  it("refuses standard result recovery after conversion or loss of the original receipt", async () => {
+    const pointer = point(), entryId = crypto.randomUUID().replaceAll("-", "").slice(0, 24), input = { start: instant };
+    await commitPrivateTimerTransition(scope, await prepare(null, pointer)); const request = await prepare(pointer, null, undefined, { workspaceId: standard, entryId, input }); await commitPrivateTimerTransition(scope, request);
+    const lookup = { workspaceId: standard, entryId, operationId: request.signed.header.operationId, input };
+    await PrivateWorkspace.create({ workspaceId: standard, ownerId: scope.userId, state: "encrypted", revision: 1, head: encodeSecret(randomSecret()), directoryDigest: encodeSecret(randomSecret()), migrationId: crypto.randomUUID(), sourceRevision: "retired", leaseUntil: new Date() });
+    await assert.rejects(privateStandardTimerResult(scope, lookup), { code: "PRECONDITION_FAILED" }); await PrivateWorkspace.deleteMany({ workspaceId: standard });
+    await EntryOperation.deleteMany({ operation: "private:timer:standardStart" });
+    await assert.rejects(privateStandardTimerResult(scope, lookup), { code: "CONFLICT" });
+    assert.equal(await EntryOperation.countDocuments({ operation: "private:timer:standardStart" }), 0); assert.equal(await TimeEntry.countDocuments({ _id: entryId }), 1);
   });
   it("keeps claim metadata and workspace time atomic while retaining only encrypted business content", async () => {
     const pointer = point(), request = await prepare(null, pointer), saved = await commitPrivateTimerTransition(scope, request);
