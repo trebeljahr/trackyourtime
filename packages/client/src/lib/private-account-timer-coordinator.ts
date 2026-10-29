@@ -1,4 +1,4 @@
-import { PrivateTimerCheckpointMissingError, type PrivateReplicaRecoveryState } from "@starter/core";
+import { PrivateTimerCheckpointMissingError, PrivateTimerHistoryProofPendingError, type PrivateReplicaRecoveryState } from "@starter/core";
 import { privateClientScope } from "./private-client-scope";
 import { privateAccountTimerCoordinatorExclusive } from "./private-indexed-storage";
 import { privateAccountInventoryStorageHost, privateAccountTimerStorageHost, privateAccountTimerStore } from "./private-replica";
@@ -24,7 +24,7 @@ export async function withPrivateAccountTimerGate<T>(userId: string, work: (cont
           const inventories = await privateAccountWorkspaceInventorySync(userId, inventoryHost.storage, inventoryHost.exclusive), inventory = await inventories.exportRecovery(); binding.check();
           // Repair only policies from this authenticated local copy. An API
           // response cannot choose new workspace roots or recipients here.
-          const { openPrivateWorkspaceCoordinatorCopy } = await import("./private-workspace-session"); binding.check();
+          const { openPrivateWorkspaceCoordinatorCopy, privateWorkspaceJournalTransport } = await import("./private-workspace-session"); binding.check();
           for (const packet of packets) {
             const permit = await timer.stagingPermit(packet.signed.header.operationId); binding.check();
             if (!permit) throw new Error("Keep the original account timer plan before opening private data");
@@ -35,6 +35,12 @@ export async function withPrivateAccountTimerGate<T>(userId: string, work: (cont
                 const row = inventory.local.inventory.workspaces.find(row => row.workspaceId === workspaceId);
                 if (!row || row.mode !== "encrypted") throw new Error("Timer recovery is missing its trusted workspace policy");
                 copy = await openPrivateWorkspaceCoordinatorCopy(userId, workspaceId, row.signedPolicy); copies.set(workspaceId, copy); binding.check();
+                await copy.pinCoordinatedReceipts(packets.filter(packet => packet.edits.some(edit => edit.edit.workspaceId === workspaceId)).map(packet => packet.signed.header.operationId)); binding.check();
+              }
+              const checkpoint = await copy.checkpoint(); binding.check();
+              if (checkpoint.revision > edit.edit.expectedRevision + 1) {
+                const proof = await copy.recoverCoordinatedReceipt(permit, privateWorkspaceJournalTransport(userId, workspaceId)); binding.check();
+                if (proof.next !== null) throw new PrivateTimerHistoryProofPendingError();
               }
               await copy.stageCoordinated(permit); binding.check();
             }
@@ -53,7 +59,7 @@ export async function assertPrivateWorkspaceTimerPin(copy: PrivateCopy, timer: T
   copy.check();
   if (!timer) {
     const state = await copy.exportRecovery();
-    if (state.pending.some(row => row.coordinatorId) || state.coordinatedReceipts?.length) throw new PrivateTimerCheckpointMissingError();
+    if (state.pending.some(row => row.coordinatorId) || state.coordinatedReceipts?.length || state.coordinatedProofs?.length || state.coordinatedReceiptPins?.length) throw new PrivateTimerCheckpointMissingError();
   }
   copy.check();
 }

@@ -1,4 +1,4 @@
-import { canonicalJson, PrivateTimerCheckpointMissingError, privateTimerRoot, verifyPrivateTimer } from "@starter/core";
+import { canonicalJson, PrivateTimerCheckpointMissingError, PrivateTimerHistoryProofPendingError, privateTimerRoot, verifyPrivateTimer } from "@starter/core";
 import { privateTimerAckSchema, privateTimerPageSchema, type PrivateTimerTransition } from "@starter/shared";
 import { privateClientScope } from "./private-client-scope";
 import { withPrivateAccountTimerGate } from "./private-account-timer-coordinator";
@@ -41,8 +41,11 @@ function syncAccountTimer(userId: string, current: () => boolean, optional: bool
           let receipt = await copy.coordinatedReceipt(permit); check();
           if (!receipt) {
             let checkpoint = await copy.checkpoint(); check();
-            if (checkpoint.revision > binding.expectedRevision + 1) throw new Error("Recover the original workspace history proof before clearing this timer packet");
             const journal = privateWorkspaceJournalTransport(userId, binding.workspaceId);
+            if (checkpoint.revision > binding.expectedRevision + 1) {
+              const proof = await copy.recoverCoordinatedReceipt(permit, journal); check();
+              if (proof.next !== null) throw new PrivateTimerHistoryProofPendingError();
+            }
             let pages = 0;
             while (checkpoint.revision < binding.expectedRevision + 1 && pages++ < 8) {
               await copy.pull(journal, binding.expectedRevision + 1); check(); checkpoint = await copy.checkpoint(); check();

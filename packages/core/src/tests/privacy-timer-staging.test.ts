@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import type { PrivateTimerPointer, PrivateTimerTransition, SignedPrivateChainedEdit } from "@starter/shared";
-import { canonicalJson, createKeyPair, createSigningPair, randomSecret } from "../privacy/crypto.js";
+import { canonicalJson, encodeSecret, createKeyPair, createSigningPair, randomSecret } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, privateReplicaIdentityFromDirectory, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { signPrivateInitialProjectionRoot, verifyPrivateInitialProjection } from "../privacy/projection-snapshot.js";
 import { signPrivateChainedWorkspaceEdit, privateWorkspaceChainRoot } from "../privacy/history-chain.js";
@@ -11,7 +11,8 @@ import { createPrivateWorkspaceReplica, PrivateReplicaCoordinatedEditError, type
 import { privateTimerEditBindings, signPrivateTimer } from "../privacy/account-timer.js";
 import { emptyPrivateTimerCheckpoint, privateTimerRecoveryWorkspaceOverlay } from "../privacy/timer-recovery.js";
 import { createPrivateAccountTimerStore, type PrivateTimerStagePermit } from "../privacy/timer-store.js";
-import { PrivateStorageLockedError } from "../privacy/storage.js";
+import { segmentedPrivateStorage } from "../privacy/segmented-storage.js";
+import { createPrivateStorage, PrivateStorageLockedError } from "../privacy/storage.js";
 const scope = { server: "https://api.example.test", userId: "owner" }, stoppedAt = "2026-10-29T02:00:00.000Z";
 async function fixture() {
   const encryption = await createKeyPair(), signing = await createSigningPair(), master = randomSecret(), files = new Map<string, string>();
@@ -33,18 +34,24 @@ async function fixture() {
     const replicaOptions = { scope: { ...scope, workspaceId }, storage, exclusive, resolveStorageKey: options.resolveStorageKey, resolveIdentity: () => privateReplicaIdentityFromDirectory(directory, scope.userId, secrets, alive()) };
     const replica = await createPrivateWorkspaceReplica(replicaOptions); await replica.bootstrapProjection(snapshot);
     const journal: SignedPrivateChainedEdit[] = [], ordinaryCalls: SignedPrivateChainedEdit[] = [];
-    const head = async () => journal.length ? await privateWorkspaceChainRoot(journal.at(-1)!.chain) : snapshot.root;
-    const validate = async (edit: SignedPrivateChainedEdit) => { assert.equal(edit.edit.expectedRevision, 1 + journal.length); assert.equal(edit.chain.header.previousRoot, await head()); };
+    let baseRevision = 1, baseHead = snapshot.root;
+    const head = async () => journal.length ? await privateWorkspaceChainRoot(journal.at(-1)!.chain) : baseHead;
+    const validate = async (edit: SignedPrivateChainedEdit) => { assert.equal(edit.edit.expectedRevision, baseRevision + journal.length); assert.equal(edit.chain.header.previousRoot, await head()); };
     const transport: PrivateReplicaTransport = {
       commit: async () => { throw new Error("Unchained transport refused"); }, changes: async () => { throw new Error("Unchained transport refused"); },
-      chainedCommit: async input => { await validate(input); ordinaryCalls.push(structuredClone(input)); journal.push(structuredClone(input)); return { revision: 1 + journal.length, head: await head() }; },
-      chainedChanges: async ({ after, through = 1 + journal.length }) => {
+      chainedCommit: async input => { await validate(input); ordinaryCalls.push(structuredClone(input)); journal.push(structuredClone(input)); return { revision: baseRevision + journal.length, head: await head() }; },
+      chainedChanges: async ({ after, through = baseRevision + journal.length }) => {
         const changes = [];
         for (const row of journal.filter(row => row.edit.expectedRevision >= after && row.edit.expectedRevision < through)) changes.push({ revision: row.edit.expectedRevision + 1, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(row.edit), scope.userId), signature: row.readerSignatures.find(row => row.userId === scope.userId)!.signature, records: row.edit.records, chain: row.chain });
         return { through, next: null, changes };
       },
     };
-    return { replica, reopen: () => createPrivateWorkspaceReplica(replicaOptions), directory, transport, journal, ordinaryCalls, validate };
+    const recoveryStorage = segmentedPrivateStorage(await createPrivateStorage({ storage, scope: replicaOptions.scope, resolveKey: options.resolveStorageKey }), capture);
+    const replaceRecoveredState = async (state: Awaited<ReturnType<typeof replica.exportRecovery>>) => {
+      await recoveryStorage.setItem("replica", JSON.stringify(state));
+      if (!journal.length) { baseRevision = state.revision; baseHead = state.head!; }
+    };
+    return { replica, reopen: () => createPrivateWorkspaceReplica(replicaOptions), directory, transport, journal, ordinaryCalls, validate, replaceRecoveredState };
   }
   for (const workspaceId of ["a", "b"]) workspaces.set(workspaceId, await workspace(workspaceId));
   async function packet(previous: PrivateTimerPointer | null, current: PrivateTimerPointer | null): Promise<PrivateTimerTransition> {
@@ -66,7 +73,7 @@ async function fixture() {
     await commit(input); await store.accept(input.signed);
     await store.settle(async original => { assert.deepEqual(original, input); for (const edit of input.edits) { const target = workspaces.get(edit.edit.workspaceId)!; await target.replica.pull(target.transport, edit.edit.expectedRevision + 1); assert.ok(await target.replica.coordinatedReceipt(permit)); } });
   }
-  return { store, workspaces, packet, finish, commit, encryption, files, reopenStore: () => createPrivateAccountTimerStore(options), fail: (prefix: string) => { failurePrefix = prefix; }, lock: () => { generation++; } };
+  return { store, workspaces, packet, finish, commit, encryption, signing, files, reopenStore: () => createPrivateAccountTimerStore(options), fail: (prefix: string) => { failurePrefix = prefix; }, lock: () => { generation++; } };
 }
 const point = (workspaceId = "a"): PrivateTimerPointer => ({ workspaceId, entryId: crypto.randomUUID() });
 it("seals preceding ordinary work offline and prevents generic sync from sending a coordinated timer", async () => {
@@ -125,4 +132,59 @@ it("recovers confirmation after a restart before or after the workspace accepted
     await store.settle(async packet => { assert.deepEqual(packet, input); if (!pullFirst) await replica.pull(a.transport); assert.ok(await replica.coordinatedReceipt(permit)); });
     assert.equal((await store.read()).committed, 0); assert.equal((await replica.read()).pending, 0); assert.equal(a.journal.length, 1);
   }
+});
+
+it("proves an older timer packet against a newer restored workspace root without replay or checkpoint replacement", async () => {
+  const f = await fixture(), a = f.workspaces.get("a")!, input = await f.packet(null, point()), permit = await f.store.prepare(input);
+  await a.replica.stageCoordinated(permit); await f.store.publish(permit); await f.commit(input); await f.store.accept(input.signed); await a.replica.pull(a.transport);
+  await a.replica.enqueue({ records: [{ kind: "tags", id: "later", authorId: null, value: { name: "Later committed work" } }] }); await a.replica.flushOne(a.transport);
+  const recovered = await a.replica.exportRecovery(); delete recovered.coordinatedReceipts; await a.replaceRecoveredState(recovered);
+  assert.equal(await a.replica.coordinatedReceipt(permit), null); await assert.rejects(a.replica.stageCoordinated(permit), /workspace changed/);
+  const result = await a.replica.recoverCoordinatedReceipt(permit, a.transport); assert.equal(result.next, null); assert.ok(result.receipt);
+  const after = await a.replica.exportRecovery(); assert.deepEqual(after.records, recovered.records); assert.equal(after.revision, recovered.revision); assert.equal(after.head, recovered.head); assert.deepEqual(after.pending, []); assert.equal(a.journal.length, 2);
+  await f.store.settle(async () => { assert.deepEqual(await a.replica.coordinatedReceipt(permit), result.receipt); }); assert.equal((await f.store.read()).committed, 0);
+});
+it("keeps encrypted proof progress across restart and resumes from its fixed saved boundary", async () => {
+  const f = await fixture(), a = f.workspaces.get("a")!, input = await f.packet(null, point()), original = await f.store.prepare(input);
+  await a.replica.stageCoordinated(original); await f.store.publish(original); await f.commit(input); await f.store.accept(input.signed); await a.replica.pull(a.transport);
+  for (let i = 0; i < 10; i++) { await a.replica.enqueue({ records: [{ kind: "tags", id: "later", authorId: null, value: { name: `Later draft ${i}` } }] }); await a.replica.flushOne(a.transport); }
+  const recovered = await a.replica.exportRecovery(); delete recovered.coordinatedReceipts; await a.replaceRecoveredState(recovered);
+  const queries: { after: number; through?: number }[] = [], paged: PrivateReplicaTransport = { ...a.transport, chainedChanges: async input => {
+    queries.push(input); const page = await a.transport.chainedChanges!(input), changes = page.changes.slice(0, 1), last = changes.at(-1)?.revision ?? input.after;
+    return { through: page.through, next: last < page.through ? last : null, changes };
+  } };
+  const first = await a.replica.recoverCoordinatedReceipt(original, paged); assert.equal(first.receipt, null); assert.equal(first.next, 9);
+  assert.equal((await a.replica.exportRecovery()).coordinatedProofs?.[0]?.through, recovered.revision);
+  assert.doesNotMatch(JSON.stringify([...f.files.values()]), /Later draft|Exact staged private timer/);
+  f.lock(); const store = await f.reopenStore(), reopened = await a.reopen(), permit = (await store.stagingPermit(input.signed.header.operationId))!;
+  const result = await reopened.recoverCoordinatedReceipt(permit, paged); assert.ok(result.receipt); assert.equal(result.next, null); assert.equal(queries[8]!.after, 9); assert.ok(queries.every(query => query.through === recovered.revision));
+  const after = await reopened.exportRecovery(); assert.equal(after.coordinatedProofs, undefined); assert.equal(after.head, recovered.head); assert.deepEqual(after.records, recovered.records); assert.equal(a.journal.length, 11);
+});
+it("rejects omitted packets, changed boundaries and a valid signed fork before saving a recovered receipt", async () => {
+  const f = await fixture(), a = f.workspaces.get("a")!, input = await f.packet(null, point()), permit = await f.store.prepare(input);
+  await a.replica.stageCoordinated(permit); await f.store.publish(permit); await f.commit(input); await f.store.accept(input.signed); await a.replica.pull(a.transport);
+  await a.replica.enqueue({ records: [{ kind: "tags", id: "later", authorId: null, value: { name: "Original later edit" } }] }); await a.replica.flushOne(a.transport);
+  const recovered = await a.replica.exportRecovery(); delete recovered.coordinatedReceipts; await a.replaceRecoveredState(recovered);
+  for (const alter of [(page: Awaited<ReturnType<NonNullable<PrivateReplicaTransport["chainedChanges"]>>>) => ({ ...page, changes: page.changes.slice(1) }), (page: Awaited<ReturnType<NonNullable<PrivateReplicaTransport["chainedChanges"]>>>) => ({ ...page, through: page.through + 1 })]) {
+    await assert.rejects(a.replica.recoverCoordinatedReceipt(permit, { ...a.transport, chainedChanges: async input => alter(await a.transport.chainedChanges!(input)) }));
+    assert.deepEqual(await a.replica.exportRecovery(), recovered);
+  }
+  const saved = a.journal[1]!, fork = await signPrivateChainedWorkspaceEdit({ edit: { ...saved.edit, operationId: crypto.randomUUID() }, directory: a.directory, previousRoot: saved.chain.header.previousRoot, secrets: { privateKey: f.encryption.privateKey, signingPrivateKey: f.signing.privateKey }, current: () => true });
+  a.journal[1] = fork; await assert.rejects(a.replica.recoverCoordinatedReceipt(permit, a.transport), /saved workspace root/); a.journal[1] = saved;
+  assert.deepEqual(await a.replica.exportRecovery(), recovered); assert.equal((await f.store.read()).committed, 1);
+  assert.throws(() => a.replica.recoverCoordinatedReceipt({ ...permit } as PrivateTimerStagePermit, a.transport), /durable timer staging/);
+});
+
+it("keeps all pinned older timer receipts when the rolling receipt tail reaches capacity", async () => {
+  const f = await fixture(), a = f.workspaces.get("a")!, recovered = await a.replica.exportRecovery();
+  // A restored confirmed copy with a full historical metadata tail. Only the
+  // new commits need encryption/signatures to exercise actual pull/pruning.
+  recovered.coordinatedReceipts = Array.from({ length: 1000 }, (_, i) => ({ coordinatorId: crypto.randomUUID(), operationId: crypto.randomUUID(), revision: i + 2, head: encodeSecret(randomSecret()) }));
+  recovered.revision = 1001; recovered.head = recovered.coordinatedReceipts.at(-1)!.head; await a.replaceRecoveredState(recovered);
+  const pins = recovered.coordinatedReceipts.slice(0, 32).map(row => row.coordinatorId); await a.replica.pinCoordinatedReceipts(pins);
+  const pointer = point(), input = await f.packet(null, pointer), permit = await f.store.prepare(input); await a.replica.stageCoordinated(permit); await f.store.publish(permit); await f.finish(input, permit);
+  let saved = await a.replica.exportRecovery(); assert.equal(saved.coordinatedReceipts!.length, 1000); assert.ok(pins.every(id => saved.coordinatedReceipts!.some(row => row.coordinatorId === id))); assert.ok(await a.replica.coordinatedReceipt(permit));
+  await a.replica.pinCoordinatedReceipts([]);
+  const next = await f.packet(pointer, pointer), nextPermit = await f.store.prepare(next); await a.replica.stageCoordinated(nextPermit); await f.store.publish(nextPermit); await f.finish(next, nextPermit);
+  saved = await a.replica.exportRecovery(); assert.equal(saved.coordinatedReceipts!.length, 1000); assert.ok(!saved.coordinatedReceipts!.some(row => row.coordinatorId === pins[0])); assert.equal(saved.coordinatedReceiptPins, undefined);
 });

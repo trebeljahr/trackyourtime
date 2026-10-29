@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import * as React from "react";
+import { PrivateTimerHistoryProofPendingError } from "@starter/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -52,4 +53,9 @@ it("syncs an enrolled account timer while viewing a standard workspace and refre
 it("keeps a partial account sync pending instead of showing the selected workspace as saved", async () => {
   state.timer.mockResolvedValue({ changed: false, caughtUp: false, pending: 2, committed: 1 });
   const view = render(); await waitFor(() => expect(view.result.current).toEqual({ phase: "pending", pending: 3 })); expect(state.sync).not.toHaveBeenCalled(); view.unmount();
+});
+
+it("keeps a resumable account history proof pending until a later pass finishes it", async () => {
+  state.timer.mockRejectedValue(new PrivateTimerHistoryProofPendingError());
+  const view = render(); await waitFor(() => expect(view.result.current).toEqual({ phase: "pending", pending: null })); expect(state.sync).not.toHaveBeenCalled(); view.unmount();
 });

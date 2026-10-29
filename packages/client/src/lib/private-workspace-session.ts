@@ -85,6 +85,8 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
       status: async () => { assertPolicy(); const value = await replica.status(); assertPolicy(); return value; },
       prepareTail: async () => { assertPolicy(); const value = await replica.prepareTail(); assertPolicy(); return value; },
       stageCoordinated: async (permit: PrivateTimerStagePermit) => { assertPolicy(); const value = await replica.stageCoordinated(permit); assertPolicy(); return value; },
+      pinCoordinatedReceipts: async (operationIds: readonly string[]) => { const captured = [...operationIds]; assertPolicy(); await replica.pinCoordinatedReceipts(captured); assertPolicy(); },
+      recoverCoordinatedReceipt: async (permit: PrivateTimerStagePermit, transport: PrivateReplicaTransport) => { assertPolicy(); const value = await replica.recoverCoordinatedReceipt(permit, transport); assertPolicy(); return value; },
       coordinatedReceipt: async (permit: PrivateTimerStagePermit) => { assertPolicy(); const value = await replica.coordinatedReceipt(permit); assertPolicy(); return value; },
       editFavorite: async (path: PrivateFavoriteEditPath, input: unknown) => {
         const frozen = structuredClone(input); assertPolicy();

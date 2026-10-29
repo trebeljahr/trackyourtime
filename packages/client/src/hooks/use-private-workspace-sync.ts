@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { PrivateTimerConflictError } from "@starter/core";
+import { PrivateTimerConflictError, PrivateTimerHistoryProofPendingError } from "@starter/core";
 import { syncPrivateAccountTimerIfPresent } from "@/lib/private-account-timer-sync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "./use-auth";
@@ -36,7 +36,7 @@ export function usePrivateWorkspaceSync(): PrivateSyncState | null {
           const result = await syncPrivateWorkspace({ server, userId, workspaceId }, (value) => { route.check(); publish(value); }, current);
           if (result.changed && current()) void client.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey[0]) && isWorkspaceContentProcedure(query.queryKey[0].join(".")) });
         } while (queued && current());
-      } catch (error) { publish({ phase: error instanceof PrivateTimerConflictError ? "conflict" : "unavailable", pending: null }); }
+      } catch (error) { publish({ phase: error instanceof PrivateTimerConflictError ? "conflict" : error instanceof PrivateTimerHistoryProofPendingError ? "pending" : "unavailable", pending: null }); }
       finally { busy = false; }
     };
     const retry = () => { void run(); };

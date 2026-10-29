@@ -2,7 +2,7 @@
 import { IDBFactory } from "fake-indexeddb";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { emptyPrivateTimerCheckpoint, encryptPrivateRecord, privateRecordDigest, privateTimerEditBindings, privateTimerRoot, privateWorkspaceChainRoot, privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateChainedWorkspaceEdit, signPrivateTimer, type PlainPrivateRecord } from "@starter/core";
+import { createPrivateStorage, segmentedPrivateStorage, PRIVATE_ACCOUNT_TIMER_SCOPE, emptyPrivateTimerCheckpoint, encryptPrivateRecord, privateRecordDigest, privateTimerEditBindings, privateTimerRoot, privateWorkspaceChainRoot, privateWorkspaceManifest, privateWorkspaceManifestForReader, signPrivateChainedWorkspaceEdit, signPrivateTimer, type PlainPrivateRecord } from "@starter/core";
 import { API_LEVEL, type PrivateTimerPage, type PrivateTimerPointer, type PrivateTimerTransition, type SignedPrivateChainedEdit, type SignedPrivateTimer } from "@starter/shared";
 import { privateRecoveryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test" }));
@@ -13,7 +13,7 @@ vi.mock("./native-session", () => ({ getNativeToken: () => null }));
 vi.mock("./shell", () => ({ clientId: () => "web", isCapacitor: () => false }));
 vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
-const { privateAccountTimerStorageHost, privateAccountTimerStore } = await import("./private-replica");
+const { privateAccountTimerStorageHost, privateAccountTimerStore, privateWorkspaceStorageHost } = await import("./private-replica");
 const { openPrivateWorkspaceCoordinatorCopy, privateWorkspaceJournalTransport } = await import("./private-workspace-session");
 const { syncPrivateAccountTimer } = await import("./private-account-timer-sync");
 let closers: (() => void)[] = [];
@@ -67,7 +67,16 @@ async function fixture() {
     return { signed, edits: [edit] } satisfies PrivateTimerTransition;
   }
   async function stage(input: PrivateTimerTransition) { const permit = await timer.prepare(input); await raw.stageCoordinated(permit); await timer.publish(permit); }
-  return { ...f, timer, raw, packet, stage, journal, history, writes, events, fetcher, failReply: () => { failReply = true; }, failJournal: (value: boolean) => { failJournal = value; }, fakeAck: () => { fakeAck = true; }, transform: (change: typeof pageTransform) => { pageTransform = change; } };
+  async function replaceRecoveredWorkspace(input: Awaited<ReturnType<typeof raw.exportRecovery>>) {
+    const workspace = await privateWorkspaceStorageHost("owner", "workspace");
+    try { const storage = segmentedPrivateStorage(await session.privateWorkspaceStorage("owner", "workspace", workspace.storage), () => session.privateOperationScope("owner")); await workspace.exclusive(() => storage.setItem(`replica:${f.archive.replica.activationRoot}`, JSON.stringify(input))); }
+    finally { workspace.close(); }
+  }
+  async function replaceRecoveredTimer(input: NonNullable<Awaited<ReturnType<typeof timer.exportRecovery>>>["state"]) {
+    const storage = segmentedPrivateStorage(await createPrivateStorage({ storage: host.storage, scope: { server: state.origin, userId: "owner", workspaceId: PRIVATE_ACCOUNT_TIMER_SCOPE }, resolveKey: () => ({ key: f.master, current: () => true }) }), () => session.privateOperationScope("owner"));
+    await host.exclusive(() => storage.setItem("timer-state", JSON.stringify(input)));
+  }
+  return { ...f, timer, raw, packet, stage, journal, history, writes, events, fetcher, replaceRecoveredWorkspace, replaceRecoveredTimer, failReply: () => { failReply = true; }, failJournal: (value: boolean) => { failJournal = value; }, fakeAck: () => { fakeAck = true; }, transform: (change: typeof pageTransform) => { pageTransform = change; } };
 }
 it("flushes earlier ordinary work, commits the exact account packet and verifies both histories before retiring it", async () => {
   const f = await fixture(), input = await f.packet(); await f.stage(input);
@@ -135,4 +144,15 @@ it("refuses a later page that changes the fixed root and retains the unaccepted 
   let pages = 0; f.transform(page => ++pages === 2 ? { ...page, root: "A".repeat(43) } : page);
   await expect(syncPrivateAccountTimer("owner")).rejects.toThrow("immutable boundary");
   expect((await f.timer.read()).checkpoint.revision).toBe(2); expect((await f.timer.exportRecovery())!.state.pending).toEqual([packets[2]]); expect(f.writes).toHaveLength(0);
+});
+
+it("settles an older account backup against newer workspace history without replaying its timer", async () => {
+  const f = await fixture(), input = await f.packet(); await f.stage(input); const original = (await f.timer.exportRecovery())!.state;
+  await syncPrivateAccountTimer("owner");
+  await f.raw.editCatalog("tags.update", { id: "tag", name: "Later committed catalog name" }); await f.raw.flushOne(privateWorkspaceJournalTransport("owner", "workspace"));
+  const workspace = await f.raw.exportRecovery(); delete workspace.coordinatedReceipts;
+  await f.replaceRecoveredWorkspace(workspace); await f.replaceRecoveredTimer(original);
+  const result = await syncPrivateAccountTimer("owner"); expect(result).toMatchObject({ pending: 0, committed: 0, revision: 1 });
+  const after = await f.raw.exportRecovery(); expect(after.revision).toBe(workspace.revision); expect(after.head).toBe(workspace.head); expect(after.records).toEqual(workspace.records); expect(after.pending).toEqual([]); expect(after.coordinatedReceipts).toHaveLength(1);
+  expect(f.writes).toHaveLength(1); expect(f.journal).toHaveLength(4);
 });
