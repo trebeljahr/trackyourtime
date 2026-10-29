@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { startTimerSchema, entrySourceSchema } from "./schemas.js";
+import { startTimerSchema, entrySourceSchema, continueEntrySchema } from "./schemas.js";
 import { privateSignatureSchema, signedPrivateChainedEditSchema } from "./private-workspace.js";
 const id = z.string().min(1).max(100), root = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const privateTimerPointerSchema = z.object({ workspaceId: id, entryId: z.union([z.uuid(), z.string().regex(/^[a-f0-9]{24}$/)]) }).strict();
 const standardPointer = z.object({ workspaceId: id, entryId: z.string().regex(/^[a-f0-9]{24}$/) }).strict();
 export const privateStandardTimerStartInputSchema = startTimerSchema.omit({ operationId: true }).extend({ start: z.iso.datetime({ offset: true }) }).strict();
 export const privateStandardTimerResultInputSchema = z.object({ operationId: z.uuid(), workspaceId: id, entryId: z.string().regex(/^[a-f0-9]{24}$/), input: privateStandardTimerStartInputSchema }).strict();
+export const privateStandardContinueTimerInputSchema = continueEntrySchema.extend({ workspaceId: id, at: z.iso.datetime({ offset: true }) }).strict();
 export type PrivateStandardTimerResultInput = z.infer<typeof privateStandardTimerResultInputSchema>;
 export type PrivateStandardTimerStartInput = z.infer<typeof privateStandardTimerStartInputSchema>;
 export const privateTimerHeaderSchema = z.object({

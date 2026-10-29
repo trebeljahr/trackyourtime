@@ -1,5 +1,5 @@
 import { encryptPrivateRecord, privateTimerEntryEdit, PRIVATE_ENTRY_EDIT_KINDS, preparePrivateTimerIntent, privateStandardHandoffRecord, privateTimerEditBindings, signPrivateChainedWorkspaceEdit, signPrivateTimer, privateWorkspaceSummary, PrivateTimerConflictError, type PrivateStandardHandoffIntent, type PrivateTimerCheckpoint } from "@starter/core";
-import { standardCurrentTimerSchema, type StartTimerReplaced, type TimeEntry } from "@starter/shared";
+import { privateStandardTimerStartInputSchema, standardCurrentTimerSchema, type StartTimerReplaced, type TimeEntry } from "@starter/shared";
 import type { PrivateTimerAction } from "./private-timer-action";
 import type { privateAccountTimerStore } from "./private-replica";
 import type { openPrivateWorkspaceCoordinatorCopy } from "./private-workspace-session";
@@ -24,16 +24,24 @@ export async function privateTimerReplacement(copy: Copy, entryId: string, end: 
 /** Caller holds the account timer gate and has verified the original current
  * body. Save the complete plan before touching either running representation. */
 export async function stagePrivateStandardHandoff(options: {
-  userId: string; workspaceId: string; body: Record<string, unknown>; action: PrivateTimerAction;
+  userId: string; workspaceId: string; path: "entries.start" | "entries.continue"; body: Record<string, unknown>; action: PrivateTimerAction;
   timer: Awaited<ReturnType<typeof privateAccountTimerStore>>; local: PrivateTimerCheckpoint; copy: Copy; check: () => void;
 }): Promise<SavedPrivateStandardHandoff> {
   const { userId, workspaceId, action, timer, local, copy, check } = options, binding = privateClientScope(userId);
   check(); const { supported } = privateScopedRpc(userId, "privacy.standardTimerResult", 20_000); supported();
   if (!local.current || local.current.workspaceId !== copy.scope.workspaceId) throw new PrivateContentUnavailableError("The original private timer changed before its handoff");
-  const intent = await preparePrivateTimerIntent({ scope: { ...copy.scope, workspaceId }, path: "entries.start", input: options.body, operationId: action.operationId, current: binding.current }); check();
+  const intent = await preparePrivateTimerIntent({ scope: { ...copy.scope, workspaceId }, path: options.path, input: options.body, operationId: action.operationId, current: binding.current }); check();
   const end = typeof intent.input.start === "string" ? intent.input.start : new Date(action.now).toISOString();
+  let standardInput;
+  if (options.path === "entries.continue") {
+    const route = await workspaceContentRoute(userId, workspaceId, binding.server); check(); route.check();
+    const guarded = { ...binding, check: () => { check(); route.check(); if (route.mode !== "standard") throw new PrivateContentUnavailableError("The continuation workspace is now private"); } };
+    const { rpc, supported: canPrepare } = privateBoundRpc(guarded, "privacy.standardContinueTimerInput", 20_000); canPrepare();
+    standardInput = privateStandardTimerStartInputSchema.parse(await rpc.privacy.standardContinueTimerInput.mutate({ workspaceId, id: String(intent.input.id), at: end, ...(intent.input.timeZone !== undefined ? { timeZone: intent.input.timeZone as string } : {}), ...(intent.input.originId !== undefined ? { originId: intent.input.originId as string } : {}) }));
+    guarded.check();
+  }
   const view = await copy.readKinds(PRIVATE_ENTRY_EDIT_KINDS), replaced = await privateTimerReplacement(copy, local.current.entryId, end); check();
-  const handoff = await privateStandardHandoffRecord({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent, accountRevision: local.revision + 1, replaced, now: action.now }); check();
+  const handoff = await privateStandardHandoffRecord({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, intent, accountRevision: local.revision + 1, replaced, now: action.now, standardInput }); check();
   const stopped = privateTimerEntryEdit({ scope: copy.scope, directory: copy.directory, records: view.records, current: binding.current, command: { kind: "stop", id: local.current.entryId, end: handoff.payload.input.start }, expectedRunningId: local.current.entryId, now: action.now });
   const tail = await copy.prepareTail(); check(); const records = [];
   for (const row of [...stopped.records, handoff.record]) { records.push(await encryptPrivateRecord(copy.scope.workspaceId, row, copy.directory.signed.directory.members, tail.revision + 1)); check(); }

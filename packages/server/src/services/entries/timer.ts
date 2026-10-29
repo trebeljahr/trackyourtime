@@ -22,6 +22,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   projectBillableByDefault,
+  privateStandardTimerStartInputSchema,
   resolvedEndMs,
   type ContinueEntryInput,
   type EntrySource,
@@ -729,11 +730,12 @@ export async function continueEntry(
   return (await continueEntryDetailed(scope, input)).entry;
 }
 
-/** {@link continueEntry}, also reporting the running entry it closed. */
-async function continueEntryDetailedImpl(
+/** Read the reusable fields without changing the source or any running timer. */
+export async function prepareContinuedEntry(
   scope: WorkspaceScope,
   input: ContinueEntryInput,
-): Promise<StartedEntry> {
+  at: string,
+) {
   const workspaceId = scope.workspaceId;
   const source = await TimeEntry.findOne({
     _id: requireObjectId(input.id, "Entry not found"),
@@ -742,32 +744,32 @@ async function continueEntryDetailedImpl(
   }).lean();
   if (!source) throw notFound();
 
-  const started = await startNewEntry({
-    workspaceId,
-    authorId: scope.userId,
-    // `continue` has no REST route — it is reachable only through tRPC, whose
-    // principal is the person, so the stop it performs is the person-wide one
-    // every session client expects. Named here rather than defaulted so that
-    // exposing this over the token API is a decision somebody has to make on
-    // this line, the way `startTimer` made it: pass a reach in, do not leave a
-    // token stopping timers in workspaces it cannot address.
-    reach: personReach,
+  return privateStandardTimerStartInputSchema.parse({
     description: source.description,
     clientId: source.clientId,
     projectId: source.projectId,
     taskId: source.taskId,
     billable: source.billable,
-    start: new Date(),
+    start: at,
     source: source.source,
     // A continued entry is being recorded NOW, wherever the person now is,
     // so it takes the caller's zone rather than inheriting the original's.
-    timeZone: input.timeZone ?? null,
+    timeZone: input.timeZone,
     // Tags go the OTHER way: continuing is "more of this same work", so
     // the labels that described it still describe it. A tag deleted since
     // then is dropped rather than copied forward dead — see
     // `filterKnownTagIds` for why this path is lenient.
     tagIds: await filterKnownTagIds(workspaceId, source.tagIds),
     originId: input.originId,
+  });
+}
+
+async function continueEntryDetailedImpl(scope: WorkspaceScope, input: ContinueEntryInput): Promise<StartedEntry> {
+  const workspaceId = scope.workspaceId;
+  const recipe = await prepareContinuedEntry(scope, input, new Date().toISOString());
+  const started = await startNewEntry({
+    ...recipe, workspaceId, authorId: scope.userId, reach: personReach, description: recipe.description ?? "", billable: recipe.billable, source: recipe.source ?? "web",
+    start: new Date(recipe.start), projectId: recipe.projectId ?? null, taskId: recipe.taskId ?? null, timeZone: recipe.timeZone ?? null,
   });
 
   const { entry } = started;

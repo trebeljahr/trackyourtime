@@ -6,8 +6,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { privateTimerRoot, privateWorkspaceChainRoot, privateWorkspaceManifest, privateWorkspaceManifestForReader, createPrivateWorkspaceReplica, privateReplicaIdentityFromDirectory, privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, encryptPrivateRecord, signPrivateInitialProjectionRoot, verifyPrivateInitialProjection, privateInitialSnapshotProjection, signPrivateWorkspacePolicy, emptyPrivateTimerCheckpoint, privateRecordDigest, signPrivateAccountInventory } from "@starter/core";
 import { API_LEVEL, type SignedPrivateChainedEdit, type SignedPrivateTimer, type EncryptedRecord, type TimeEntry } from "@starter/shared";
 import { privateManualEntryFixture, seedPrivateWorkspaceClient } from "@/test-private-recovery";
-const state = vi.hoisted(() => ({ origin: "https://api.example.test", selected: "standard", level: 38, tokenRevision: 0, note: vi.fn() }));
-vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: async () => {}, rebaseApiUrl: (url: string) => url }));
+const state = vi.hoisted(() => ({ origin: "https://api.example.test", selected: "standard", level: 38, tokenRevision: 0, ready: async () => {}, note: vi.fn() }));
+vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, getAbsoluteApiOrigin: () => state.origin, getDefaultAbsoluteApiOrigin: () => state.origin, subscribeApiOrigin: () => () => {}, whenApiOriginReady: () => state.ready(), rebaseApiUrl: (url: string) => url }));
 vi.mock("./active-workspace", () => ({ getActiveWorkspaceId: () => state.selected, subscribeActiveWorkspace: () => () => {}, isActiveWorkspaceReady: () => true, whenActiveWorkspaceReady: async () => {}, getKnownWorkspaceIds: () => new Set(["workspace", "standard"]), getKnownWorkspacesOwner: () => "owner", getActiveWorkspaceSnapshot: () => ({ activeId: state.selected, workspaces: null }), workspaceNameFor: () => "Synthetic workspace" }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => null }));
 vi.mock("./server-level", () => ({ currentServerApiLevel: () => state.level, noteClientTooOld: () => {} }));
@@ -26,7 +26,7 @@ const { writeRunningMirror, __resetRunningMirrorForTests } = await import("./run
 let closers: (() => void)[] = [];
 beforeEach(async () => {
   vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); vi.stubEnv("NEXT_PUBLIC_API_URL", state.origin); localStorage.clear();
-  state.origin = "https://api.example.test"; state.selected = "standard"; state.level = API_LEVEL; state.tokenRevision = 0; state.note.mockReset(); closers = [];
+  state.origin = "https://api.example.test"; state.selected = "standard"; state.level = API_LEVEL; state.tokenRevision = 0; state.ready = async () => {}; state.note.mockReset(); closers = [];
   session.lockPrivateData(); session.privateAccountChanged("owner"); __resetRunningMirrorForTests(); offline.__resetOfflineQueueForTests(); offline.__resetOfflineQueueOwnerForTests(); await offline.setOfflineQueueOwner("owner");
 });
 afterEach(() => { for (const close of closers.reverse()) close(); session.lockPrivateData(); __resetRunningMirrorForTests(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -207,7 +207,7 @@ it("never forwards a private retry into standard storage after selection changes
 
 function serveHandoff(f: Awaited<ReturnType<typeof fixture>>, loseStandardReply = false) {
   const journal: SignedPrivateChainedEdit[] = [], history: SignedPrivateTimer[] = [], results = new Map<string, TimeEntry>(), requests: { path: string; input: Record<string, unknown> }[] = [];
-  let standardCreated = 0, running: TimeEntry | null = null;
+  let standardCreated = 0, running: TimeEntry | null = null, continuationDescription = "Original standard continuation source";
   f.fetcher.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const target = new URL(String(url)), path = target.pathname.split("/").at(-1)!, input = JSON.parse(init?.body ? String(init.body) : target.searchParams.get("input") ?? "{}");
     requests.push({ path, input }); expect(String(init?.body)).not.toMatch(/Hidden private source|Private source clock/); let data;
@@ -226,6 +226,9 @@ function serveHandoff(f: Awaited<ReturnType<typeof fixture>>, loseStandardReply 
       const through = input.through ?? journal.length + 1, changes = [];
       for (const signed of journal.filter(row => row.edit.expectedRevision >= input.after && row.edit.expectedRevision < through)) changes.push({ revision: signed.edit.expectedRevision + 1, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(signed.edit), "owner"), signature: signed.readerSignatures.find(row => row.userId === "owner")!.signature, records: signed.edit.records, chain: signed.chain });
       data = { through, next: null, changes };
+    } else if (path === "privacy.standardContinueTimerInput") {
+      expect(input.workspaceId).toBe("standard");
+      data = { description: continuationDescription, start: input.at, timeZone: input.timeZone, originId: input.originId, tagIds: ["retained-tag"], source: "desktop", billable: true };
     } else if (path === "privacy.standardTimerResult") {
       expect(history.some(row => row.header.operationId === input.operationId && row.header.standardStart?.entryId === input.entryId)).toBe(true);
       data = results.get(input.operationId); if (!data) throw new Error("No original standard result");
@@ -233,7 +236,7 @@ function serveHandoff(f: Awaited<ReturnType<typeof fixture>>, loseStandardReply 
     else throw new Error("Unexpected synthetic handoff route");
     return new Response(JSON.stringify({ result: { data } }), { headers: { "content-type": "application/json" } });
   });
-  return { requests, history, results, get standardCreated() { return standardCreated; }, stopStandard: () => { running = null; } };
+  return { requests, history, results, changeContinuation: () => { continuationDescription = "Changed after original preparation"; }, get standardCreated() { return standardCreated; }, stopStandard: () => { running = null; } };
 }
 it("finishes a private-to-standard SDK handoff and keeps its private replacement notice out of the mirror", async () => {
   const f = await fixture("Hidden private source"); await f.client.mutation("entries.start", { start: stamp, operationId: crypto.randomUUID(), description: "Private source clock" });
@@ -273,4 +276,43 @@ it("refuses a private current-entry body addressed to a standard workspace befor
   await expect(f.client.mutation("entries.resolveRunaway", { id: operationId, resolution: "end-at", start: stamp, end })).rejects.toThrow("own workspace");
   await expect(f.client.mutation("entries.remove", { id: operationId })).rejects.toThrow("own workspace");
   expect(f.fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); expect((await f.timer.read()).pending).toBe(1);
+});
+
+it("continues a standard source atomically after private time and reuses the encrypted recipe", async () => {
+  const f = await fixture("Hidden private source"); await f.client.mutation("entries.start", { start: stamp, operationId: crypto.randomUUID(), description: "Private source clock" });
+  const backend = serveHandoff(f); state.selected = "standard"; vi.spyOn(Date, "now").mockReturnValue(Date.parse(end));
+  const input = { operationId: crypto.randomUUID(), id: "000000000000000000000001", timeZone: "Australia/Sydney", originId: "continue-sdk-test" };
+  const started = await f.client.mutation("entries.continue", input) as TimeEntry;
+  expect(started).toMatchObject({ workspaceId: "standard", description: "Original standard continuation source", start: end, timeZone: input.timeZone, tagIds: ["retained-tag"], replaced: { workspaceName: "Hidden private source", end } });
+  backend.changeContinuation(); backend.stopStandard(); vi.mocked(Date.now).mockReturnValue(Date.parse(end) + 60_000);
+  expect(await f.client.mutation("entries.continue", input)).toEqual(started);
+  expect(backend.standardCreated).toBe(1); expect(backend.requests.filter(row => row.path === "privacy.standardContinueTimerInput")).toHaveLength(1);
+  const count = backend.requests.length;
+  await expect(f.client.mutation("entries.continue", { ...input, id: "000000000000000000000002" })).rejects.toThrow("different request");
+  expect(backend.requests).toHaveLength(count); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+it("recovers a continued standard timer after a lost handoff reply without preparing its source twice", async () => {
+  const f = await fixture(); await f.client.mutation("entries.start", { start: stamp, operationId: crypto.randomUUID() });
+  const backend = serveHandoff(f, true); state.selected = "standard"; vi.spyOn(Date, "now").mockReturnValue(Date.parse(end));
+  const input = { operationId: crypto.randomUUID(), id: "000000000000000000000001" };
+  await expect(f.client.mutation("entries.continue", input)).rejects.toThrow("handoff is saved");
+  backend.changeContinuation(); vi.mocked(Date.now).mockReturnValue(Date.parse(end) + 60_000);
+  expect(await f.client.mutation("entries.continue", input)).toMatchObject({ description: "Original standard continuation source", start: end });
+  expect(backend.standardCreated).toBe(1); expect(backend.requests.filter(row => row.path === "privacy.standardContinueTimerInput")).toHaveLength(1); expect((await f.timer.read()).pending).toBe(0);
+});
+it("keeps private time intact when standard continuation preparation is unsupported or unavailable", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(); await f.client.mutation("entries.start", { start: stamp, operationId });
+  state.selected = "standard"; state.level = 40; f.fetcher.mockClear();
+  await expect(f.client.mutation("entries.continue", { id: "000000000000000000000001" })).rejects.toThrow("supports this encrypted data protocol");
+  expect(f.fetcher).not.toHaveBeenCalled(); expect((await f.timer.read()).local.current?.entryId).toBe(operationId); expect((await f.timer.read()).pending).toBe(1);
+  state.level = API_LEVEL; f.fetcher.mockRejectedValue(new TypeError("Offline"));
+  await expect(f.client.mutation("entries.continue", { id: "000000000000000000000001" })).rejects.toThrow("Offline");
+  expect((await f.timer.read()).local.current?.entryId).toBe(operationId); expect((await f.timer.read()).pending).toBe(1); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+
+it("refuses continuation preparation when native credentials change before dispatch", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(); await f.client.mutation("entries.start", { operationId, start: stamp });
+  state.selected = "standard"; state.ready = async () => { state.tokenRevision++; }; f.fetcher.mockClear();
+  await expect(f.client.mutation("entries.continue", { id: "000000000000000000000001" })).rejects.toThrow();
+  expect(f.fetcher).not.toHaveBeenCalled(); expect((await f.timer.read()).local.current?.entryId).toBe(operationId); expect((await f.timer.read()).pending).toBe(1); expect(await offline.getOfflineQueue().list()).toEqual([]);
 });

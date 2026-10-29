@@ -255,3 +255,20 @@ it("retains a standard handoff's original implicit start and hides its target fr
   assert.throws(() => verifyPrivateStandardHandoffIntent({ ...options, intent: changed, payload: opened }), /different request/);
   f.records.push(record.record); await assert.rejects(privateStandardHandoffRecord({ ...options, intent, accountRevision: 10, replaced: null, now: Date.now() }), /original timer receipt/);
 });
+
+it("binds a prepared standard continuation to its original source, zone and action", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(), target = { ...scope, workspaceId: "standard" }, input = { id: "000000000000000000000001", timeZone: "Australia/Sydney", originId: "continuation-test" };
+  const options = { scope, directory: f.directory, records: f.records, current: () => true, privateKey: f.privateKey };
+  const intent = await preparePrivateTimerIntent({ scope: target, path: "entries.continue", input, operationId, current: () => true });
+  const recipe = { start: stamp, description: "Original standard source", timeZone: input.timeZone, originId: input.originId };
+  const saved = await privateStandardHandoffRecord({ ...options, intent, accountRevision: 9, replaced: null, now: Date.parse(stamp), standardInput: recipe });
+  const payload = await openPrivateTimerActorReceipt({ ...options, record: saved.record });
+  assert.deepEqual(verifyPrivateStandardHandoffIntent({ ...options, intent, payload }).input, recipe);
+  for (const change of [{ id: "000000000000000000000002" }, { timeZone: "Europe/Berlin" }]) {
+    const changed = await preparePrivateTimerIntent({ scope: target, path: "entries.continue", input: { ...input, ...change }, operationId, current: () => true });
+    assert.throws(() => verifyPrivateStandardHandoffIntent({ ...options, intent: changed, payload }));
+  }
+  for (const change of [{ start: new Date(Date.parse(stamp) + 1000).toISOString() }, { timeZone: "Europe/Berlin" }, { originId: "another" }]) await assert.rejects(privateStandardHandoffRecord({ ...options, intent, accountRevision: 9, replaced: null, now: Date.parse(stamp), standardInput: { ...recipe, ...change } }), /differs from its original/);
+  const wrongPath = await preparePrivateTimerIntent({ scope: target, path: "entries.start", input: recipe, operationId, current: () => true });
+  assert.throws(() => verifyPrivateStandardHandoffIntent({ ...options, intent: wrongPath, payload }));
+});

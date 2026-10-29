@@ -77,11 +77,10 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
       const pointer = snapshot.local.current, targetId = path === "entries.stop" || path === "entries.discard" ? pointer?.workspaceId ?? workspaceId : workspaceId;
       const targetRoute = targetId === workspaceId ? route : await workspaceContentRoute(userId, targetId, binding.server); check(); targetRoute.check();
       if (targetRoute.mode === "standard") {
-        if (pointer && path === "entries.start") {
+        if (pointer && (path === "entries.start" || path === "entries.continue")) {
           const source = await copyFor(pointer.workspaceId);
-          return { handoff: await stagePrivateStandardHandoff({ userId, workspaceId, body, action: captured, timer: context.timer, local: snapshot.local, copy: source, check }) };
+          return { handoff: await stagePrivateStandardHandoff({ userId, workspaceId, path, body, action: captured, timer: context.timer, local: snapshot.local, copy: source, check }) };
         }
-        if (pointer && ["entries.start", "entries.continue"].includes(path)) throw new PrivateContentUnavailableError("Continuing into a standard workspace is not available yet. Current time was kept.");
         return { handled: false as const };
       }
       if (__durableTempId !== undefined && (typeof __durableTempId !== "string" || !__durableTempId || __durableTempId.length > 200 || !["entries.start", "entries.continue"].includes(path))) throw new PrivateContentUnavailableError("Resolve the original timer identity before changing private time");

@@ -1,3 +1,5 @@
+import { Tag } from "../models/Tag.js";
+import { standardContinueTimerInput } from "../services/privacy/standard-timer-continue.js";
 import assert from "node:assert/strict";
 import { before, beforeEach, after, describe, it } from "node:test";
 import { canonicalJson, createKeyPair, createSigningPair, decryptPrivateRecord, encodeSecret, encryptPrivateRecord, privateMemberKeyFingerprint, privateRecordDigest, privateTimerEditBindings, privateTimerWitnessFromPacket, verifyPrivateTimerCurrentWitness, randomSecret, seal, signPrivateChainedWorkspaceEdit, signPrivateTimer, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory, type VerifiedPrivateDirectory, type PlainPrivateRecord } from "@starter/core";
@@ -62,6 +64,29 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     }
   });
   after(dropTestDatabase);
+  it("prepares continuation fields without closing private time or copying old financial snapshots", async () => {
+    const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer));
+    const tag = await Tag.create({ workspaceId: standard, name: "Retained", createdBy: scope.userId });
+    const source = await standardEntry(new Date(instant));
+    await TimeEntry.updateOne({ _id: source._id }, { $set: { billable: true, hourlyRate: 999, timeZone: "Europe/Berlin", tagIds: [String(tag._id), crypto.randomUUID().replaceAll("-", "").slice(0, 24)] } });
+    const before = await privateTimerCheckpoint(scope.userId), original = await TimeEntry.findById(source._id).lean();
+    const result = await standardContinueTimerInput(scope.userId, { workspaceId: standard, id: String(source._id), at: instant, timeZone: "Australia/Sydney", originId: "continuation-test" });
+    assert.equal(result.description, source.description); assert.equal(result.start, instant); assert.equal(result.timeZone, "Australia/Sydney"); assert.equal(result.originId, "continuation-test"); assert.equal(result.billable, true); assert.deepEqual(result.tagIds, [String(tag._id)]);
+    assert.equal("hourlyRate" in result, false); assert.equal("authorId" in result, false); assert.equal("end" in result, false);
+    assert.deepEqual(await TimeEntry.findById(source._id).lean(), original); assert.deepEqual(await privateTimerCheckpoint(scope.userId), before);
+    assert.equal(await EntryOperation.countDocuments(), 0); assert.equal(await TimeEntry.countDocuments(), 1);
+  });
+  it("checks fresh continuation source visibility, membership and standard storage mode", async () => {
+    const source = await TimeEntry.create({ workspaceId: standard, authorId: "colleague", description: "Visible colleague source", start: new Date("2026-10-01T10:00:00.000Z"), end: new Date(instant) }), request = { workspaceId: standard, id: String(source._id), at: instant };
+    await assert.rejects(standardContinueTimerInput(scope.userId, request), { code: "NOT_FOUND" });
+    await WorkspaceMember.updateOne({ workspaceId: standard, userId: scope.userId }, { $set: { canViewOthersTime: true } });
+    assert.equal((await standardContinueTimerInput(scope.userId, request)).description, source.description);
+    await assert.rejects(standardContinueTimerInput(scope.userId, { ...request, workspaceId: a }), { code: "PRECONDITION_FAILED" });
+    await WorkspaceMember.deleteOne({ workspaceId: standard, userId: scope.userId });
+    await assert.rejects(standardContinueTimerInput(scope.userId, request), { code: "NOT_FOUND" });
+    assert.equal(await TimeEntry.countDocuments(), 1); assert.equal(await EntryOperation.countDocuments(), 0);
+  });
+
   async function receiptPacket(request: PrivateTimerTransition, receiptOperationId = request.signed.header.operationId) {
     const original = request.edits[0]!, directory = directories.get(original.edit.workspaceId)!;
     const receipt = await encryptPrivateRecord(original.edit.workspaceId, { kind: "imports", id: `entryoperations:${receiptOperationId}`, authorId: scope.userId, value: { _id: receiptOperationId, workspaceId: original.edit.workspaceId, userId: scope.userId, protocol: "trackyourtime-private-timer-operation-v1", result: { description: "Encrypted original retry result" } } }, directory.signed.directory.members, original.edit.expectedRevision + 1);
@@ -245,6 +270,10 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
   it("keeps public timer writes closed and confines metadata reads to the authenticated account", async t => {
     const originalOrigin = env.BETTER_AUTH_URL; Reflect.set(env, "BETTER_AUTH_URL", scope.server); t.after(() => { Reflect.set(env, "BETTER_AUTH_URL", originalOrigin); });
     const caller = privacyRouter.createCaller({ user: { id: scope.userId }, session: { user: { id: scope.userId } } } as unknown as Context);
+    const continuation = { workspaceId: standard, id: "000000000000000000000001", at: instant };
+    await assert.rejects(caller.standardContinueTimerInput(continuation), { code: "NOT_FOUND" });
+    await assert.rejects(privacyRouter.createCaller({ user: null, session: null } as unknown as Context).standardContinueTimerInput(continuation), { code: "UNAUTHORIZED" });
+    await assert.rejects(caller.standardContinueTimerInput({ ...continuation, userId: "other" } as never), { code: "BAD_REQUEST" });
     assert.deepEqual(await caller.timerVersions({ after: 0 }), { through: 0, root: null, next: null, versions: [] });
     await assert.rejects(caller.timerWrite(await prepare(null, point())), { code: "NOT_IMPLEMENTED" });
     assert.equal(await PrivateRecord.countDocuments(), 0); assert.equal(await PrivateTimerVersion.countDocuments(), 0);

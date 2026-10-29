@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { startTimerSchema, stopTimerSchema, entryIdInputSchema, continueEntrySchema, updateEntrySchema, privateStandardTimerStartInputSchema, recipientBoxSchema, type TimeEntry, type StartTimerReplaced } from "@starter/shared";
+import { startTimerSchema, stopTimerSchema, entryIdInputSchema, continueEntrySchema, updateEntrySchema, privateStandardTimerStartInputSchema, recipientBoxSchema, type PrivateStandardTimerStartInput, type TimeEntry, type StartTimerReplaced } from "@starter/shared";
 import { canonicalJson, sealForRecipient, unsealForRecipient, type PublicKey } from "./crypto.js";
 import { privateRecordDigest } from "./workspace-edits.js";
 import { privateEntryReader } from "./entry-view.js";
@@ -89,30 +89,34 @@ export async function privateTimerIntentRecord(options: PrivateViewOptions & { i
 
 const standardHandoffProtocol = "trackyourtime-private-standard-start-intent-v1";
 const standardHandoffSchema = z.object({
-  protocol: z.literal(standardHandoffProtocol), operation: z.literal("entries.start"), requestHash: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  protocol: z.literal(standardHandoffProtocol), operation: z.enum(["entries.start", "entries.continue"]), requestHash: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   workspaceId: z.string().min(1).max(100), entryId: z.string().regex(/^[a-f0-9]{24}$/), accountRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER - 1),
   input: privateStandardTimerStartInputSchema,
   replaced: z.object({ entryId: z.string().min(1).max(100), workspaceId: z.string().min(1).max(100), workspaceName: z.string().max(512), end: z.iso.datetime({ offset: true }) }).strict().nullable(),
 }).strict();
 export type PrivateStandardHandoffIntent = z.infer<typeof standardHandoffSchema>;
 function checkStandardIntent(options: PrivateViewOptions, intent: VerifiedPrivateTimerIntent) {
-  if (!intents.has(intent) || !intent.current() || intent.path !== "entries.start" || intent.scope.server !== options.scope.server || intent.scope.userId !== options.scope.userId || intent.scope.workspaceId === options.scope.workspaceId) throw new Error("Private standard timer intent changed");
+  if (!intents.has(intent) || !intent.current() || !["entries.start", "entries.continue"].includes(intent.path) || intent.scope.server !== options.scope.server || intent.scope.userId !== options.scope.userId || intent.scope.workspaceId === options.scope.workspaceId) throw new Error("Private standard timer intent changed");
   privateViewSource(options).check();
 }
 /** The standard target/body and old workspace notice are sealed only to the
  * account author. The source workspace's owner receives no new target content. */
-export async function privateStandardHandoffRecord(options: PrivateViewOptions & { intent: VerifiedPrivateTimerIntent; accountRevision: number; replaced: StartTimerReplaced | null; now: number }) {
+export async function privateStandardHandoffRecord(options: PrivateViewOptions & { intent: VerifiedPrivateTimerIntent; accountRevision: number; replaced: StartTimerReplaced | null; now: number; standardInput?: PrivateStandardTimerStartInput }) {
   checkStandardIntent(options, options.intent);
   if (privateViewSource(options).ofKind("imports").some(row => row.id === options.intent.receiptId)) throw new Error("Keep the original timer receipt instead of replacing it");
-  const input = privateStandardTimerStartInputSchema.parse({ ...options.intent.input, start: options.intent.input.start ?? new Date(options.now).toISOString() });
+  if (options.intent.path === "entries.start" && options.standardInput !== undefined) throw new Error("A standard start must keep its original input");
+  const input = privateStandardTimerStartInputSchema.parse(options.intent.path === "entries.continue" ? options.standardInput : { ...options.intent.input, start: options.intent.input.start ?? new Date(options.now).toISOString() });
+  if (options.intent.path === "entries.continue" && (Date.parse(input.start) !== options.now || (input.timeZone ?? null) !== (options.intent.input.timeZone ?? null) || input.originId !== options.intent.input.originId)) throw new Error("Standard continuation preparation differs from its original request");
   if (options.replaced && (options.replaced.workspaceId !== options.scope.workspaceId || Date.parse(options.replaced.end) !== Date.parse(input.start))) throw new Error("Private timer replacement notice differs from its source");
-  const payload = standardHandoffSchema.parse({ protocol: standardHandoffProtocol, operation: "entries.start", requestHash: options.intent.requestHash, workspaceId: options.intent.scope.workspaceId, entryId: options.intent.operationId.replaceAll("-", "").slice(0, 24).toLowerCase(), accountRevision: options.accountRevision, input, replaced: structuredClone(options.replaced) });
+  const payload = standardHandoffSchema.parse({ protocol: standardHandoffProtocol, operation: options.intent.path, requestHash: options.intent.requestHash, workspaceId: options.intent.scope.workspaceId, entryId: options.intent.operationId.replaceAll("-", "").slice(0, 24).toLowerCase(), accountRevision: options.accountRevision, input, replaced: structuredClone(options.replaced) });
   const record = await privateTimerActorReceipt({ ...options, operationId: options.intent.operationId, payload }); checkStandardIntent(options, options.intent);
   return { record, payload };
 }
 export function verifyPrivateStandardHandoffIntent(options: PrivateViewOptions & { intent: VerifiedPrivateTimerIntent; payload: unknown }): PrivateStandardHandoffIntent {
   checkStandardIntent(options, options.intent);
-  const payload = standardHandoffSchema.parse(options.payload), expected = privateStandardTimerStartInputSchema.parse({ ...options.intent.input, start: options.intent.input.start ?? payload.input.start });
+  const payload = standardHandoffSchema.parse(options.payload);
+  const expected = options.intent.path === "entries.start" ? privateStandardTimerStartInputSchema.parse({ ...options.intent.input, start: options.intent.input.start ?? payload.input.start }) : payload.input;
+  if (payload.operation !== options.intent.path || (options.intent.path === "entries.continue" && ((payload.input.timeZone ?? null) !== (options.intent.input.timeZone ?? null) || payload.input.originId !== options.intent.input.originId))) throw new Error("Private standard timer continuation differs from its original request");
   if (payload.workspaceId !== options.intent.scope.workspaceId || payload.entryId !== options.intent.operationId.replaceAll("-", "").slice(0, 24).toLowerCase() || payload.requestHash !== options.intent.requestHash || canonicalJson(payload.input) !== canonicalJson(expected)) throw new Error("Private standard timer operation identity was reused for a different request");
   return payload;
 }
