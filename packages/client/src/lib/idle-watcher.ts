@@ -17,3 +17,12 @@ import { createIdleWatcher, type IdleWatcher } from "@starter/core";
  * of it — which is exactly the behaviour we want anyway.
  */
 export const idleWatcher: IdleWatcher = createIdleWatcher();
+
+let workspaceContext: string | null | undefined;
+/** Public scope only. A held resume must never become a new workspace's draft. */
+export function bindIdleWatcherWorkspace(workspaceId: string | null): boolean {
+  if (workspaceContext === workspaceId) return false;
+  workspaceContext = workspaceId;
+  idleWatcher.reset();
+  return true;
+}

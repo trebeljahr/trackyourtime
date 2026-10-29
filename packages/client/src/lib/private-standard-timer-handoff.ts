@@ -1,5 +1,5 @@
 import { encryptPrivateRecord, privateTimerEntryEdit, PRIVATE_ENTRY_EDIT_KINDS, preparePrivateTimerIntent, privateStandardHandoffRecord, privateTimerEditBindings, signPrivateChainedWorkspaceEdit, signPrivateTimer, privateWorkspaceSummary, PrivateTimerConflictError, type PrivateStandardHandoffIntent, type PrivateTimerCheckpoint } from "@starter/core";
-import { standardCurrentTimerSchema, type StartTimerReplaced } from "@starter/shared";
+import { standardCurrentTimerSchema, type StartTimerReplaced, type TimeEntry } from "@starter/shared";
 import type { PrivateTimerAction } from "./private-timer-action";
 import type { privateAccountTimerStore } from "./private-replica";
 import type { openPrivateWorkspaceCoordinatorCopy } from "./private-workspace-session";
@@ -46,7 +46,7 @@ export async function stagePrivateStandardHandoff(options: {
 }
 /** No original-result read is allowed to clear pending work. Verify both
  * histories first; the server endpoint is replay-only and cannot recreate time. */
-export async function finishPrivateStandardHandoff(userId: string, saved: SavedPrivateStandardHandoff, original: PrivateRequestScope) {
+export async function finishPrivateStandardHandoff(userId: string, saved: SavedPrivateStandardHandoff, original: PrivateRequestScope): Promise<{ handled: true; value: TimeEntry & { replaced: StartTimerReplaced | null } }> {
   const binding = privateClientScope(userId), deadline = performance.now() + 20_000;
   const check = () => { binding.check(); checkPrivateRequestScope(original); };
   const current = () => { try { check(); return performance.now() < deadline; } catch { return false; } };

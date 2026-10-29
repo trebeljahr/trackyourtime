@@ -182,7 +182,7 @@ export const privateContentLink = (): TRPCLink<AppRouter> => () => ({ op, next }
         if (cancelled) return;
         if (current.handled) { observer.next({ result: { data: current.value } } as never); observer.complete(); return; }
       }
-      if (op.type === "mutation" && isPrivateTimerIntentPath(op.path)) {
+      if (op.type === "mutation" && op.path.startsWith("entries.")) {
         const saved = await mutatePrivateAccountTimer(originalScope.userId, op.path, addressed, op.context.privateTimerAction as PrivateTimerAction); checkPrivateRequestScope(originalScope);
         if (saved.handled) { if (!cancelled) { observer.next({ result: { data: saved.value } } as never); observer.complete(); } return; }
       }

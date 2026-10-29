@@ -1,6 +1,6 @@
 import { openPrivateTimerActorReceipt, isPrivateStandardHandoffPayload, verifyPrivateStandardHandoffIntent, canonicalJson, readersForPrivateRecord, encryptPrivateRecord, isPrivateTimerIntentPath, preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord, privateTimerEntryEdit, privateEntryEdit, PRIVATE_ENTRY_EDIT_KINDS, privateTimerEditBindings, signPrivateChainedWorkspaceEdit, signPrivateTimer, type PlainPrivateRecord, type PrivateTimerEntryCommand } from "@starter/core";
 import { workspaceNameFor } from "./active-workspace";
-import { privateTimerReplacement, stagePrivateStandardHandoff, finishPrivateStandardHandoff } from "./private-standard-timer-handoff";
+import { privateTimerReplacement, stagePrivateStandardHandoff, finishPrivateStandardHandoff, type SavedPrivateStandardHandoff } from "./private-standard-timer-handoff";
 import type { SignedPrivateChainedEdit, TimeEntry, StartTimerReplaced } from "@starter/shared";
 import { capturePrivateRequestScope, checkPrivateRequestScope } from "./private-request-scope";
 import { privateClientScope } from "./private-client-scope";
@@ -19,20 +19,27 @@ import { PrivateContentUnavailableError } from "./private-content-error";
 import type { PrivateTimerAction } from "./private-timer-action";
 type Copy = Awaited<ReturnType<typeof openPrivateWorkspaceCoordinatorCopy>>;
 type Result = (TimeEntry & { replaced?: StartTimerReplaced | null }) | { success: true; id: string };
+type MutationResult = { handled: false } | { handled: true; value: Result };
+type LocalOutcome = MutationResult | { handoff: SavedPrivateStandardHandoff };
 /** Actual SDK adapter. One durable preparing packet precedes all workspace
  * publication. Retried intents return their encrypted original result; no
  * timer body can enter the ordinary HTTP queue or plaintext running mirror. */
-export async function mutatePrivateAccountTimer(userId: string, path: string, raw: unknown, action: PrivateTimerAction) {
-  if (!isPrivateTimerIntentPath(path) || !privateSession(userId)) return { handled: false as const };
+export async function mutatePrivateAccountTimer(userId: string, path: string, raw: unknown, action?: PrivateTimerAction): Promise<MutationResult> {
+  if (!privateSession(userId)) return { handled: false as const };
   const original = capturePrivateRequestScope(), binding = privateClientScope(userId), input = structuredClone(raw) as Record<string, unknown>;
   if (!input || typeof input !== "object" || Array.isArray(input) || typeof input.workspaceId !== "string") throw new PrivateContentUnavailableError("Choose the original timer workspace before saving time");
   if (input.__privateIntentId !== undefined) return { handled: false as const };
-  const workspaceId = input.workspaceId, captured = Object.freeze({ ...action });
-  const outcome = await withPrivateAccountTimerGate(userId, async context => {
+  const workspaceId = input.workspaceId, captured = action ? Object.freeze({ ...action }) : null;
+  const outcome = await withPrivateAccountTimerGate<LocalOutcome>(userId, async context => {
     const check = () => { context.check(); checkPrivateRequestScope(original); }; check();
     if (!context.timer) return { handled: false as const };
     const snapshot = (await context.timer.exportRecovery())!; check();
     if (snapshot.state.conflict) throw new PrivateContentUnavailableError("The account timer needs conflict review. Pending work was kept.");
+    const nested = input.input && typeof input.input === "object" && !Array.isArray(input.input) ? input.input as Record<string, unknown> : null;
+    const addressedIds = [input.id, nested?.id, ...(Array.isArray(input.entries) ? input.entries.map(row => row && typeof row === "object" ? (row as { id?: unknown }).id : undefined) : [])];
+    if (snapshot.local.current && snapshot.local.current.workspaceId !== workspaceId && addressedIds.includes(snapshot.local.current.entryId) && !["entries.stop", "entries.discard"].includes(path)) throw new PrivateContentUnavailableError("Edit the running timer from its own workspace");
+    if (!isPrivateTimerIntentPath(path)) return { handled: false as const };
+    if (!captured) throw new PrivateContentUnavailableError("The original timer action could not be verified");
     const route = await workspaceContentRoute(userId, workspaceId, binding.server); check(); route.check();
     const copies = new Map<string, Copy>();
     const copyFor = async (id: string) => { let copy = copies.get(id); if (!copy) { copy = await openPrivateWorkspaceCoordinatorCopy(userId, id); copies.set(id, copy); check(); } return copy; };
@@ -74,7 +81,7 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
           const source = await copyFor(pointer.workspaceId);
           return { handoff: await stagePrivateStandardHandoff({ userId, workspaceId, body, action: captured, timer: context.timer, local: snapshot.local, copy: source, check }) };
         }
-        if (pointer && ["entries.start", "entries.continue"].includes(path)) throw new PrivateContentUnavailableError("Private-to-standard timer starts are not available in this client yet. Current time was kept.");
+        if (pointer && ["entries.start", "entries.continue"].includes(path)) throw new PrivateContentUnavailableError("Continuing into a standard workspace is not available yet. Current time was kept.");
         return { handled: false as const };
       }
       if (__durableTempId !== undefined && (typeof __durableTempId !== "string" || !__durableTempId || __durableTempId.length > 200 || !["entries.start", "entries.continue"].includes(path))) throw new PrivateContentUnavailableError("Resolve the original timer identity before changing private time");
@@ -117,7 +124,7 @@ export async function mutatePrivateAccountTimer(userId: string, path: string, ra
       if (["entries.start", "entries.continue"].includes(path) && "end" in result) {
         let replaced: StartTimerReplaced | null = null;
         if (pointer && pointer.workspaceId !== targetId) replaced = await privateTimerReplacement(await copyFor(pointer.workspaceId), pointer.entryId, switchingEnd);
-        else if (!pointer && current.value && current.value.workspaceId !== targetId) replaced = { entryId: current.value.id, workspaceId: current.value.workspaceId, workspaceName: workspaceNameFor(current.value.workspaceId), end: switchingEnd };
+        else if (!pointer && current.value && current.value.workspaceId !== targetId) replaced = { entryId: current.value.id, workspaceId: current.value.workspaceId, workspaceName: workspaceNameFor(current.value.workspaceId) ?? "", end: switchingEnd };
         result = { ...result, replaced };
       }
       check();

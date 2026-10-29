@@ -373,12 +373,13 @@ export const useSync = (): SyncStatus => {
  * right on the first frame after 90 seconds in the background.
  */
 export const timerStore = createTimerStore();
-subscribePrivateViewEpoch(() => { timerStore.getState().clear(); });
+subscribePrivateViewEpoch(() => { timerStore.getState().clear(); idleWatcher.reset(); });
 
 // The running timer is a person's. Whoever signs in next in this tab must not
 // see the previous account's clock while their own `entries.current` is on its
 // way — or, offline, instead of it.
 onSignOut(() => {
+  idleWatcher.reset();
   timerStore.getState().setRunning(null);
 });
 

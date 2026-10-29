@@ -252,6 +252,11 @@ describe("atomic account-wide private timer coordination", { skip: skipWithoutDa
     await assert.rejects(other.timerVersions({ after: 0 }), { code: "PRECONDITION_FAILED" });
     const anonymous = privacyRouter.createCaller({ user: null, session: null } as unknown as Context);
     await assert.rejects(anonymous.timerVersions({ after: 0 }), { code: "UNAUTHORIZED" });
+    const missingResult = { operationId: crypto.randomUUID(), workspaceId: standard, entryId: "a".repeat(24), input: { start: instant } };
+    await assert.rejects(caller.standardTimerResult(missingResult), { code: "NOT_FOUND" });
+    await assert.rejects(anonymous.standardTimerResult(missingResult), { code: "UNAUTHORIZED" });
+    await assert.rejects(caller.standardTimerResult({ ...missingResult, userId: "other" } as never), { code: "BAD_REQUEST" });
+
   });
   it("paginates a fixed timer root without including later account operations", async () => {
     const pointer = point(); await commitPrivateTimerTransition(scope, await prepare(null, pointer));

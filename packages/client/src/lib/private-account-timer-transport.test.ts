@@ -88,3 +88,16 @@ it("requires receipt support before publishing even an otherwise compatible time
   expect(await transport.commit(packet)).toEqual({ revision: 1, root });
   expect(String(f.fetcher.mock.calls[0]![1]!.body)).not.toContain("Private retry receipt");
 });
+
+it("refuses a retained standard body once the trusted target mode is private", async () => {
+  const f = await fixture(), signed = await signPrivateTimer({ ...f.packet.signed.header, operationId: crypto.randomUUID(), revision: 2, previousRoot: f.root, previous: f.packet.signed.header.current, current: null, standardStart: { workspaceId: "standard", entryId: "a".repeat(24) } }, f.secrets.signingPrivateKey, () => true);
+  const packet = { ...f.packet, signed, standardStartInput: { description: "Never send to converted target", start: "2026-10-29T02:00:00.000Z" } }, transport = privateAccountTimerTransport("owner");
+  state.mode = "encrypted"; await expect(transport.commit(packet)).rejects.toThrow("now private"); expect(f.fetcher).not.toHaveBeenCalled();
+});
+it("refuses a retained standard body after native credentials change during readiness", async () => {
+  const f = await fixture(), signed = await signPrivateTimer({ ...f.packet.signed.header, operationId: crypto.randomUUID(), revision: 2, previousRoot: f.root, previous: f.packet.signed.header.current, current: null, standardStart: { workspaceId: "standard", entryId: "a".repeat(24) } }, f.secrets.signingPrivateKey, () => true);
+  const packet = { ...f.packet, signed, standardStartInput: { description: "Original credential body", start: "2026-10-29T02:00:00.000Z" } }, transport = privateAccountTimerTransport("owner");
+  let enter!: () => void, release!: () => void; const entered = new Promise<void>(resolve => { enter = resolve; }), paused = new Promise<void>(resolve => { release = resolve; }); state.ready = async () => { enter(); await paused; };
+  const sending = transport.commit(packet); await entered; state.tokenRevision++; release();
+  await expect(sending).rejects.toThrow("changed"); expect(f.fetcher).not.toHaveBeenCalled();
+});

@@ -64,6 +64,8 @@ type MutationOptions = {
 };
 const options = new Map<string, MutationOptions>();
 const removedInputs: unknown[] = [];
+const startInputs: unknown[] = [];
+let stopAnswer: (() => Promise<void>) | null = null;
 let currentData: TimeEntry | null | undefined;
 const setCurrent = vi.fn((_key: undefined, next: TimeEntry | null) => {
   currentData = next;
@@ -77,8 +79,9 @@ const mutationStub = (path: string) => ({
     return {
       mutate: (input: unknown) => {
         if (path === "entries.remove") removedInputs.push(input);
+        if (path === "entries.start") startInputs.push(input);
       },
-      mutateAsync: asyncNoop,
+      mutateAsync: () => path === "entries.stop" && stopAnswer ? stopAnswer() : asyncNoop(),
       isPending: false,
     };
   },
@@ -185,7 +188,7 @@ beforeEach(async () => {
   online = true;
   currentData = null;
   enqueued.length = 0;
-  removedInputs.length = 0;
+  removedInputs.length = 0; startInputs.length = 0; stopAnswer = null;
   hookedMutations = null;
   options.clear();
   toastMessage.mockClear();
@@ -285,4 +288,15 @@ describe("entry mutations across workspaces", () => {
 
     expect(removedInputs).toEqual([{ id: "entry-delete", originId: expect.any(String) }]);
   });
+});
+
+it("does not resume an old private idle seed after the action's scope changes while stop settles", async () => {
+  const { registerPrivateMutationActionCapture } = await import("@/lib/private-mutation-guard");
+  let allowed = true, release!: () => void; stopAnswer = () => new Promise<void>(resolve => { release = resolve; });
+  const restore = registerPrivateMutationActionCapture(() => ({ current: () => allowed, check: () => { if (!allowed) throw new Error("Scope changed"); } }));
+  try {
+    hookedMutations!.splitAtIdle({ end: new Date().toISOString(), resume: { description: "Private held seed", projectId: null, taskId: null, billable: false } });
+    allowed = false; release(); await Promise.resolve(); await Promise.resolve();
+    expect(startInputs).toEqual([]);
+  } finally { restore(); }
 });

@@ -3,7 +3,7 @@ import { it } from "node:test";
 import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
 import { privateEntryEdit, privateTimerEntryEdit, preparePrivateEntryIntent, type VerifiedPrivateEntryIntent, type PrivateEntryEditPath, type PrivateTimerEntryCommand } from "../privacy/entry-edit.js";
-import { preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord, openPrivateTimerActorReceipt } from "../privacy/timer-intent.js";
+import { preparePrivateTimerIntent, readPrivateTimerIntent, privateTimerIntentRecord, openPrivateTimerActorReceipt, privateStandardHandoffRecord, verifyPrivateStandardHandoffIntent } from "../privacy/timer-intent.js";
 import { encryptPrivateRecord, decryptPrivateRecord, privateRecordsToRecovery, partitionPrivateRecovery, type PlainPrivateRecord } from "../privacy/records.js";
 import type { TimeEntry } from "@starter/shared";
 const scope = { server: "https://api.example.test", workspaceId: "workspace", userId: "author" }, stamp = "2026-10-27T00:00:00.000Z";
@@ -241,4 +241,17 @@ it("keeps legacy timer receipts readable while new receipts use the author-only 
   const intent = await preparePrivateTimerIntent({ scope, path: "entries.start", input, operationId, current: () => true }), start = f.timer({ kind: "start", entryId: operationId, input }, null);
   f.records.push({ kind: "imports", id: intent.receiptId, authorId: scope.userId, value: { _id: operationId, workspaceId: scope.workspaceId, userId: scope.userId, protocol: "trackyourtime-private-timer-operation-v1", operation: intent.path, requestHash: intent.requestHash, result: start.result } });
   assert.deepEqual(await readPrivateTimerIntent({ ...options, intent }), start.result);
+});
+
+it("retains a standard handoff's original implicit start and hides its target from source-workspace readers", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(), target = { ...scope, workspaceId: "standard" }, input = { description: "Standard target details" }, options = { scope, directory: f.directory, records: f.records, current: () => true, privateKey: f.privateKey };
+  const intent = await preparePrivateTimerIntent({ scope: target, path: "entries.start", input, operationId, current: () => true });
+  const record = await privateStandardHandoffRecord({ ...options, intent, accountRevision: 9, replaced: { entryId: crypto.randomUUID(), workspaceId: scope.workspaceId, workspaceName: "Private source name", end: stamp }, now: Date.parse(stamp) });
+  assert.equal(record.payload.input.start, stamp); assert.equal(record.payload.entryId, operationId.replaceAll("-", "").slice(0, 24)); assert.doesNotMatch(JSON.stringify(record.record.value), /Standard target details|Private source name|standard/);
+  const opened = await openPrivateTimerActorReceipt({ ...options, record: record.record });
+  const retry = await preparePrivateTimerIntent({ scope: target, path: "entries.start", input, operationId, current: () => true });
+  assert.deepEqual(verifyPrivateStandardHandoffIntent({ ...options, intent: retry, payload: opened }), record.payload);
+  const changed = await preparePrivateTimerIntent({ scope: target, path: "entries.start", input: { description: "Changed target" }, operationId, current: () => true });
+  assert.throws(() => verifyPrivateStandardHandoffIntent({ ...options, intent: changed, payload: opened }), /different request/);
+  f.records.push(record.record); await assert.rejects(privateStandardHandoffRecord({ ...options, intent, accountRevision: 10, replaced: null, now: Date.now() }), /original timer receipt/);
 });

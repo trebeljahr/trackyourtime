@@ -18,7 +18,9 @@ import { useIdleSignal, type IdleReading } from "@/hooks/use-idle-signal";
 import { useRunningEntry } from "@/hooks/use-sync";
 import { useFormatSettings } from "@/lib/format";
 import { notifyDesktop } from "@/lib/desktop-shell";
-import { idleWatcher } from "@/lib/idle-watcher";
+import { getActiveWorkspaceId, subscribeActiveWorkspace } from "@/lib/active-workspace";
+import { subscribePrivateViewEpoch } from "@/lib/private-view-lifecycle";
+import { bindIdleWatcherWorkspace, idleWatcher } from "@/lib/idle-watcher";
 import { translate } from "@/i18n/translate";
 
 /** Toast id, so a second reading replaces the prompt instead of stacking one. */
@@ -79,6 +81,7 @@ export const useIdleGuard = (): void => {
   const runPlanRef = React.useRef<(plan: IdlePlan) => void>(() => undefined);
 
   const answerIdle = React.useCallback((answer: IdleAnswer): void => {
+    bindIdleWatcherWorkspace(getActiveWorkspaceId());
     toast.dismiss(IDLE_TOAST_ID);
     runPlanRef.current(idleWatcher.answer(answer, Date.now()));
   }, []);
@@ -142,9 +145,22 @@ export const useIdleGuard = (): void => {
     runPlanRef.current = runPlan;
   }, [runPlan]);
 
+  React.useEffect(() => {
+    const refresh = () => { if (bindIdleWatcherWorkspace(getActiveWorkspaceId())) toast.dismiss(IDLE_TOAST_ID); };
+    refresh();
+    const pending = idleWatcher.pending(), running = contextRef.current.running;
+    if (pending && running?.id === pending.entryId && running.workspaceId === getActiveWorkspaceId()) runPlanRef.current({ kind: "prompt", pending });
+    const workspace = subscribeActiveWorkspace(refresh), privacy = subscribePrivateViewEpoch(() => { idleWatcher.reset(); toast.dismiss(IDLE_TOAST_ID); });
+    return () => { workspace(); privacy(); toast.dismiss(IDLE_TOAST_ID); };
+  }, []);
+
   const onReading = React.useCallback((reading: IdleReading): void => {
     const context = contextRef.current;
-    const entry = context.running;
+    const entry = context.running, workspaceId = getActiveWorkspaceId();
+    if (bindIdleWatcherWorkspace(workspaceId)) toast.dismiss(IDLE_TOAST_ID);
+    if (!workspaceId || (entry && entry.workspaceId !== workspaceId)) {
+      idleWatcher.reset(); toast.dismiss(IDLE_TOAST_ID); return;
+    }
 
     // A project may legitimately produce no input — meetings, reading, calls —
     // so its own behaviour wins over the workspace's.

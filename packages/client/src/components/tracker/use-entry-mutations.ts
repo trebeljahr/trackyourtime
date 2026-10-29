@@ -1048,9 +1048,10 @@ export const useEntryMutations = (): EntryMutations => {
    */
   const splitAtIdle = React.useCallback(
     ({ end, resume }: SplitAtIdleArgs): void => {
+      const action = capturePrivateMutationAction();
       const stopInput: OfflineStopInput = { end, originId: ORIGIN_ID };
       const openResumed = (): void => {
-        if (resume !== null) startTimer(resume);
+        if (resume !== null && action.current()) startTimer(resume);
       };
 
       void stopMutation.mutateAsync(stopInput).then(openResumed, (error) => {

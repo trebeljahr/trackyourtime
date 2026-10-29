@@ -13,7 +13,7 @@ vi.mock("@/hooks/use-api-origin", () => ({ useApiOrigin: () => ({ choice: null }
 vi.mock("@/lib/native-session", () => ({ getNativeToken: () => null }));
 vi.mock("@/lib/auth-client", () => ({ onSignOut: () => () => {} }));
 vi.mock("@/lib/running-mirror", () => ({ writeRunningMirror: async () => {} }));
-vi.mock("@/lib/idle-watcher", () => ({ idleWatcher: { noteRemoteActivity: vi.fn() } }));
+vi.mock("@/lib/idle-watcher", () => ({ idleWatcher: { noteRemoteActivity: vi.fn(), reset: vi.fn() } }));
 vi.mock("@/lib/revoke-this-device", () => ({ revokeThisDevice: vi.fn() }));
 vi.mock("@/lib/api-origin", () => ({ getApiOrigin: () => "", whenApiOriginReady: async () => {}, rebaseApiUrl: (url: string) => url }));
 let workspace = "ws-a";

@@ -31,8 +31,9 @@ beforeEach(async () => {
 });
 afterEach(() => { for (const close of closers.reverse()) close(); session.lockPrivateData(); __resetRunningMirrorForTests(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const stamp = "2026-10-29T01:00:00.000Z", end = "2026-10-29T02:00:00.000Z";
-async function fixture() {
+async function fixture(name?: string) {
   const f = await privateManualEntryFixture();
+  if (name) { await f.replica.enqueue({ records: [{ kind: "workspaceIdentity", id: "organization", authorId: null, value: { workspaceId: "workspace", organization: { _id: "workspace", id: "workspace", name, kind: "team" } } }] }); f.archive = await f.capture(); }
   f.enrollment = await signPrivateAccountInventory({ server: state.origin, userId: "owner", workspaces: [...f.archive.inventory.local.inventory.workspaces, { workspaceId: "standard", mode: "standard" }], previous: null, signingPrivateKey: f.secrets.signingPrivateKey, current: () => true });
   await seedPrivateWorkspaceClient(f); state.selected = "workspace";
   const host = await privateAccountTimerStorageHost("owner"); closers.push(host.close);
@@ -156,7 +157,7 @@ async function secondWorkspace(f: Awaited<ReturnType<typeof fixture>>, workspace
     await replica.bootstrapProjection(snapshot);
   } finally { host.close(); }
   const account = await privateAccountInventoryStorageHost("owner"), { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
-  try { const sync = await privateAccountWorkspaceInventorySync("owner", account.storage, account.exclusive); await sync.update([...f.enrollment.inventory.workspaces, { workspaceId, mode: "encrypted", signedPolicy }]); } finally { account.close(); }
+  try { const sync = await privateAccountWorkspaceInventorySync("owner", account.storage, account.exclusive); await sync.update([...f.enrollment.inventory.workspaces.filter(row => row.workspaceId !== workspaceId), { workspaceId, mode: "encrypted", signedPolicy }]); } finally { account.close(); }
 }
 it("publishes one atomic account plan when the real SDK switches between two private workspaces", async () => {
   const f = await fixture(); await secondWorkspace(f, "private-other");
@@ -202,4 +203,74 @@ it("never forwards a private retry into standard storage after selection changes
   state.selected = "standard"; f.fetcher.mockClear();
   await expect(f.client.mutation("entries.start", input)).rejects.toThrow("another workspace");
   expect(f.fetcher).not.toHaveBeenCalled(); expect((await f.timer.read()).pending).toBe(2); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+
+function serveHandoff(f: Awaited<ReturnType<typeof fixture>>, loseStandardReply = false) {
+  const journal: SignedPrivateChainedEdit[] = [], history: SignedPrivateTimer[] = [], results = new Map<string, TimeEntry>(), requests: { path: string; input: Record<string, unknown> }[] = [];
+  let standardCreated = 0, running: TimeEntry | null = null;
+  f.fetcher.mockImplementation(async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const target = new URL(String(url)), path = target.pathname.split("/").at(-1)!, input = JSON.parse(init?.body ? String(init.body) : target.searchParams.get("input") ?? "{}");
+    requests.push({ path, input }); expect(String(init?.body)).not.toMatch(/Hidden private source|Private source clock/); let data;
+    if (path === "privacy.timerVersions") { const through = input.through ?? history.length; data = { through, root: through ? await privateTimerRoot(history[through - 1]!) : null, next: null, versions: history.slice(input.after, through) }; }
+    else if (path === "privacy.chainedWrite") { const { workspaceId, ...signed } = input; expect(workspaceId).toBe("workspace"); journal.push(signed); data = { revision: 1 + journal.length, head: await privateWorkspaceChainRoot(signed.chain) }; }
+    else if (path === "privacy.timerWrite") {
+      journal.push(...input.edits); history.push(input.signed);
+      if (input.signed.header.standardStart) {
+        standardCreated++; const body = input.standardStartInput, pointer = input.signed.header.standardStart;
+        const entry: TimeEntry = { id: pointer.entryId, workspaceId: pointer.workspaceId, authorId: "owner", description: body.description ?? "", clientId: body.clientId ?? null, projectId: body.projectId ?? null, taskId: body.taskId ?? null, billable: body.billable ?? false, start: new Date(body.start).toISOString(), end: null, durationSec: 0, hourlyRate: null, currency: "EUR", source: body.source ?? "web", timeZone: body.timeZone ?? null, tagIds: body.tagIds ?? [], runaway: null, invoiceId: null, importId: null, createdAt: body.start, updatedAt: body.start };
+        results.set(input.signed.header.operationId, structuredClone(entry)); running = entry;
+        if (loseStandardReply) { loseStandardReply = false; throw new TypeError("Standard handoff reply lost"); }
+      }
+      data = { revision: history.length, root: await privateTimerRoot(input.signed) };
+    } else if (path === "privacy.chainedChanges") {
+      const through = input.through ?? journal.length + 1, changes = [];
+      for (const signed of journal.filter(row => row.edit.expectedRevision >= input.after && row.edit.expectedRevision < through)) changes.push({ revision: signed.edit.expectedRevision + 1, manifest: privateWorkspaceManifestForReader(await privateWorkspaceManifest(signed.edit), "owner"), signature: signed.readerSignatures.find(row => row.userId === "owner")!.signature, records: signed.edit.records, chain: signed.chain });
+      data = { through, next: null, changes };
+    } else if (path === "privacy.standardTimerResult") {
+      expect(history.some(row => row.header.operationId === input.operationId && row.header.standardStart?.entryId === input.entryId)).toBe(true);
+      data = results.get(input.operationId); if (!data) throw new Error("No original standard result");
+    } else if (path === "privacy.standardCurrentTimer") data = running;
+    else throw new Error("Unexpected synthetic handoff route");
+    return new Response(JSON.stringify({ result: { data } }), { headers: { "content-type": "application/json" } });
+  });
+  return { requests, history, results, get standardCreated() { return standardCreated; }, stopStandard: () => { running = null; } };
+}
+it("finishes a private-to-standard SDK handoff and keeps its private replacement notice out of the mirror", async () => {
+  const f = await fixture("Hidden private source"); await f.client.mutation("entries.start", { start: stamp, operationId: crypto.randomUUID(), description: "Private source clock" });
+  const backend = serveHandoff(f); state.selected = "standard";
+  const operationId = crypto.randomUUID(), input = { operationId, start: end, description: "Standard target clock" }, started = await f.client.mutation("entries.start", input) as TimeEntry;
+  expect(started).toMatchObject({ workspaceId: "standard", description: input.description, replaced: { workspaceName: "Hidden private source", end } });
+  expect((await f.timer.read()).pending).toBe(0); expect(backend.standardCreated).toBe(1); expect(await f.client.query("entries.current")).toMatchObject({ id: started.id });
+  backend.stopStandard(); expect(await f.client.mutation("entries.start", input)).toEqual(started); expect(backend.standardCreated).toBe(1); expect(await f.client.query("entries.current")).toBeNull();
+  await writeRunningMirror(started); expect(localStorage.getItem("trackyourtime.running-entry")).toContain("Standard target clock"); expect(JSON.stringify({ ...localStorage })).not.toContain("Hidden private source");
+  expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+it("resumes the exact saved handoff after a lost reply and blocks a premature ordinary stop", async () => {
+  const f = await fixture("Hidden private source"); await f.client.mutation("entries.start", { start: stamp, operationId: crypto.randomUUID(), description: "Private source clock" });
+  const backend = serveHandoff(f, true); state.selected = "standard"; const operationId = crypto.randomUUID(), input = { operationId, start: end, description: "Resumed standard clock" };
+  await expect(f.client.mutation("entries.start", input)).rejects.toThrow("handoff is saved");
+  expect(backend.standardCreated).toBe(1); expect((await f.timer.read()).pending).toBe(1); const packet = (await f.timer.exportRecovery())!.state.pending[0]!;
+  expect(packet.standardStartInput?.description).toBe(input.description);
+  await expect(f.client.mutation("entries.stop", { id: packet.signed.header.standardStart!.entryId, operationId: crypto.randomUUID(), end: "2026-10-29T03:00:00.000Z" })).rejects.toThrow("saved timer handoff");
+  expect(backend.requests.some(row => row.path.startsWith("entries."))).toBe(false);
+  expect(await f.client.mutation("entries.start", input)).toMatchObject({ id: packet.signed.header.standardStart!.entryId, description: input.description });
+  expect(backend.standardCreated).toBe(1); expect((await f.timer.read()).pending).toBe(0); expect(await offline.getOfflineQueue().list()).toEqual([]);
+});
+it("keeps a saved standard start sealed after its target policy changes to private", async () => {
+  const f = await fixture(); await f.client.mutation("entries.start", { start: stamp, operationId: crypto.randomUUID() });
+  state.selected = "standard"; f.fetcher.mockRejectedValue(new TypeError("Offline")); const operationId = crypto.randomUUID(), input = { operationId, start: end, description: "Pending standard intent" };
+  await expect(f.client.mutation("entries.start", input)).rejects.toThrow("handoff is saved");
+  await secondWorkspace(f, "standard"); const backend = serveHandoff(f), { syncPrivateAccountTimer } = await import("./private-account-timer-sync");
+  await expect(syncPrivateAccountTimer("owner")).rejects.toThrow("now private");
+  expect(backend.standardCreated).toBe(0); expect(JSON.stringify(backend.requests)).not.toContain("Pending standard intent"); expect((await f.timer.read()).pending).toBe(1);
+  f.fetcher.mockClear(); await expect(f.client.mutation("entries.start", input)).rejects.toThrow("now private"); expect(f.fetcher).not.toHaveBeenCalled();
+});
+
+it("refuses a private current-entry body addressed to a standard workspace before any legacy transport", async () => {
+  const f = await fixture(), operationId = crypto.randomUUID(); await f.client.mutation("entries.start", { operationId, start: stamp, description: "Private current content" });
+  state.selected = "standard"; f.fetcher.mockClear();
+  await expect(f.client.mutation("entries.update", { id: operationId, description: "Private edited description" })).rejects.toThrow("own workspace");
+  await expect(f.client.mutation("entries.resolveRunaway", { id: operationId, resolution: "end-at", start: stamp, end })).rejects.toThrow("own workspace");
+  await expect(f.client.mutation("entries.remove", { id: operationId })).rejects.toThrow("own workspace");
+  expect(f.fetcher).not.toHaveBeenCalled(); expect(await offline.getOfflineQueue().list()).toEqual([]); expect((await f.timer.read()).pending).toBe(1);
 });
