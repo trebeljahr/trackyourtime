@@ -50,16 +50,23 @@ test("a signal wakes a watcher, which stops hearing once closed", async () => {
     wake();
   });
   const woken = new Promise((resolve) => (wake = resolve));
+  // macOS can miss a write made while a new watcher is still starting, so keep
+  // signalling. A loaded menu bar has had its watcher running for much longer.
+  const resend = setInterval(signalLocalChange, 100);
   signalLocalChange();
-  await Promise.race([
-    woken,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("the watcher never woke")), 5_000)),
-  ]);
+  try {
+    await Promise.race([
+      woken,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("the watcher never woke")), 10_000)),
+    ]);
+  } finally {
+    clearInterval(resend);
+  }
   assert.ok(heard > 0);
 
   stop();
   // Let events already queued for the first write drain before counting.
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await new Promise((resolve) => setTimeout(resolve, 500));
   const before = heard;
   signalLocalChange();
   await new Promise((resolve) => setTimeout(resolve, 200));
