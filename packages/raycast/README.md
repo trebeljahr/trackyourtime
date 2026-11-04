@@ -6,7 +6,7 @@ Start and stop your timer from the keyboard, and see it running in the macOS men
 
 | Command | What it does |
 | --- | --- |
-| **Timer** | Stops the running timer, or resumes your latest work. Its search subtitle names the work and elapsed time. |
+| **Timer** | Stops the running timer, or resumes your latest work. Its search subtitle names the work and when it started. |
 | **Timer Menu Bar** | Shows the running time in the menu bar. Its menu can stop, edit or discard the timer, continue recent work and show today's total. |
 | **Show All Time** | Lists the last 14 days of entries, grouped by day. Continue, edit or delete any of them. |
 | **Open Dashboard** | Opens the web app. |
@@ -17,7 +17,7 @@ Reports, invoices, the calendar and catalog editing stay in the web app.
 
 Run **Timer** or assign it a global hotkey. While tracking, it stops your current timer. When idle, it resumes your latest work from the past 30 days. With nothing to resume, it starts immediately and opens details.
 
-The search subtitle shows **Stop Timer · work · project · elapsed** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. The menu-bar updater refreshes the subtitle without changing tracked time. Keep Timer Menu Bar enabled for scheduled updates from other devices. Every press checks the current timer before acting.
+The search subtitle shows **Stop Timer · work · project · since 14:32** while tracking and **Start Timer · No timer running** when idle. A task name takes priority over notes. The menu bar refreshes the subtitle when it reads the timer, without changing tracked time. Every press checks the current timer before acting.
 
 There is no separate Start / Stop Timer command.
 
@@ -49,11 +49,9 @@ To see your account or sign out, open **Show All Time**, press **⌘T**, then pr
 
 ### Menu bar item
 
-Run **Timer Menu Bar** once to enable its background refresh. While tracking, the menu bar shows the Track Your Time icon beside elapsed minutes.
+Run **Timer Menu Bar** once to add the icon. It stays in the menu bar, and shows elapsed minutes beside it while a timer runs.
 
-The item is hidden when no timer runs. **When Idle** is the single display preference: turn it on to keep the app logo for quick access. A timer started from Raycast requests an immediate menu bar refresh. A timer started elsewhere while the item is hidden appears on the next background refresh, scheduled about every 10 seconds.
-
-Raycast unloads menu bar commands between refreshes. macOS can delay scheduled refreshes, particularly on battery. Opening the menu reads the current timer.
+Nothing runs in the background while no timer runs: no scheduled refresh and no network requests. Changes made in Raycast reach the menu bar at once. A timer started on another device appears when you open the menu, which always reads the current timer. While a timer runs, the item holds a live connection, so a stop on another device clears the clock at once.
 
 While tracking, the menu shows the timer name above dimmed elapsed time, with controls in a separate section. Click the name or choose **Edit Timer…** to open the entry editor. Editing never pauses the clock.
 

@@ -1,4 +1,5 @@
 import { LocalStorage } from "@raycast/api";
+import { signalLocalChange } from "./local-signal.js";
 import { createHash } from "node:crypto";
 import { createId, sameServerOrigin, signOutSession, type IssuedSession } from "../vendor/index.js";
 import { clearCache } from "./local-cache.js";
@@ -38,6 +39,7 @@ export const onSessionChanged = (listener: () => void): (() => void) => {
 };
 
 export const notifySessionChanged = (): void => {
+  signalLocalChange();
   for (const listener of listeners) listener();
 };
 

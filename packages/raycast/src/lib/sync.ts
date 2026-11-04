@@ -1,6 +1,6 @@
 /**
- * Sync events refresh commands while Raycast keeps them loaded. Scheduled
- * menu-bar launches cover the gaps after the native menu closes.
+ * Sync events refresh commands while Raycast keeps them loaded. An unloaded
+ * command has no socket, and reads the current state on its next load.
  */
 import { useEffect, useRef, useState } from "react";
 import { createSyncClient, resolveSyncUrl, syncEventReach, type SyncEvent } from "../vendor/index.js";

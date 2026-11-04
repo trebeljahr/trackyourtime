@@ -23,7 +23,8 @@ class Socket {
 globalThis.WebSocket = Socket;
 const source = (file) => new URL(`../src/${file}`, import.meta.url).href;
 const mocks = new Map([
-  [source("lib/menu-presence.ts"), `export const useMenuPresence=visible=>visible;`],
+  [source("lib/menu-presence.ts"), `export const useMenuPresence=()=>true;`],
+  [source("lib/menu-frame.ts"), `export const lastRunningStart=()=>null; export const rememberRunningStart=()=>{};`],
   [
     "react",
     `const h=globalThis.__raycastInteraction;
@@ -52,7 +53,6 @@ const mocks = new Map([
     export const launchCommand=async options=>h.events.push(['launch',options]);
     export const showToast=async options=>h.events.push(['toast',options]); export const showHUD=async text=>h.events.push(['hud',text]);
     export const open=async()=>{}; export const confirmAlert=async()=>true;
-    export const getPreferenceValues=()=>({showWhenIdle:h.showWhenIdle});
     export const useNavigation=()=>({push:element=>h.events.push(['push',element]),pop:()=>{}});`,
   ],
   [source("lib/api.ts"), `export const getTrackYourTime=async()=>globalThis.__raycastInteraction.api;`],
@@ -60,8 +60,8 @@ const mocks = new Map([
     source("lib/hooks.ts"),
     `const h=globalThis.__raycastInteraction;
     export const useApi=()=>({data:h.data,isLoading:false,signedOut:false,revalidate:()=>h.events.push(['refresh']),refresh:async()=>{h.events.push(['refresh']);if(h.revalidate)await h.revalidate();},optimistic:async request=>{const result=await request;h.events.push(['refresh']);if(h.revalidate)await h.revalidate();return result;}});
-    export const useReconciledRunning=data=>data?.running??null; export const useNow=()=>h.now;
-    export const usePoll=()=>{}; export const useWatchRunning=()=>{};`,
+    export const useReconciledRunning=data=>data?.running??null; export const useNow=()=>h.now; export const useMinuteClock=()=>h.now;
+    export const useWatchRunning=()=>{};`,
   ],
   [
     source("lib/auth.ts"),
@@ -198,7 +198,6 @@ beforeEach(() => {
     stateIndex: 0,
     search: undefined,
     now: Date.now(),
-    showWhenIdle: false,
     launchType: "user",
     metadataFails: false,
     cache: { settings: null, projects: [], tasks: [] },
@@ -293,7 +292,6 @@ test("immediate starts disclose a timer replaced in another workspace", async ()
   assert.ok(host.events.some(([kind, value]) => kind === "toast" && value.message === "Stopped your timer in Studio"));
 
   host.events = [];
-  host.showWhenIdle = true;
   nodes(render(MenuBar), "MenuBarExtra.Item")
     .find((row) => row.props.title === "Start Timer")
     .props.onAction();
@@ -346,7 +344,6 @@ test("queued timers run without opening an editor with an unresolved id", async 
   assert.ok(host.events.some((e) => e[0] === "toast" && e[1].title === "Timer started"));
 });
 test("menu start creates a timer before handing off to its editor", async () => {
-  host.showWhenIdle = true;
   const tree = render(MenuBar);
   const start = nodes(tree, "MenuBarExtra.Item").find((n) => n.props.title === "Start Timer");
   const action = start.props.onAction();
@@ -358,13 +355,16 @@ test("menu start creates a timer before handing off to its editor", async () => 
   assert.equal(launch[1].context.editRunningId, "new-entry");
   assert.ok(host.events.findIndex((e) => e[0] === "start") < host.events.findIndex((e) => e[0] === "launch"));
 });
-test("menu is hidden idle and releases the host after reading a running timer", () => {
-  assert.equal(render(MenuBar), null);
+test("the item stays while idle, and only a running timer holds the process loaded", () => {
+  const idle = render(MenuBar);
+  assert.equal(idle.props.icon, "menu-bar.png");
+  assert.equal(idle.props.title, undefined);
+  assert.equal(idle.props.isLoading, false);
   host.data.running = entry({ start: new Date(host.now - 60_000).toISOString() });
   const first = render(MenuBar);
   assert.equal(first.props.title, "1m");
   assert.equal(first.props.icon, "menu-bar.png");
-  assert.equal(first.props.isLoading, false);
+  assert.equal(first.props.isLoading, true);
   host.now += 60_000;
   assert.equal(render(MenuBar).props.title, "2m");
 });
@@ -417,7 +417,6 @@ test("timer names stay on one line and retain empty-description fallbacks", () =
 });
 
 test("starting other work is offered only while idle, and history stays outside the menu", () => {
-  host.showWhenIdle = true;
   host.data.recent = [entry({ id: "past" })];
   host.data.favorites = [{ id: "pin", description: "Favorite" }];
   host.data.projects = [{ id: "project", name: "Website", color: "#19a7ce" }];
@@ -620,7 +619,6 @@ test("fresh current fields outrank an older history response", async () => {
 });
 
 test("menu actions wait for the snapshot and request a fresh native item before opening details", async () => {
-  host.showWhenIdle = true;
   let finish;
   host.revalidate = () =>
     new Promise((resolve) => {
@@ -638,7 +636,6 @@ test("menu actions wait for the snapshot and request a fresh native item before 
 });
 
 test("every timer mutation from the menu refreshes its native item after settling", async () => {
-  host.showWhenIdle = true;
   host.data.running = entry();
   host.data.recent = [entry({ id: "past", end: new Date().toISOString() })];
   host.data.favorites = [
@@ -670,7 +667,6 @@ test("every timer mutation from the menu refreshes its native item after settlin
 });
 
 test("an offline menu start refreshes without opening an editor for a temporary id", async () => {
-  host.showWhenIdle = true;
   host.api.start = async () => entry({ id: "temp-offline" });
   const row = nodes(render(MenuBar), "MenuBarExtra.Item").find((n) => n.props.title === "Start Timer");
   await row.props.onAction();
@@ -678,9 +674,13 @@ test("an offline menu start refreshes without opening an editor for a temporary 
   assert.ok(!host.events.some(([kind]) => kind === "launch"));
 });
 
-test("scheduled launches refresh hidden timers without needing an open command", () => {
+test("nothing schedules the menu bar, and it holds no timer of its own while idle", () => {
   const { commands } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(commands.find((command) => command.name === "menu-bar").interval, "10s");
+  assert.equal(commands.find((command) => command.name === "menu-bar").interval, undefined);
+  const menu = readFileSync(new URL("../src/menu-bar.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(menu, /setInterval|usePoll|return null/);
+  const hooks = readFileSync(new URL("../src/lib/hooks.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(hooks, /WORKSPACE_POLL_MS|ECHO_POLL_MS|usePoll/);
 });
 
 test("a newly loaded menu adopts starts, replacements and stops from other clients", async () => {
@@ -694,7 +694,9 @@ test("a newly loaded menu adopts starts, replacements and stops from other clien
     assert.match(render(MenuBar).props.tooltip, new RegExp(source));
     remote = null;
     host.data = await loadTimerSnapshot(host.api, { recentLimit: 6 });
-    assert.equal(render(MenuBar), null);
+    const idle = render(MenuBar);
+    assert.equal(idle.props.title, undefined);
+    assert.equal(idle.props.isLoading, false);
   }
 });
 

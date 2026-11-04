@@ -3,7 +3,7 @@
 ## [Initial Version] - {PR_MERGE_DATE}
 
 - Timer: start immediately, then add details. Choose favorites, 30-day recents or a project in Quick Start; the workspace selector stays visible.
-- Timer Menu Bar: a live elapsed clock with no colored icon, hidden while idle unless the optional stopwatch is enabled.
+- Timer Menu Bar: a live elapsed clock beside a permanent icon, with no background work while idle.
 - Start / Stop Timer: a command for a hotkey that stops the timer or resumes your latest entry.
 - Show All Time: the last 14 days of entries, with continue, edit and delete.
 - Open Dashboard: opens the web app for reports and invoices.

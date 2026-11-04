@@ -2353,54 +2353,48 @@ The rules below predate the store copy and apply to the extension itself.
   is `CATALOG_COLORS` in `@starter/shared` — the same list the server assigns
   from and the web picker renders, so a color picked in one client is a color
   the next one can name.
-- Raycast unloads a menu bar command once its first render settles, so a
-  `setInterval` in it fires once and stops. An unfinished load is the one thing
-  that keeps the process alive: the item passes `isLoading` while a timer runs,
-  which is what lets the clock tick `m:ss` every second, and drops it when the
-  timer stops so an idle item costs nothing. `interval` (1m) and the dropdown
-  opening cover the unloaded case. Staying loaded means owning freshness:
-  `entries.current` every 4s while ticking, because a stop made elsewhere would
-  leave a clock counting up on an ended entry, and the whole snapshot every
-  20s; mutations call `refreshMenuBar()` rather than waiting for either.
-  Running shows only the elapsed clock, ticking every second. Idle is hidden
-  by default; `showWhenIdle` optionally keeps a monochrome stopwatch. The
-  hidden/unloaded item discovers starts elsewhere on its 1-minute background
-  interval. The `Timer` view is the surface that can push forms. Menu start
-  writes first, then passes `context.editRunningId` to that view; the editor
-  opens only when the id and active workspace match, never for an unsynced id.
-  Both read `lib/timer-data.ts`: `entries.current` is authoritative even for
-  a timer older than the 30-day recent window. Recent rows use the full
-  quick-start key, and the view starts with the live/start row instead of an
-  About row. Start and project shortcuts write immediately, with a single-flight
-  guard; the resulting entry is edited afterwards, preserving its start time.
+- **The menu bar never renders `null`, and nothing schedules it.** Returning
+  null removes the native status item, and Raycast tears down all of its status
+  items for one change (bursts of 8 scene teardowns in `MenuBarAgent`, which a
+  `10s` interval plus a null first render turned into 48 a minute and a visibly
+  blinking icon). So the manifest has no `interval` and no idle-hide preference,
+  and a load holds its last clock (`lib/menu-frame.ts`) until the session read
+  resolves. Idle, `isLoading` turns false after the read and Raycast unloads the
+  process: no timer, no socket, no request. Raycast cannot hold a socket for an
+  unloaded command, so a timer started on another device appears when the menu
+  is opened, which loads the command. Do not add an `interval` back.
+- **Only a running timer or queued work keeps the process loaded**, through
+  `isLoading`, which is the only thing that does. Loaded, it wakes once per
+  elapsed minute (`useMinuteClock`; the title shows minutes, so a second tick
+  would change nothing) and holds the sync socket. Menu start writes first, then
+  passes `context.editRunningId` to the Timer view; the editor opens only when
+  the id and active workspace match, never for an unsynced id. Both read
+  `lib/timer-data.ts`: `entries.current` is authoritative even for a timer older
+  than the 30-day recent window. Recent rows use the full quick-start key.
+  Start and project shortcuts write immediately, with a single-flight guard; the
+  resulting entry is edited afterwards, preserving its start time.
 - **`refreshMenuBar()` is a nudge, never the mechanism.** It is a background
-  `launchCommand`, and Raycast may decline it — and a menu bar command that is
-  still *loaded*, which is exactly what a running timer keeps it, is not
-  remounted by one. On its own it left the item ticking an entry the user had
-  just stopped from the `timer` command one process over. Four things carry the
-  truth instead, in descending order of how quickly they notice and ascending
-  order of how much they cost:
+  `launchCommand`, which starts an unloaded command but does not remount a
+  loaded one. Three things reach a loaded item instead:
   - **The timer echo** (`timer-echo.ts` in `@starter/core`, `lib/storage.ts`
     here) — every timer mutation records `{ runningId, at }` in Raycast's
     `LocalStorage` the instant the server confirms it, written centrally in
-    `api.ts` so a new command cannot forget. Any surface re-reads it once a
-    second — a local read, no network — and `reconcileRunning` lets it outrank
-    a snapshot *fetched before it*. This is the one that closes the gap
-    between Raycast's separate command processes, and the only one that still
-    works with the network down. It needs no TTL: the next successful fetch
-    carries a later `fetchedAt`, so a stale record of a stop can never mask a
-    timer started on another device.
-  - **The sync socket** (`lib/sync.ts`) — held for as long as Raycast keeps a
-    command alive, which is a view command while it is open and the menu bar
-    item while it ticks. That is what makes a stop from the web app or another
-    machine land at once rather than on a poll. It deliberately does NOT
-    filter this install's own `originId`: every Raycast command shares one, so
-    filtering would drop the event the menu bar needs most.
-  - **`useWatchRunning`** — `entries.current` every 4s, but only while the
-    socket is NOT connected. An open socket has already reported every stop,
-    so polling underneath it asks a question that has been answered.
-  - **`usePoll`** — the whole snapshot every 20s, which is also what picks up
-    a renamed project or a new favorite.
+    `api.ts` so a new command cannot forget. `lib/local-signal.ts` touches a file
+    in `supportPath` after each such write, and every loaded surface re-reads on
+    the `fs.watch`, with no timer. The session and workspace use the same signal,
+    and a writer must signal after its storage write. `reconcileRunning` lets the
+    echo outrank a snapshot *fetched before it*. It needs no TTL: the next
+    successful fetch carries a later `fetchedAt`, so a stale record of a stop can
+    never mask a timer started on another device.
+  - **The sync socket** (`lib/sync.ts`) — open in a view command and in a menu
+    bar item with a running timer or queued work. That is what makes a stop from
+    the web app or another machine land at once. It deliberately does NOT filter
+    this install's own `originId`: every Raycast command shares one, so filtering
+    would drop the event the menu bar needs most. Its connect event also drains
+    the offline queue.
+  - **`useWatchRunning`** — `entries.current` once a minute, only while a timer
+    runs and the socket is NOT connected. It is the only poll left, and it never
+    runs while idle.
 - `entries.stop` is **idempotent when given an id**: an entry that is already
   stopped is returned rather than refused. Two devices racing to stop one timer
   is the normal case, and the loser asked for a state the world is already in.
@@ -2484,10 +2478,10 @@ What fails quietly if it is changed:
   refused sessions hide cached actions and offer pairing directly.
 - **The queue drains from the reads, not from a background loop.** Raycast has
   no long-lived process to own one. `loadTimerSnapshot` drains before it reads
-  (so the snapshot comes back already carrying the replayed work), the menu
-  bar's own `interval` therefore drains once a minute, and `useSyncRevalidate`
-  revalidates the instant the sync socket connects — the earliest and clearest
-  proof available that the network is back.
+  (so the snapshot comes back already carrying the replayed work), and `useSyncRevalidate`
+revalidates the instant the sync socket connects — the earliest and clearest
+proof available that the network is back. The menu bar stays loaded while rows
+are pending for that reason.
 
 ### Client/server version handshake
 

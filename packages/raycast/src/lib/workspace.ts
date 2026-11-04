@@ -17,6 +17,7 @@
  * a timer ticks, and a switch made in the Timer command, one process over,
  * must reach it on its next read.
  */
+import { signalLocalChange } from "./local-signal.js";
 import { LocalStorage } from "@raycast/api";
 import {
   parseWorkspaceChoice,
@@ -37,8 +38,8 @@ const CHOICE_KEY = "trackyourtime.raycast.workspace";
 /**
  * Told when the workspace changes inside THIS process — a switch from the
  * Timer view, or a fresh list replacing a workspace the account left — so the
- * view re-keys at once instead of on its next storage poll. Other processes
- * notice through that poll (`useActiveWorkspaceId`).
+ * view re-keys at once. Other processes hear `signalLocalChange`
+ * (`useActiveWorkspaceId`).
  */
 const listeners = new Set<() => void>();
 
@@ -50,6 +51,7 @@ export const onWorkspaceChanged = (listener: () => void): (() => void) => {
 };
 
 const notify = (): void => {
+  signalLocalChange();
   for (const listener of listeners) listener();
 };
 

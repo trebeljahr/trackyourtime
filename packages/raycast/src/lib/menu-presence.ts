@@ -1,31 +1,37 @@
 import { useEffect, useState } from "react";
 import { desktopHasYielded, publishMenuPresence } from "./menu-ownership.js";
 
-/** Claim first, render only after desktop has removed its item. */
-export function useMenuPresence(visible: boolean): boolean {
-  const [ready, setReady] = useState(false);
+/** How long a load waits for the desktop app before Raycast may unload it. */
+const YIELD_WAIT_MS = 5_000;
+
+/**
+ * Claim the menu bar from the desktop app, and report whether it has let go.
+ *
+ * The answer never hides the item. Returning null removes the native status
+ * item, and a command with no item can be unloaded before it can draw one. The
+ * caller holds the load while this is false instead. Two items can overlap for
+ * one desktop poll on the first claim, and never after that.
+ */
+export function useMenuPresence(): boolean {
+  const [yielded, setYielded] = useState(() => desktopHasYielded());
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
     try {
-      if (!publishMenuPresence(visible)) {
-        setReady(false);
-        return;
-      }
-      const check = (): boolean => {
-        const yielded = visible && desktopHasYielded();
-        setReady(yielded);
-        if (yielded && timer) clearInterval(timer);
-        return yielded;
-      };
-      if (!check() && visible) timer = setInterval(check, 100);
+      publishMenuPresence(true);
     } catch {
-      setReady(false);
+      setYielded(true);
+      return;
     }
-    // The native item survives command unload. Only an explicit hidden render
-    // releases ownership; the host PID lets desktop recover when Raycast quits.
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [visible]);
-  return ready;
+    if (desktopHasYielded()) {
+      setYielded(true);
+      return;
+    }
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (!desktopHasYielded() && Date.now() - startedAt < YIELD_WAIT_MS) return;
+      clearInterval(timer);
+      setYielded(true);
+    }, 100);
+    return () => clearInterval(timer);
+  }, []);
+  return yielded;
 }

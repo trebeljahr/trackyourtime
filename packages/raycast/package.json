@@ -16,19 +16,7 @@
       "title": "Timer Menu Bar",
       "subtitle": "Track Your Time",
       "description": "Show the running timer in the macOS menu bar, with stop, edit and recent work in its menu.",
-      "mode": "menu-bar",
-      "interval": "10s",
-      "preferences": [
-        {
-          "name": "showWhenIdle",
-          "title": "When Idle",
-          "label": "Keep the app logo in the menu bar when no timer runs",
-          "description": "Off shows only a running timer. Timers started elsewhere appear on the next scheduled refresh (about every 10 seconds; macOS may delay it).",
-          "type": "checkbox",
-          "required": false,
-          "default": false
-        }
-      ]
+      "mode": "menu-bar"
     },
     {
       "name": "timer",

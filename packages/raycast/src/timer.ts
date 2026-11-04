@@ -1,8 +1,8 @@
 import { LaunchType, environment, launchCommand, showHUD, updateCommandMetadata } from "@raycast/api";
-import { decideTimerToggle, entryDurationSec, toQuickStart, type TimeEntry } from "./vendor/index.js";
+import { decideTimerToggle, toQuickStart, type TimeEntry } from "./vendor/index.js";
 import { getTrackYourTime } from "./lib/api.js";
 import { pendingCounts } from "./lib/offline.js";
-import { formatDurationShort, isoDaysAgo } from "./lib/format.js";
+import { formatClock, formatDurationShort, isoDaysAgo } from "./lib/format.js";
 import { noteTimerEcho } from "./lib/storage.js";
 import { entryLabel, RECENT_DAYS } from "./lib/timer-data.js";
 import { isAlreadyStopped, refreshMenuBar, replacedNotice, showFailureToast } from "./lib/ui.js";
@@ -51,7 +51,8 @@ const showState = async (running: TimeEntry | null): Promise<void> => {
   const chars = Array.from(name);
   const short = chars.length > 48 ? `${chars.slice(0, 47).join("").trimEnd()}…` : name;
   const context = project && project !== name ? ` · ${Array.from(project).slice(0, 32).join("")}` : "";
-  await setSubtitle(`Stop Timer · ${short}${context} · ${formatDurationShort(entryDurationSec(running, Date.now()))}`);
+  // A start time stays true between launches; an elapsed time would go stale.
+  await setSubtitle(`Stop Timer · ${short}${context} · since ${formatClock(running.start)}`);
 };
 
 export default async function Timer(): Promise<void> {

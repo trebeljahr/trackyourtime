@@ -3,6 +3,7 @@ import { useCachedPromise } from "@raycast/utils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { reconcileRunning, type TimerEcho } from "../vendor/index.js";
 import { getTrackYourTime, type TrackYourTime } from "./api.js";
+import { watchLocalChange } from "./local-signal.js";
 import { loadTimerEcho } from "./storage.js";
 import { isAuthFailure, showFailureToast } from "./ui.js";
 import { activeWorkspaceId, onWorkspaceChanged } from "./workspace.js";
@@ -10,15 +11,10 @@ import { notifySessionChanged, onSessionChanged, sessionCacheKey } from "./auth.
 import { NotSignedInError } from "./errors.js";
 
 /**
- * How often a surface re-reads the session and chosen workspace. Both are
- * local reads; a change in another command reaches a loaded menu bar too.
- */
-const WORKSPACE_POLL_MS = 5000;
-
-/**
- * The session and workspace this command reads from. Re-read storage so a
- * sign-out, new pairing or workspace switch re-keys every loader. Cached
- * content is withheld until the first local identity read resolves.
+ * The session and workspace this command reads from. Re-read storage when
+ * another command signals a change, so a sign-out, new pairing or workspace
+ * switch re-keys every loader. Cached content is withheld until the first
+ * local identity read resolves.
  */
 export function useActiveWorkspaceId(): {
   workspaceId: string | null;
@@ -52,12 +48,12 @@ export function useActiveWorkspaceId(): {
         });
     };
     read();
-    const id = setInterval(read, WORKSPACE_POLL_MS);
+    const stopWatching = watchLocalChange(read);
     const unsubscribe = onWorkspaceChanged(read);
     const unsubscribeSession = onSessionChanged(read);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stopWatching();
       unsubscribe();
       unsubscribeSession();
     };
@@ -166,21 +162,6 @@ export function useApi<T>(
 }
 
 /**
- * Re-run a loader on a timer, for a surface that has to notice a change it
- * did not make itself.
- *
- * Every trackyourtime client refreshes the menu bar after its own mutations, so
- * this is only about the ones that cannot: a timer started in the web app, on
- * another machine, or by a build of this extension that is not running.
- */
-export function usePoll(revalidate: () => void, intervalMs: number): void {
-  useEffect(() => {
-    const id = setInterval(revalidate, intervalMs);
-    return () => clearInterval(id);
-  }, [revalidate, intervalMs]);
-}
-
-/**
  * Watch for the running entry being replaced or stopped, and reload when it
  * is.
  *
@@ -245,11 +226,35 @@ export function useNow(active: boolean, intervalMs = 1000): number {
 }
 
 /**
- * How often a surface re-reads this install's timer echo. One second, because
- * it is a local storage read with no network in it, and because a second is
- * how long the user should ever see a timer they already stopped.
+ * A clock for a display that shows whole minutes of `anchorMs`.
+ *
+ * It wakes once per minute of elapsed time, exactly when the text changes, and
+ * not at all without an anchor. Each changed title makes Raycast rebuild its
+ * status items, so a re-render with nothing new to show still has a cost.
  */
-const ECHO_POLL_MS = 1000;
+export function useMinuteClock(anchorMs: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (anchorMs === null || Number.isNaN(anchorMs)) return;
+    let id: ReturnType<typeof setTimeout>;
+    const schedule = (): void => {
+      const elapsed = Math.max(0, Date.now() - anchorMs);
+      id = setTimeout(
+        () => {
+          setNow(Date.now());
+          schedule();
+        },
+        60_000 - (elapsed % 60_000),
+      );
+    };
+    setNow(Date.now());
+    schedule();
+    return () => clearTimeout(id);
+  }, [anchorMs]);
+
+  return now;
+}
 
 /**
  * The running entry a surface should actually draw, given the snapshot it
@@ -258,8 +263,8 @@ const ECHO_POLL_MS = 1000;
  * This is what makes stop/start agree across Raycast's separate processes.
  * `refreshMenuBar()` cannot: a menu bar command that is still loaded — which
  * a running timer keeps it — is not remounted by a background launch, so the
- * live instance would keep ticking an ended entry until its own 20s poll came
- * round. Reading a local record costs nothing and cannot be declined.
+ * live instance would keep ticking an ended entry. Another command's write
+ * wakes this through `watchLocalChange`, with no timer in between.
  *
  * Calls `revalidate` once when the echo names a timer the snapshot has never
  * seen, so the fields catch up with the fact.
@@ -276,14 +281,15 @@ export function useReconciledRunning<T extends { id: string }>(
     let cancelled = false;
     const read = (): void => {
       void loadTimerEcho().then((next) => {
-        if (!cancelled) setEcho(next);
+        if (cancelled) return;
+        setEcho((previous) => (previous?.at === next?.at && previous?.runningId === next?.runningId ? previous : next));
       });
     };
     read();
-    const id = setInterval(read, ECHO_POLL_MS);
+    const stopWatching = watchLocalChange(read);
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stopWatching();
     };
   }, []);
 

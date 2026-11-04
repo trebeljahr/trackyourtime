@@ -16,7 +16,7 @@ export const markTimerAction = async (active: boolean): Promise<void> => {
   );
 };
 
-/** The menu bar owns periodic refresh; Timer itself keeps a normal Run action. */
+/** Publish the search subtitle after a menu bar load. Timer keeps a normal Run action. */
 export const refreshTimerSearch = async (): Promise<void> => {
   if (await timerActionBusy()) return;
   await launchCommand({ name: "timer", type: LaunchType.Background }).catch(() => undefined);

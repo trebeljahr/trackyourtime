@@ -9,8 +9,8 @@ import { refreshTimerSearch } from "./timer-search.js";
 /**
  * Nudge the menu bar to re-read the timer.
  *
- * Menu bar commands otherwise only refresh on their interval, which would
- * leave the clock showing a timer the user just stopped from a hotkey.
+ * An unloaded menu bar command runs only when something launches it, so every
+ * local timer change has to. A loaded one hears the timer echo instead.
  */
 export async function refreshMenuBar(refreshToggle = true): Promise<void> {
   // The toggle updates its own subtitle after acting; relaunching itself
@@ -18,7 +18,7 @@ export async function refreshMenuBar(refreshToggle = true): Promise<void> {
   try {
     await launchCommand({ name: "menu-bar", type: LaunchType.Background });
   } catch {
-    // A disabled menu bar can wait for its next scheduled refresh.
+    // A disabled menu bar has nothing to refresh.
   }
   if (refreshToggle) await refreshTimerSearch();
 }

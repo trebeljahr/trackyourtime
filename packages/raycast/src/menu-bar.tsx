@@ -1,16 +1,5 @@
+import { Icon, Keyboard, LaunchType, MenuBarExtra, Toast, launchCommand, open, showToast } from "@raycast/api";
 import {
-  Icon,
-  Keyboard,
-  LaunchType,
-  MenuBarExtra,
-  Toast,
-  getPreferenceValues,
-  launchCommand,
-  open,
-  showToast,
-} from "@raycast/api";
-import {
-  entryDurationSec,
   isTempId,
   quickStartHint,
   quickStartLabel,
@@ -23,9 +12,10 @@ import { CompatibilityMenuBarSection } from "./components/compatibility-banner.j
 import { useMenuPresence } from "./lib/menu-presence.js";
 import { BRAND_MARK } from "./lib/brand.js";
 import { refreshTimerSearch } from "./lib/timer-search.js";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatClock, formatDurationShort, formatMenuBarClock } from "./lib/format.js";
-import { useApi, useNow, usePoll, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
+import { useApi, useMinuteClock, useReconciledRunning, useWatchRunning } from "./lib/hooks.js";
+import { lastRunningStart, rememberRunningStart } from "./lib/menu-frame.js";
 import { heldCopy } from "./lib/offline.js";
 import { webLink } from "./lib/preferences.js";
 import {
@@ -44,18 +34,11 @@ import { describeFailure, isAlreadyStopped, refreshMenuBar, replacedNotice, show
 /** History contributes today’s total, but has no separate section in this menu. */
 const RECENT_LIMIT = 6;
 
-/** Full snapshot fallback while the menu is open; the manifest refreshes unloaded commands. */
-const POLL_MS = 10_000;
-
 /**
- * How often a ticking item checks that its entry is still the running one.
- *
- * Tighter than the snapshot poll because this is the number on screen. A
- * timer stopped from a hotkey, the web app or another machine leaves this
- * item counting up on an entry that ended, and a clock that is confidently
- * wrong is worse than one that is a few seconds behind.
+ * The fallback for a running clock whose socket cannot connect: a proxy that
+ * drops upgrades, or no network at all. With the socket open nothing polls.
  */
-const WATCH_MS = 4_000;
+const WATCH_MS = 60_000;
 
 /** The live command, where the clock ticks and forms can be pushed. */
 const openTimer = (editRunningId?: string): Promise<void> => {
@@ -66,8 +49,20 @@ const openTimer = (editRunningId?: string): Promise<void> => {
   });
 };
 
-export default function MenuBar(): React.JSX.Element | null {
-  const { showWhenIdle } = getPreferenceValues<Preferences.MenuBar>();
+/**
+ * The native item stays for the life of the command and this never returns null,
+ * since null removes the status item from the menu bar.
+ *
+ * Idle: `isLoading` turns false after the read, Raycast unloads the process, and
+ * nothing recurs. No manifest `interval` exists, so nothing launches it again
+ * until someone opens the menu or another command changes the timer. Raycast has
+ * no way to hold a socket for an unloaded command, so a timer started on another
+ * device appears when the menu is opened.
+ *
+ * Running: `isLoading` stays true, the one way to keep a process loaded. That
+ * process wakes once per elapsed minute and holds the sync socket.
+ */
+export default function MenuBar(): React.JSX.Element {
   const starting = useRef(false);
   const [isActing, setIsActing] = useState(false);
   const { data, isLoading, error, signedOut, revalidate, refresh, optimistic } = useApi("menu-bar", async (api) => {
@@ -86,28 +81,25 @@ export default function MenuBar(): React.JSX.Element | null {
    */
   const running = useReconciledRunning(data, revalidate);
 
-  // A menu-bar command is unloaded after a fetch or when its menu closes.
-  // Only real requests keep isLoading true; a running timer is not a load.
-  const ticking = running !== null;
+  const pending = data?.pending ?? 0;
+  // Queued work needs the socket's "the network is back" too, or it would wait
+  // for someone to open the menu.
+  const live = running !== null || pending > 0;
 
-  // These hooks keep an open menu current. The scheduled command is the
-  // fallback once Raycast unloads it, including when the idle item is hidden.
-  const now = useNow(ticking);
-  usePoll(revalidate, POLL_MS);
-  // While loaded, the socket hears changes from every client, including this install.
-  const synced = useSyncRevalidate(revalidate, !signedOut);
-  // The fallback for a socket that cannot connect at all — a proxy that drops
-  // upgrades, a host with no global WebSocket. While one is open it carries
-  // every stop already, so polling `entries.current` underneath it would ask
-  // a question that has been answered.
-  useWatchRunning(running?.id ?? null, ticking && !synced, revalidate, WATCH_MS);
+  // Before the snapshot is usable, keep the clock the item already shows.
+  const heldStart = data === undefined && isLoading && !signedOut ? lastRunningStart() : null;
+  const clockStart = running?.start ?? heldStart;
+  const now = useMinuteClock(clockStart === null ? null : Date.parse(clockStart));
+  const knownStart = signedOut ? null : data === undefined ? undefined : (running?.start ?? null);
+  useEffect(() => {
+    if (knownStart !== undefined) rememberRunningStart(knownStart);
+  }, [knownStart]);
+
+  const synced = useSyncRevalidate(revalidate, !signedOut && live);
+  useWatchRunning(running?.id ?? null, running !== null && !synced, revalidate, WATCH_MS);
   // The server-level refresh is throttled per origin.
   const { banner } = useServerLevel();
-
-  // Version and refresh problems remain visible even when idle items are hidden.
-  const visible = signedOut || !!running || isLoading || isActing || showWhenIdle || !!error || banner !== null;
-  const ownsMenu = useMenuPresence(visible);
-  if (!visible || !ownsMenu) return null;
+  const desktopYielded = useMenuPresence();
 
   if (signedOut) {
     return (
@@ -117,7 +109,7 @@ export default function MenuBar(): React.JSX.Element | null {
     );
   }
 
-  const elapsed = running ? entryDurationSec(running, now) : 0;
+  const elapsed = clockStart === null ? 0 : Math.max(0, Math.floor((now - Date.parse(clockStart)) / 1000));
   const clock = formatMenuBarClock(elapsed);
   const label = running ? entryLabel(running) : "";
   const sections = timerMenuSections(running ? { label, elapsedSec: elapsed } : null);
@@ -125,7 +117,6 @@ export default function MenuBar(): React.JSX.Element | null {
   const favorites = data?.favorites ?? [];
   const projects = data?.projects ?? [];
   const pinned = running ? favoriteFor(running, favorites) : undefined;
-  const pending = data?.pending ?? 0;
   const foreign = data?.foreign ?? 0;
 
   const act = async (
@@ -186,8 +177,8 @@ export default function MenuBar(): React.JSX.Element | null {
   return (
     <MenuBarExtra
       icon={BRAND_MARK}
-      title={running ? clock : undefined}
-      isLoading={isLoading || isActing}
+      title={clockStart === null ? undefined : clock}
+      isLoading={isLoading || isActing || live || !desktopYielded}
       tooltip={
         // A failed refresh leaves the previous snapshot on screen, which is
         // the right call for a glanceable item — but it must not pass for a
