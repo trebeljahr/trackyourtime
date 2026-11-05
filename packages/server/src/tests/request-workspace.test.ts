@@ -3,8 +3,13 @@ import { it, mock } from "node:test";
 import { z } from "zod";
 import { createRequestWorkspaceResolver, resolveWorkspace, type WorkspaceLookups } from "../auth/workspace.js";
 import { WorkspaceMember, type WorkspaceMemberDocLike } from "../models/WorkspaceMember.js";
+import { PrivateWorkspace } from "../models/PrivateData.js";
 import type { Context } from "../trpc/context.js";
 import { router, workspaceProcedure } from "../trpc/trpc.js";
+
+// workspaceProcedure also asks whether the workspace is private
+// (assertStandardWorkspace). None is here; answer that without a database.
+mock.method(PrivateWorkspace, "findOne", () => ({ lean: async () => null }));
 
 const user = { id: "user", name: "User", email: "user@example.test" };
 const member = (workspaceId: string, money = false): WorkspaceMemberDocLike => ({

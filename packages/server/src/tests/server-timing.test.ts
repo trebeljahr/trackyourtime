@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
-import { it } from "node:test";
+import { it, mock } from "node:test";
 import express from "express";
 import type { AddressInfo } from "node:net";
 import { allowServerTiming, timeServerWork } from "../middleware/server-timing.js";
 import { router, workspaceProcedure } from "../trpc/trpc.js";
 import type { Context } from "../trpc/context.js";
+import { PrivateWorkspace } from "../models/PrivateData.js";
+
+// workspaceProcedure also asks whether the workspace is private
+// (assertStandardWorkspace). None is here; answer that without a database.
+mock.method(PrivateWorkspace, "findOne", () => ({ lean: async () => null }));
 
 it("records actual workspace/data paths including parallel batch work and failures", async () => {
   const app = express();

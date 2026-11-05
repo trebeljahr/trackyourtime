@@ -28,6 +28,7 @@ import {
   WorkspaceMember,
   type WorkspaceMemberDocLike,
 } from "../models/WorkspaceMember.js";
+import { PrivateWorkspace } from "../models/PrivateData.js";
 import { invoicesRouter } from "../trpc/routers/invoices.js";
 import type { Context } from "../trpc/context.js";
 
@@ -139,6 +140,13 @@ const stubbableMember = WorkspaceMember as unknown as {
 };
 const realMemberFindOne = stubbableMember.findOne;
 
+// workspaceProcedure also asks whether the workspace is private
+// (assertStandardWorkspace). This one is a standard workspace.
+const stubbablePrivateWorkspace = PrivateWorkspace as unknown as {
+  findOne: (filter: Record<string, unknown>) => LeanQuery<null>;
+};
+const realPrivateWorkspaceFindOne = stubbablePrivateWorkspace.findOne;
+
 /** The filters the router actually queried invoices with, newest last. */
 let queried: Record<string, unknown>[] = [];
 
@@ -154,6 +162,8 @@ stubbableInvoice.findOne = (filter) =>
     return matchesFilter(invoiceDoc, filter) ? invoiceDoc : null;
   });
 
+stubbablePrivateWorkspace.findOne = () => leanQuery(async () => null);
+
 stubbableMember.findOne = (filter) =>
   leanQuery(async () =>
     filter.workspaceId === WORKSPACE && filter.userId === ALICE
@@ -164,6 +174,7 @@ stubbableMember.findOne = (filter) =>
 after(() => {
   stubbableInvoice.findOne = realInvoiceFindOne;
   stubbableMember.findOne = realMemberFindOne;
+  stubbablePrivateWorkspace.findOne = realPrivateWorkspaceFindOne;
 });
 
 /**
