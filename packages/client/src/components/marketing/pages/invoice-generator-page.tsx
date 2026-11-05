@@ -161,7 +161,11 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
         pdfkitStandalone) as RenderInvoicePdfOptions["PDFDocument"];
       const generatedAt = new Date().toISOString();
       const invoice = buildInvoice(form, locale, generatedAt);
-      const bytes = await renderInvoicePdf(invoice, { generatedAt }, undefined, { PDFDocument });
+      // `oneOff`: no Status or Grouped-by row — this invoice has no workflow
+      // in the app and was not grouped from tracked time.
+      const bytes = await renderInvoicePdf(invoice, { generatedAt, oneOff: true }, undefined, {
+        PDFDocument,
+      });
       const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -390,6 +394,28 @@ export function InvoiceGeneratorPage({ locale }: { locale: Locale }): React.Reac
                   onChange={(v) => setField("dueDate", v)}
                   type="date"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">{t("invoiceGenerator.form.servicePeriod")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("invoiceGenerator.form.servicePeriodHint")}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField
+                    id="invoice-periodStart"
+                    label={t("invoiceGenerator.form.servicePeriodStart")}
+                    value={form.periodStart}
+                    onChange={(v) => setField("periodStart", v)}
+                    type="date"
+                  />
+                  <TextField
+                    id="invoice-periodEnd"
+                    label={t("invoiceGenerator.form.servicePeriodEnd")}
+                    value={form.periodEnd}
+                    onChange={(v) => setField("periodEnd", v)}
+                    type="date"
+                  />
+                </div>
               </div>
             </FieldGroup>
 

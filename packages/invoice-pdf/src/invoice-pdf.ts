@@ -82,6 +82,14 @@ type PdfImageSource = Parameters<PDFKit.PDFDocument["image"]>[0];
 export type InvoicePdfMeta = {
   /** ISO datetime the document was rendered at. */
   generatedAt: string;
+  /**
+   * A one-off invoice that never lived in the app — the public generator's.
+   * It has no workflow status (a "Draft" row on a final invoice reads as
+   * unfinished) and was not grouped from tracked time, so the Status and
+   * Grouped-by rows are left out. Absent for every stored invoice, which
+   * prints exactly as before.
+   */
+  oneOff?: boolean;
 };
 
 const MARGINS = { top: 48, bottom: 30, left: 48, right: 48 } as const;
@@ -449,13 +457,17 @@ function drawHeaderBlock(sheet: Sheet): void {
   sheet.y = Math.max(recipientBottom, issuerBottom) + 8;
 
   const rows: [string, string][] = [
-    ...(invoice.documentKind === "credit" ? [] : [[t("status"), t("statusValue", { status: invoice.status })] as [string, string]]),
+    ...(invoice.documentKind === "credit" || sheet.meta.oneOff
+      ? []
+      : [[t("status"), t("statusValue", { status: invoice.status })] as [string, string]]),
     [t("issueDate"), format.date(invoice.issueDate)],
     ...(invoice.documentKind === "credit" ? [[t("creditOriginal"), invoice.creditReference?.number ?? ""] as [string, string]] : [[t("dueDate"), format.date(invoice.dueDate)] as [string, string]]),
     // A blank invoice has no period and prints no Period row; every invoice
     // with a range prints one exactly as before.
     ...periodRow(invoice, t, format),
-    [t("groupedBy"), t("groupByValue", { groupBy: invoice.groupBy })],
+    ...(sheet.meta.oneOff
+      ? []
+      : [[t("groupedBy"), t("groupByValue", { groupBy: invoice.groupBy })] as [string, string]]),
   ];
 
   for (const [label, value] of rows) {
@@ -509,6 +521,45 @@ function drawRule(sheet: Sheet, strong: boolean): void {
 
 type RowStyle = "header" | "body" | "total";
 
+/**
+ * The tallest a wrapped description may grow: one page's table area, less the
+ * continuation heading and header row. Only a pathological label reaches it;
+ * beyond it the text is cut with an ellipsis rather than pushed into the
+ * footer band.
+ */
+const maxLabelHeight = (sheet: Sheet): number =>
+  sheet.bottom - sheet.top - HEADING_SIZE - 10 - ROW_HEIGHT * 3;
+
+/**
+ * A body row's description when it does not fit on one line: the text to draw
+ * wrapped and its height. `null` when it fits, so that row draws exactly as it
+ * always did. A line's description is what the customer pays for, so it wraps
+ * instead of losing its end to "..." — the numeric cells never need to.
+ */
+function wrappedLabel(
+  sheet: Sheet,
+  columns: SizedColumn[],
+  cells: Partial<Cells>,
+): { text: string; width: number; height: number } | null {
+  const column = columns.find((candidate) => candidate.key === "label");
+  if (column === undefined) return null;
+  const { doc } = sheet;
+  const text = sanitizePdfText(cells.label ?? "");
+  const width = column.width - CELL_PADDING * 2;
+  doc.font(FONT).fontSize(BODY_SIZE);
+  if (text === "" || doc.widthOfString(text) <= width) return null;
+  const height = Math.min(doc.heightOfString(text, { width }), maxLabelHeight(sheet));
+  return { text, width, height };
+}
+
+/** How tall a body row is: one line, or the wrapped description plus the same padding. */
+function bodyRowHeight(sheet: Sheet, columns: SizedColumn[], cells: Partial<Cells>): number {
+  const wrapped = wrappedLabel(sheet, columns, cells);
+  if (wrapped === null) return ROW_HEIGHT;
+  sheet.doc.font(FONT).fontSize(BODY_SIZE);
+  return Math.max(ROW_HEIGHT, ROW_HEIGHT - sheet.doc.currentLineHeight() + wrapped.height);
+}
+
 function drawRow(
   sheet: Sheet,
   columns: SizedColumn[],
@@ -517,6 +568,8 @@ function drawRow(
 ): void {
   const { doc } = sheet;
   const bold = style !== "body";
+  const wrapped = style === "body" ? wrappedLabel(sheet, columns, cells) : null;
+  const height = style === "body" ? bodyRowHeight(sheet, columns, cells) : ROW_HEIGHT;
   let x = sheet.left;
 
   doc
@@ -527,15 +580,24 @@ function drawRow(
   for (const column of columns) {
     const raw = cells[column.key] ?? "";
     const inner = column.width - CELL_PADDING * 2;
-    doc.text(fitText(doc, raw, inner), x + CELL_PADDING, sheet.y + 3, {
-      width: inner,
-      align: column.align,
-      lineBreak: false,
-    });
+    if (column.key === "label" && wrapped !== null) {
+      doc.text(wrapped.text, x + CELL_PADDING, sheet.y + 3, {
+        width: wrapped.width,
+        height: wrapped.height,
+        align: column.align,
+        ellipsis: true,
+      });
+    } else {
+      doc.text(fitText(doc, raw, inner), x + CELL_PADDING, sheet.y + 3, {
+        width: inner,
+        align: column.align,
+        lineBreak: false,
+      });
+    }
     x += column.width;
   }
 
-  sheet.y += ROW_HEIGHT;
+  sheet.y += height;
   doc.fillColor(INK);
   if (style !== "body") drawRule(sheet, style === "total");
 }
@@ -798,8 +860,9 @@ export async function renderInvoicePdf(
         drawRow(sheet, columns, { label: t("noLines") }, "body");
       } else {
         for (const line of invoice.lineItems) {
-          ensureSpace(sheet, columns, ROW_HEIGHT);
-          drawRow(sheet, columns, lineCells(format, t, line, withUnits), "body");
+          const cells = lineCells(format, t, line, withUnits);
+          ensureSpace(sheet, columns, bodyRowHeight(sheet, columns, cells));
+          drawRow(sheet, columns, cells, "body");
         }
       }
 

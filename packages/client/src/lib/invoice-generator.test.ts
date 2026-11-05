@@ -9,6 +9,7 @@ import {
   isInvoiceForm,
   readDraft,
   removeDraft,
+  servicePeriod,
   validateLine,
   validLines,
   writeDraft,
@@ -203,5 +204,62 @@ describe("draft persistence", () => {
     const storage = memStorage();
     storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(bad));
     expect(readDraft(storage)).toBeNull();
+  });
+});
+
+describe("service period", () => {
+  it("is absent when neither date is given, so the PDF prints no Period row", () => {
+    const invoice = buildInvoice(formWith([stdLine()]), "de", GENERATED_AT);
+    expect(invoice.from).toBeNull();
+    expect(invoice.to).toBeNull();
+  });
+
+  it("carries the first and the last day as UTC midnights", () => {
+    const invoice = buildInvoice(
+      formWith([stdLine()], { periodStart: "2026-10-01", periodEnd: "2026-10-31" }),
+      "de",
+      GENERATED_AT,
+    );
+    expect(invoice.from).toBe("2026-10-01T00:00:00.000Z");
+    expect(invoice.to).toBe("2026-10-31T00:00:00.000Z");
+  });
+
+  it("reads one date alone as a single day", () => {
+    expect(servicePeriod("2026-10-05", "")).toEqual({
+      from: "2026-10-05T00:00:00.000Z",
+      to: "2026-10-05T00:00:00.000Z",
+    });
+    expect(servicePeriod("", "2026-10-07")).toEqual({
+      from: "2026-10-07T00:00:00.000Z",
+      to: "2026-10-07T00:00:00.000Z",
+    });
+  });
+
+  it("puts dates typed the wrong way round in order and ignores garbage", () => {
+    expect(servicePeriod("2026-10-31", "2026-10-01")).toEqual({
+      from: "2026-10-01T00:00:00.000Z",
+      to: "2026-10-31T00:00:00.000Z",
+    });
+    expect(servicePeriod("soon", "  ")).toEqual({ from: null, to: null });
+  });
+
+  it("restores a draft saved before the period existed with blank dates", () => {
+    const legacy: Record<string, unknown> = { ...formWith([stdLine()]) };
+    delete legacy.periodStart;
+    delete legacy.periodEnd;
+    const store = new Map<string, string>([[DRAFT_STORAGE_KEY, JSON.stringify(legacy)]]);
+    const storage: DraftStorage = {
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => void store.set(key, value),
+      removeItem: (key) => void store.delete(key),
+    };
+    const draft = readDraft(storage);
+    expect(draft?.periodStart).toBe("");
+    expect(draft?.periodEnd).toBe("");
+    expect(draft?.number).toBe("INV-1");
+  });
+
+  it("refuses a draft whose period is not text", () => {
+    expect(isInvoiceForm({ ...formWith([stdLine()]), periodStart: 5 })).toBe(false);
   });
 });

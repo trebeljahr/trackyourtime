@@ -1744,6 +1744,12 @@ cannot register its standard fonts in a browser, so the page imports pdfkit's
 `pdfkit.standalone.js` through the `pdfkit-standalone` alias in `next.config.ts`
 and hands the constructor to `renderInvoicePdf`'s optional `PDFDocument` option;
 the server path is unchanged.
+It renders with `meta.oneOff`, which drops the Status and Grouped-by rows (no
+workflow, nothing grouped). Its optional service period is stored as UTC
+midnights of the first and the LAST day — not the exclusive `to` of a stored
+invoice — because the renderer prints `to` as-is when no `paymentTerms`
+sentence is frozen. Long line descriptions wrap in every invoice PDF; a row
+whose label fits one line draws byte for byte as before.
 
 Four rules, each of which fails quietly if broken:
 

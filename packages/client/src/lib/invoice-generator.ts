@@ -87,6 +87,14 @@ export type InvoiceForm = {
   number: string;
   issueDate: string;
   dueDate: string;
+  /**
+   * The optional service period (Leistungszeitraum), `YYYY-MM-DD` each. A
+   * German invoice must state when the service was performed (§14(4) Nr. 6
+   * UStG); one date alone is a single day. Drafts saved before these fields
+   * existed lack them, which `readDraft` fills in as blank.
+   */
+  periodStart: string;
+  periodEnd: string;
   currency: string;
   lines: LineForm[];
   notes: string;
@@ -143,6 +151,8 @@ export const emptyForm = (): InvoiceForm => ({
   number: "",
   issueDate: "",
   dueDate: "",
+  periodStart: "",
+  periodEnd: "",
   currency: "EUR",
   lines: [emptyLine("line-1")],
   notes: "",
@@ -349,8 +359,7 @@ export function buildInvoice(
     status: "draft",
     issueDate: isoDate(form.issueDate, generatedAt),
     dueDate: isoDate(form.dueDate, form.issueDate || generatedAt),
-    from: null,
-    to: null,
+    ...servicePeriod(form.periodStart, form.periodEnd),
     groupBy: "project",
     lineItems,
     subtotal: totals.subtotal,
@@ -416,7 +425,9 @@ export function isInvoiceForm(value: unknown): value is InvoiceForm {
     typeof form.recipient === "object" &&
     form.recipient !== null &&
     Array.isArray(form.lines) &&
-    form.lines.every(isLineForm)
+    form.lines.every(isLineForm) &&
+    (form.periodStart === undefined || typeof form.periodStart === "string") &&
+    (form.periodEnd === undefined || typeof form.periodEnd === "string")
   );
 }
 
@@ -435,7 +446,11 @@ export function readDraft(storage: DraftStorage): InvoiceForm | null {
     const raw = storage.getItem(DRAFT_STORAGE_KEY);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as unknown;
-    return isInvoiceForm(parsed) ? parsed : null;
+    // A draft saved before the service period existed has no such keys; the
+    // blank defaults keep every field a controlled string.
+    if (!isInvoiceForm(parsed)) return null;
+    const saved: Partial<InvoiceForm> = parsed;
+    return { ...parsed, periodStart: saved.periodStart ?? "", periodEnd: saved.periodEnd ?? "" };
   } catch {
     return null;
   }
@@ -448,6 +463,35 @@ export function removeDraft(storage: DraftStorage): void {
   } catch {
     // Nothing to do — the caller resets the form state either way.
   }
+}
+
+/** A form date (`YYYY-MM-DD`), or null when the field is blank or not a date. */
+function dayKey(value: string): string | null {
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * The service period as the invoice's `from`/`to`, or both null when neither
+ * date is given — then the PDF prints no Period row, as before. One date alone
+ * is a one-day period; dates typed the wrong way round are put in order.
+ *
+ * Both bounds are UTC midnights of the first and the LAST day. A stored
+ * invoice's `to` is exclusive, but the renderer prints `to` as it is when the
+ * invoice froze no `paymentTerms` sentence (which a generator invoice never
+ * does), and in UTC, so the inclusive last day is what makes the page read
+ * "1 Oct to 31 Oct" rather than "to 1 Nov". Nothing else reads these bounds:
+ * the generator makes no e-invoice XML.
+ */
+export function servicePeriod(
+  start: string,
+  end: string,
+): { from: string | null; to: string | null } {
+  const first = dayKey(start) ?? dayKey(end);
+  const last = dayKey(end) ?? dayKey(start);
+  if (first === null || last === null) return { from: null, to: null };
+  const [low, high] = first <= last ? [first, last] : [last, first];
+  return { from: `${low}T00:00:00.000Z`, to: `${high}T00:00:00.000Z` };
 }
 
 /** A form date (`YYYY-MM-DD`) as an ISO datetime at UTC midnight, or a fallback. */
