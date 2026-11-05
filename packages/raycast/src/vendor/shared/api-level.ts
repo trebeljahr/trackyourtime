@@ -24,7 +24,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 17;
+export const API_LEVEL = 41;
 
 export type ApiLevelChange = {
   level: number;
@@ -36,7 +36,7 @@ export type ApiLevelChange = {
 
 /**
  * What each level added, oldest first. The last row's `level` is
- * {@link API_LEVEL}; `api-level.test.ts` in the server tests checks that.
+ * {@link API_LEVEL}; `version-handshake.test.ts` in the server tests checks that.
  *
  * Level 0 is not a row: it is every server and client released before the
  * handshake existed, which sends no level at all and reports none.
@@ -151,6 +151,55 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
       "`hidden` on tag rows, `tags.create` and `tags.update`; `includeHidden` on `tags.list` (also REST and MCP). Hidden automation tags are omitted from normal catalogs and report group labels.",
     ],
   },
+  {
+    level: 18,
+    release: "0.4.0",
+    added: [
+      "Passkey sign-in and private identity enrollment with signed key updates under `privacy.*`.",
+      "Encrypted workspace transport and migration preparation endpoints; workspace conversion remains disabled until client compatibility and restore validation are complete.",
+    ],
+  },
+  { level: 19, release: "0.4.0", added: [
+    "Private device unlocking through an encrypted relay: privacy.createDeviceUnlock, deviceUnlockStatus, approveDeviceUnlock and cancelDeviceUnlock.",
+  ] },
+  { level: 20, release: "0.4.0", added: [
+    "Signed encrypted workspace edits and immutable revision feeds under privacy.signedWrite and privacy.changes; both remain behind the workspace rollout guard.",
+  ] },
+  { level: 21, release: "0.4.0", added: [
+    "Account-scoped deletion previews distinguish encrypted and standard shared-workspace retention policies under privacy.deletionPreview.",
+  ] },
+  { level: 22, release: "0.4.0", added: [
+    "Owner-signed workspace key directory history and guarded preparation under privacy.directory and privacy.prepareDirectory; recipient metadata includes signing public keys. New private-key enrollments can bind their intended account and server.",
+  ] },
+  { level: 23, release: "0.4.0", added: [
+    "Guarded reader-specific initial snapshot manifests and immutable ciphertext pages under privacy.initialSnapshot and privacy.initialSnapshotPage.",
+  ] },
+  { level: 24, release: "0.4.0", added: [
+    "Guarded chained workspace edits and history under privacy.chainedWrite and privacy.chainedChanges. Initial snapshot v2 binds every reader to a common history root; private workspaces require the chained protocol without changing standard-client compatibility.",
+  ] },
+  { level: 25, release: "0.4.0", added: [
+    "Guarded member-private favorites source and signed conversion acknowledgements under privacy.migrationFavoritesSource and privacy.acknowledgeMigrationFavorites; no conversion or plaintext deletion is enabled.",
+  ] },
+  { level: 26, release: "0.4.0", added: ["Guarded owner migration approval bound to a reopened encrypted original backup and exact signed initial snapshot; no source deletion is enabled."] },
+  { level: 27, release: "0.4.0", added: ["Encrypted members records separate shared member details from private hourly rates. Guarded private snapshot consumers require this kind; standard-client compatibility is unchanged."] },
+  { level: 28, release: "0.4.0", added: ["Encrypted workspaceIdentity and creator-only integrations kinds for lossless supplemental recovery. Private snapshots require the expanded kind set; no migration or source deletion is enabled."] },
+  { level: 29, release: "0.4.0", added: ["Context-bound record keyCommitment for multi-reader ciphertext; initial private snapshots require the extended record format. Workspace migration remains disabled."] },
+  {
+    level: 30,
+    release: "0.4.0",
+    added: ["`privacy.recoveryChallenge` and `privacy.combinedRecovery`: trusted-root, session-bound original backups for standard owner workspaces, including the supplemental dataset."],
+  },
+  { level: 31, release: "0.4.0", added: ["`privacy.inventoryWrite` and `privacy.inventoryVersions`: root-signed encrypted account workspace inventory history, with immutable retries and bounded pages. Workspace conversion remains disabled."] },
+  { level: 32, release: "0.4.0", added: ["Authenticated POST reader projections and directory history for trusted private workspace bootstrap, including permanent reserved mode. Conversion and private content writes remain disabled."] },
+  { level: 33, release: "0.4.0", added: ["Read-only profile.displayPreferences for account rendering/idle preferences without plaintext workspace rates or currency. Private workspace conversion and writes remain disabled."] },
+  { level: 34, release: "0.4.0", added: ["Read-only profile.workspaceMemberMetadata for existing account names, emails and membership ids without workspace rates or authority. Private conversion and writes remain disabled."] },
+  { level: 35, release: "0.4.0", added: ["Optional clientWorkspaceId on workspaces.create binds standard workspace creation to a client-generated UUID. Private conversion and writes remain disabled."] },
+  { level: 36, release: "0.4.0", added: ["Authenticated privacy.timerVersions and guarded privacy.timerWrite coordinate signed account timer history with encrypted workspace edits. Conversion and private content writes remain disabled."] },
+  { level: 37, release: "0.4.0", added: ["Optional signed standardStart coordinates and transient standardStartInput extend guarded account timer writes for atomic private-to-standard handoffs. Conversion and private content writes remain disabled."] },
+  { level: 38, release: "0.4.0", added: ["Account-scoped privacy.standardCurrentTimer checks the actual timer workspace and membership before returning standard time, independent of workspace selection. Private timers remain client-only; conversion and private content writes remain disabled."] },
+  { level: 39, release: "0.4.0", added: ["Encrypted author-owned entryoperations receipts may accompany guarded account timer transitions, bound to the signed operation UUID. Public conversion and private content writes remain disabled."] },
+  { level: 40, release: "0.4.0", added: ["Account-scoped privacy.standardTimerResult reads the original standard result of a previously committed private timer handoff, with fresh membership/mode and original request checks. It cannot start or reopen time. Private rollout guards remain closed."] },
+  { level: 41, release: "0.4.0", added: ["Authenticated privacy.standardContinueTimerInput prepares a standard continuation without changing time, with fresh workspace membership and visibility. Private handoff receipts retain the original continuation recipe. Private rollout guards remain closed."] },
 ];
 
 /**

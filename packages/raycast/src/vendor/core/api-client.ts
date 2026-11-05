@@ -2,6 +2,7 @@
 // Do not edit. Change the source file, then run `pnpm vendor:raycast`.
 import { durableRequestSignal } from "./durable-entry.js";
 import { CLIENT_TOO_OLD, versionHeaders, type VersionRefusal } from "../shared/api-level.js";
+import { REQUIRES_API_LEVEL } from "../shared/capabilities.js";
 
 /**
  * Thin caller over the tRPC HTTP endpoints, for clients that cannot use the
@@ -261,6 +262,10 @@ export function assertEntryClientSupported(
   input: unknown,
   level: number | null,
 ): void {
+  if (path === "workspaces.create" && input !== null && typeof input === "object" && (input as { clientWorkspaceId?: unknown }).clientWorkspaceId !== undefined &&
+    (level === null || !Number.isSafeInteger(level) || level < REQUIRES_API_LEVEL["workspaces.clientCreation"])) {
+    throw new ApiError("Update the server before creating a workspace with a client-generated identity.", "PRECONDITION_FAILED", 412);
+  }
   if (
     level !== null &&
     level < 7 &&

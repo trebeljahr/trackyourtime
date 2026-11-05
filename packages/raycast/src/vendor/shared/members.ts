@@ -282,5 +282,7 @@ export const createWorkspaceSchema = z.object({
     .regex(/^[A-Za-z]{3}$/, "Currency must be a 3-letter ISO 4217 code")
     .transform((value) => value.toUpperCase()),
   weekStartsOn: z.union([z.literal(0), z.literal(1)]),
+  /** A new standard workspace reserved by the client, never an existing id. */
+  clientWorkspaceId: z.uuid().optional(),
 });
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;

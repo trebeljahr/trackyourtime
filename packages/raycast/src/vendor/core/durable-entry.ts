@@ -16,7 +16,7 @@ export const webQueueExclusive = (name: string): QueueExclusive => async (task) 
   return navigator.locks.request(name, { mode: "exclusive" }, task);
 };
 
-const operationId = (): string => {
+export const createEntryOperationId = (): string => {
   if (!globalThis.crypto?.getRandomValues)
     throw new Error("Secure operation identities are unavailable");
   if (globalThis.crypto.randomUUID) return globalThis.crypto.randomUUID();
@@ -33,7 +33,7 @@ export const durableEntryPayload = (op: string, payload: unknown): unknown => {
   const stored = payload as { input?: unknown };
   if (typeof stored.input !== "object" || stored.input === null) return payload;
   const input = JSON.parse(JSON.stringify(stored.input)) as Record<string, unknown>;
-  input.operationId ??= operationId();
+  input.operationId ??= createEntryOperationId();
   if (op === "entries.start") input.start ??= new Date().toISOString();
   if (op === "entries.stop") input.end ??= new Date().toISOString();
   return { ...stored, input };
