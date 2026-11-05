@@ -132,7 +132,9 @@ describe("immutable initial snapshot storage", { skip: skipWithoutDatabase }, ()
   it("erases a departing member's personal snapshot data while preserving another reader's signed projection", async () => {
     const integrations = await Promise.all(["owner", "member"].map((userId) => encryptPrivateRecord(base.workspaceId, { kind: "integrations", id: `webhooksubscriptions:${userId}-hook`, authorId: userId, value: { _id: `${userId}-hook`, workspaceId: base.workspaceId, createdBy: userId, secret: `${userId}-private-webhook-secret` } }, people, 1)));
     await storeRecords(integrations); records.push(...integrations); await signSnapshot();
-    await preparePrivateInitialSnapshot(scope(), readers);
+    // Activated, not still preparing: erasure during preparation cancels the
+    // whole preparation instead (privacy-plaintext-guard.test.ts).
+    await activateChainedFixture();
     const before = await downloadPrivateInitialSnapshot(options());
     await mongooseRowStore.deleteMany("workspaceMembers", { workspaceId: base.workspaceId, userId: "member" });
     await mongooseRowStore.erasePrivateUserData("member");

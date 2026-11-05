@@ -14,5 +14,7 @@ it("requires the existing private identity to change recovery, independent of lo
 });
 it("keeps incomplete workspace conversion unreachable before any database writes", async () => {
   assert.throws(requirePrivateWorkspaceRollout, /not available/);
-  await assert.rejects(beginPrivateMigration("workspace", "owner", "hash", "signature"), /not available/);
+  // The obsolete-protocol gate (requirePrivateClientProtocol) now refuses
+  // begin first; either refusal comes before any database read or write.
+  await assert.rejects(beginPrivateMigration("workspace", "owner", "hash", "signature"), { code: "NOT_IMPLEMENTED", message: /legacy private-data protocol is unavailable/ });
 });
