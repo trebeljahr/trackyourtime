@@ -51,6 +51,55 @@ const MIXED_SCOPE: Record<string, { procedures: readonly string[]; reason: strin
   },
 };
 
+/**
+ * Routers that cannot use workspaceProcedure because it refuses the very
+ * workspaces they serve, and so scope through a gate of their own. Each names
+ * that gate, which must resolve the workspace through `resolveWorkspace` and
+ * answer NOT_FOUND exactly as workspaceProcedure does, and lists the
+ * account-level procedures allowed beside it. Every other procedure in the
+ * file must go through the gate, so a new one cannot slip in unscoped.
+ */
+const OWN_WORKSPACE_GATE: Record<
+  string,
+  { gate: string; account: { procedure: string; names: readonly string[] }; reason: string }
+> = {
+  "privacy.ts": {
+    gate: "privateWorkspaceProcedure",
+    account: {
+      procedure: "privateAccountProcedure",
+      names: [
+        "standardContinueTimerInput",
+        "standardTimerResult",
+        "standardCurrentTimer",
+        "timerVersions",
+        "timerWrite",
+        "inventoryWrite",
+        "inventoryVersions",
+        "deletionPreview",
+        "identity",
+        "enroll",
+        "updateIdentity",
+        "createDeviceUnlock",
+        "deviceUnlockStatus",
+        "approveDeviceUnlock",
+        "cancelDeviceUnlock",
+      ],
+    },
+    reason:
+      "workspaceProcedure refuses a private workspace (assertStandardWorkspace), and these procedures exist to run on one; " +
+      "the account procedures hold the caller's own keys, devices, timer and inventory history, keyed by ctx.user.id alone",
+  },
+};
+
+/** The source of `const <name> = …;` up to the end of its middleware. */
+const definitionOf = (source: string, name: string): string => {
+  const start = source.indexOf(`const ${name} = `);
+  assert.ok(start >= 0, `expected a definition of ${name}`);
+  const end = source.indexOf("\n});", start);
+  assert.ok(end > start, `expected ${name}'s middleware to end with "});"`);
+  return source.slice(start, end);
+};
+
 /** The procedure names in a router source that use `kind`. */
 const proceduresUsing = (source: string, kind: string): string[] =>
   [...source.matchAll(new RegExp(`^\\s*(\\w+):\\s*${kind}\\b`, "gm"))].map((m) => m[1] ?? "");
@@ -77,6 +126,14 @@ test("every domain router scopes its procedures with workspaceProcedure", () => 
     if (file in NOT_WORKSPACE_SCOPED || NOT_A_ROUTER.has(file)) continue;
     const source = read(file);
     if (!source.includes("Procedure")) continue;
+    const own = OWN_WORKSPACE_GATE[file];
+    if (own) {
+      const gate = definitionOf(source, own.gate);
+      assert.match(gate, /resolveWorkspace\(/, `${file}: ${own.gate} must resolve the workspace with resolveWorkspace`);
+      assert.match(gate, /code: "NOT_FOUND"/, `${file}: ${own.gate} must answer NOT_FOUND for a workspace the caller is not in`);
+      assert.ok(proceduresUsing(source, own.gate).length > 0, `${file} never uses ${own.gate}`);
+      continue;
+    }
 
     assert.ok(
       source.includes("workspaceProcedure"),
@@ -91,6 +148,22 @@ test("no domain router falls back to the unscoped protectedProcedure", () => {
   for (const file of routerFiles) {
     if (file in NOT_WORKSPACE_SCOPED || NOT_A_ROUTER.has(file)) continue;
     const source = read(file);
+    const own = OWN_WORKSPACE_GATE[file];
+    if (own) {
+      const all = [...source.matchAll(/^\s*(\w+):\s*(\w+Procedure)\b/gm)];
+      const strays = all.filter(([, , kind]) => kind !== own.gate && kind !== own.account.procedure).map(([, name]) => name);
+      assert.deepEqual(strays, [], `${file}: every procedure must use ${own.gate} or ${own.account.procedure}`);
+      assert.deepEqual(
+        proceduresUsing(source, own.account.procedure).sort(),
+        [...own.account.names].sort(),
+        `${file}: only the listed account procedures may run outside ${own.gate}`,
+      );
+      // The account gate is the only place a bare session check may appear.
+      assert.equal(source.split("protectedProcedure").length - 1, 2, `${file}: protectedProcedure is for the account gate only`);
+      assert.match(definitionOf(source, own.account.procedure), /^const \w+ = protectedProcedure\.use\(/);
+      assert.ok(own.reason.length > 10);
+      continue;
+    }
     const mixed = MIXED_SCOPE[file];
     if (mixed) {
       const unscoped = [
