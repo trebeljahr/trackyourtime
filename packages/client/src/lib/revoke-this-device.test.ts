@@ -30,8 +30,14 @@ vi.mock("@/components/ui/sonner", () => ({
   toast: { error: (...args: unknown[]) => toastError(...args) },
 }));
 
-const { clearOfflineQueue, enqueueOffline, getOfflineQueue, getPendingCount } =
-  await import("./offline");
+const {
+  __resetOfflineQueueOwnerForTests,
+  clearOfflineQueue,
+  enqueueOffline,
+  getOfflineQueue,
+  getPendingCount,
+  setOfflineQueueOwner,
+} = await import("./offline");
 const { revokeThisDevice } = await import("./revoke-this-device");
 const { __resetSessionRevokedForTests, consumeSessionRevokedNotice } =
   await import("./session-revoked");
@@ -51,6 +57,10 @@ beforeEach(async () => {
   vi.clearAllMocks();
   __resetSessionRevokedForTests();
   await clearOfflineQueue();
+  __resetOfflineQueueOwnerForTests();
+  // A row can only be queued for a resolved account: the signed-in person
+  // whose session the server later revokes.
+  await setOfflineQueueOwner("user-1");
 });
 
 describe("revokeThisDevice", () => {

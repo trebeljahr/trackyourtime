@@ -22,6 +22,13 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceSummary } from "@starter/core";
 
+// These tests pin the legacy (standard-storage) queue's replay rules; the
+// private-routing gate in front of each row write has its own coverage.
+vi.mock("@/lib/private-content-route", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/private-content-route")>()),
+  assertStandardWorkspaceContent: async () => () => {},
+}));
+
 vi.mock("@/mobile/network", () => ({
   getNetworkOnline: () => true,
   getServerNetworkOnline: () => true,

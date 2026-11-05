@@ -11,7 +11,8 @@ vi.mock("@/lib/auth-client", () => ({
   signInWithPassword: fake.signIn, authClient: {}, getSession: async () => undefined,
   isTwoFactorChallenge: () => false, POST_AUTH_REDIRECT: "/app/track",
 }));
-vi.mock("@/lib/api-origin", () => ({
+vi.mock("@/lib/api-origin", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-origin")>()),
   subscribeApiOrigin: (listener: () => void) => {
     fake.listeners.add(listener);
     return () => fake.listeners.delete(listener);

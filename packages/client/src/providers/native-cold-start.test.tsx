@@ -30,6 +30,12 @@ vi.mock("@capacitor/preferences", () => ({
 vi.mock("@/components/app-shell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }));
+// The private-data device gate between the layout and the shell has its own
+// tests (private-workspace-boundary, private-device-connection). Here it
+// stands aside, like AppShell, so what is asserted is the auth path alone.
+vi.mock("@/components/private-workspace-boundary", () => ({
+  PrivateWorkspaceBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 const session = {
   session: { id: "s1", userId: "u1" },

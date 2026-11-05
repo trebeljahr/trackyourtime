@@ -23,7 +23,8 @@ vi.mock("@/lib/shell", async () =>
 const setNativeToken = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("@/lib/native-session", () => ({ setNativeToken }));
 
-vi.mock("@/lib/api-origin", () => ({
+vi.mock("@/lib/api-origin", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-origin")>()),
   whenApiOriginReady: async () => undefined,
   getAbsoluteApiOrigin: () => "https://api.example.test",
 }));

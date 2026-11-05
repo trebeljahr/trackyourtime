@@ -40,7 +40,8 @@ const loadClient = async (streamQueries = true) => {
     isActiveWorkspaceReady: () => workspaceReady,
     whenActiveWorkspaceReady: () => workspaceSettled,
   }));
-  vi.doMock("@/lib/api-origin", () => ({
+  vi.doMock("@/lib/api-origin", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/api-origin")>()),
     whenApiOriginReady: () => originReady,
     rebaseApiUrl: (url: string) => {
       const parsed = new URL(url, "https://build.invalid");

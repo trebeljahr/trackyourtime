@@ -40,6 +40,7 @@ import {
   setOfflineQueueOwner,
   type OfflineStartInput,
 } from "./offline";
+import { privateAccountChanged } from "./private-session";
 
 const USER = "user-1";
 
@@ -118,6 +119,9 @@ describe("offline rows and workspaces", () => {
     __resetOfflineQueueOwnerForTests();
     __resetActiveWorkspaceForTests();
     await setOfflineQueueOwner(USER);
+    // A workspace switch is an action of the signed-in account; it refuses to
+    // run before the auth provider has resolved who that is.
+    privateAccountChanged(USER);
   });
 
   it("stamps a queued row with the active workspace", async () => {

@@ -15,7 +15,8 @@ const OWN = "https://track.example.com";
 
 const server = { current: CLOUD };
 
-vi.mock("@/lib/api-origin", () => ({
+vi.mock("@/lib/api-origin", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api-origin")>()),
   getAbsoluteApiOrigin: () => server.current,
   getDefaultAbsoluteApiOrigin: () => CLOUD,
   whenApiOriginReady: async () => undefined,

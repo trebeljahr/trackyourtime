@@ -21,7 +21,7 @@ vi.mock("@/components/members/use-active-workspace", () => ({
   useActiveWorkspace: () => ({ workspace: state.workspace }),
 }));
 vi.mock("@/hooks/use-api-origin", () => ({ useApiOrigin: () => ({ ready: true }) }));
-vi.mock("@/lib/api-origin", () => ({ getAbsoluteApiOrigin: () => state.server }));
+vi.mock("@/lib/api-origin", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api-origin")>()), getAbsoluteApiOrigin: () => state.server }));
 vi.mock("@/mobile/preferences-storage", () => ({
   shouldUseNativeStorage: () => false,
   preferencesStorage: () => { throw new Error("web must not use native preferences"); },

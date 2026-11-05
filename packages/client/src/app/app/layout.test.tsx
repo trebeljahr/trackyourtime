@@ -34,6 +34,12 @@ vi.mock("@/components/app-shell", () => ({
     <div data-testid="app-shell">{children}</div>
   ),
 }));
+// The private-data device gate between the layout and the shell has its own
+// tests (private-workspace-boundary, private-device-connection). Here it
+// stands aside, like AppShell, so what is asserted is the auth path alone.
+vi.mock("@/components/private-workspace-boundary", () => ({
+  PrivateWorkspaceBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 const { default: ProtectedLayout } = await import("./layout");
 

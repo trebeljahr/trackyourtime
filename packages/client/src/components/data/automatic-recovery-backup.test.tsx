@@ -5,7 +5,7 @@ import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-libra
 const state = vi.hoisted(() => ({ version: 0, unlocked: true, supported: true, listeners: new Set<() => void>(), configure: vi.fn(), note: vi.fn(), choose: vi.fn(), close: vi.fn() }));
 vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "owner" } }) }));
 vi.mock("@/components/members/use-active-workspace", () => ({ useActiveWorkspace: () => ({ workspace: { id: "workspace", role: "owner" } }) }));
-vi.mock("@/lib/private-session", () => ({ privateDataOrigin: () => "https://api.example.test", privateSession: () => state.unlocked ? {} : null, privateSessionVersion: () => state.version, subscribePrivateSession: (listener: () => void) => { state.listeners.add(listener); return () => state.listeners.delete(listener); } }));
+vi.mock("@/lib/private-session", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/private-session")>()), privateDataOrigin: () => "https://api.example.test", privateSession: () => state.unlocked ? {} : null, privateSessionVersion: () => state.version, subscribePrivateSession: (listener: () => void) => { state.listeners.add(listener); return () => state.listeners.delete(listener); } }));
 vi.mock("@/lib/server-level", () => ({ useServerSupports: () => state.supported }));
 vi.mock("@/lib/trpc", () => ({ trpc: { useUtils: () => ({ client: {} }), privacy: { identity: { useQuery: () => ({ data: { identity: { synthetic: true } } }) } } } }));
 vi.mock("@/lib/recovery-backup-folder", () => ({ supportsRecoveryBackupFolders: () => true, chooseRecoveryBackupFolder: () => state.choose() }));

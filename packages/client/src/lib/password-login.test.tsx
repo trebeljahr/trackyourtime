@@ -160,6 +160,12 @@ afterEach(() => {
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/components/app-shell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
+// The private-data device gate between the layout and the shell has its own
+// tests (private-workspace-boundary, private-device-connection). Here it
+// stands aside, like AppShell, so what is asserted is the auth path alone.
+vi.mock("@/components/private-workspace-boundary", () => ({
+  PrivateWorkspaceBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 describe("password login", () => {
   for (const platform of ["web", "capacitor"] as const) {
     it(`uses one auth request including protected navigation on ${platform}`, async () => {
