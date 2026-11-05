@@ -214,7 +214,7 @@ export const marketing: Translation<typeof source> = {
         "<strong>Deine Sitzungen.</strong> Für jedes Gerät, auf dem du dich anmeldest: die IP-Adresse und die Browser- oder App-Kennung, mit der die Anmeldung erfolgt ist, und der Name der Track-Your-Time-App. Genau das zeigt dir Einstellungen → Geräte, damit du ein Gerät wiedererkennst und abmelden kannst.",
       tokens:
         "<strong>API-Tokens und Webhooks</strong>, wenn du welche anlegst: ein Hash jedes Tokens, seine Berechtigungen und die Adressen, an die deine Webhooks senden, mit einem Protokoll jeder Zustellung.",
-      logs: "<strong>Anfrageprotokolle.</strong> Der Server protokolliert jede Anfrage mit IP-Adresse, Zeitpunkt, angefragter Adresse und Browser-Kennung. Die Protokolle dienen dazu, Fehler zu finden und zu beheben, und zu nichts anderem.",
+      logs: "<strong>Anfrageprotokolle.</strong> Der Server protokolliert jede Anfrage mit IP-Adresse, Land, Zeitpunkt, angefragter Adresse samt Query-String, Statuscode, Browser-Kennung und verweisender Seite. Die Protokolle dienen dazu, Fehler und Angriffe zu finden, und zu nichts anderem.",
     },
     purpose: {
       title: "Warum der Dienst das speichert",
@@ -307,7 +307,7 @@ export const marketing: Translation<typeof source> = {
     },
     retention: {
       title: "Wie lange die Daten gespeichert bleiben",
-      body: "Dein Konto und deine erfasste Zeit bleiben gespeichert, bis du sie löschst oder ihre Löschung verlangst. Eine Browser-Sitzung endet 7 Tage nach ihrer letzten Nutzung. Eine Sitzung in einer App oder Erweiterung endet 30 Tage nach ihrer letzten Nutzung. Beide enden sofort, wenn du das Gerät abmeldest.",
+      body: "Dein Konto und deine erfasste Zeit bleiben gespeichert, bis du sie löschst oder ihre Löschung verlangst. Eine Browser-Sitzung endet 7 Tage nach ihrer letzten Nutzung. Eine Sitzung in einer App oder Erweiterung endet 30 Tage nach ihrer letzten Nutzung. Beide enden sofort, wenn du das Gerät abmeldest. Anfrageprotokolle werden nach 14 Tagen gelöscht.",
     },
     rights: {
       title: "Deine Rechte",

@@ -217,7 +217,7 @@ export const marketing = {
         "<strong>Your sessions.</strong> For each device you sign in on: the IP address and browser or app identifier it signed in from, and the name of the Track Your Time client. This is what Settings → Devices shows you, so you can recognise a device and sign it out.",
       tokens:
         "<strong>API tokens and webhooks</strong>, if you create them: a hash of each token, its scopes, and the addresses your webhooks send to, with a record of each delivery.",
-      logs: "<strong>Request logs.</strong> The server logs each request with the IP address, the time, the address requested and the browser identifier. The logs exist to find and fix faults and are used for nothing else.",
+      logs: "<strong>Request logs.</strong> The server logs each request with the IP address, the country, the time, the address requested including any query string, the response code, the browser identifier and the referring page. The logs exist to find faults and attacks and are used for nothing else.",
     },
     purpose: {
       title: "Why the service stores it",
@@ -310,7 +310,7 @@ export const marketing = {
     },
     retention: {
       title: "How long it is kept",
-      body: "Your account and tracked time are kept until you delete them or ask for them to be deleted. A browser session ends 7 days after its last use. A session in an app or extension ends 30 days after its last use. Either ends at once when you sign the device out.",
+      body: "Your account and tracked time are kept until you delete them or ask for them to be deleted. A browser session ends 7 days after its last use. A session in an app or extension ends 30 days after its last use. Either ends at once when you sign the device out. Request logs are deleted after 14 days.",
     },
     rights: {
       title: "Your rights",

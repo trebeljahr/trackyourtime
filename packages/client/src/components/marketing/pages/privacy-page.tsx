@@ -17,7 +17,7 @@ export const privacyMetadata = (locale: Locale): Metadata => {
 };
 
 /** Bump when the policy changes in substance. Store listings link to this page. */
-const LAST_UPDATED = Date.UTC(2026, 9, 22);
+const LAST_UPDATED = Date.UTC(2026, 10, 6);
 
 /**
  * The date in the page's language, identical on every build machine.
