@@ -1799,8 +1799,10 @@ own (`tests/support/test-database.ts`). CI sets it, to a single-node replica
 set (`scripts/mongo-replica-set-container.sh`), with `REQUIRE_TRANSACTIONS=1`:
 the transaction cases (approvals, durable entry replay, invoice deletion) skip
 on a standalone mongod, and that flag turns the skip — or a missing URI — into
-a failure. Those files branch on `testDatabaseTransactions()`; the `verify` job
-runs them once more against a standalone service for the fallback paths.
+a failure. Those files branch on `testDatabaseTransactions()`. CI no longer
+runs them against a standalone mongod: since storage quotas every workspace
+write needs a transaction, so a standalone server refuses them all and the
+fallback paths are unreachable (`docs/storage-limits.md`).
 
 Scheduler rules:
 

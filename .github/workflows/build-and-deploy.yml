@@ -51,19 +51,6 @@ jobs:
   # block below — so it is equally safe from a fork.
   verify:
     runs-on: ubuntu-latest
-    services:
-      # A STANDALONE mongod, for the standalone step below only. The unit
-      # suite itself runs against the replica set the steps start: a service
-      # container cannot take `--replSet`.
-      mongo-unit:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     # The workflow-level block grants `packages: write` for the two image
     # pushes. This job pins `contents: read` instead, so PR code never runs
     # with a token that can publish a package. (A fork PR gets a read-only
@@ -103,21 +90,10 @@ jobs:
           # Turns those skips into failures: a lost URI or a standalone server
           # must fail the run, not pass it with the riskiest cases unrun.
           REQUIRE_TRANSACTIONS: "1"
-      # The same files keep a standalone fallback (refusing durable replay
-      # with 412, gating approvals, leaving an interrupted invoice deletion
-      # visibly pending), which a replica set never reaches. Every file that
-      # branches on the topology asks `testDatabaseTransactions`, so this
-      # list finds them; their replica-set-only cases skip here, having run above.
-      - name: Server tests against a standalone mongod
-        working-directory: packages/server
-        # The assignment fails the step when grep finds nothing; a bare
-        # `node --test` would run its default glob instead.
-        run: |
-          files=$(grep -l testDatabaseTransactions src/tests/*.test.ts)
-          # shellcheck disable=SC2086 # one path per word, split on purpose
-          node --import tsx --test $files
-        env:
-          TEST_MONGODB_URI: mongodb://127.0.0.1:27017
+      # No standalone-mongod pass any more: since storage quotas (7e8d4a21)
+      # every workspace write runs in a transaction and a standalone server
+      # refuses it, so the fallback paths that pass exercised are unreachable.
+      # docs/storage-limits.md: a replica set or mongos is required.
       - run: pnpm run test:client
       # The client image builds the docs into out/docs/ (packages/client/Dockerfile),
       # but that only runs on a push to main, after merge. Building them here
