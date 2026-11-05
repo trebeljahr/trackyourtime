@@ -20,6 +20,9 @@ const repo = path.resolve(here, "../../..");
 const ALLOWED_FILES = [
   /^electron\/src\/activity\/(?!.*\.test\.ts$)[^/]+\.ts$/,
   /^electron\/src\/(distribution|ipc|trust)\.ts$/,
+  // The activity vault keeps its key in the OS-encrypted store; that file
+  // reads and writes local files only, and is walked like any other.
+  /^electron\/src\/secure-store\.ts$/,
   /^packages\/core\/src\/activity\/[^/]+\.ts$/,
   /^packages\/shared\/src\/desktop-(bridge|shortcuts)\.ts$/,
 ];
@@ -48,7 +51,8 @@ const importsOf = (source: string): ImportRef[] => {
   for (const match of source.matchAll(/(?:^|\n)\s*import\s+["']([^"']+)["']/g)) {
     refs.push({ specifier: match[1] ?? "", names: "" });
   }
-  for (const match of source.matchAll(/import\(\s*["']([^"']+)["']\s*\)/g)) {
+  // Not a member call: `ObjC.import('AppKit')` in a JXA script string is no module.
+  for (const match of source.matchAll(/(?<![\w$.])import\(\s*["']([^"']+)["']\s*\)/g)) {
     refs.push({ specifier: match[1] ?? "", names: "" });
   }
   return refs;
