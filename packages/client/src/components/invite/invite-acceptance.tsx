@@ -1,5 +1,6 @@
 "use client";
 
+import { reconcileJoinedWorkspaces } from "@/lib/private-inventory-reconcile";
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -337,6 +338,10 @@ function InvitationBody({
     setJoining(true);
     try {
       const { workspaceId } = await accept.mutateAsync({ id: invitation.id });
+      // With keys, content requests must name a workspace the signed inventory
+      // lists; add the joined one before the app opens in it
+      // (lib/private-inventory-reconcile.ts).
+      if (user) await reconcileJoinedWorkspaces(user.id, [{ id: workspaceId }]);
       await enterWorkspace(workspaceId, navigate);
     } catch (failure) {
       setJoining(false);

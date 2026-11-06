@@ -34,7 +34,10 @@ export function lockAndForgetPrivateData(): void {
   lockPrivateData();
   if (userId) void forgetUnlockedKeys(origin, userId);
 }
-let restoring = 0;
+let restoring = 0, restoreInFlight: Promise<unknown> | null = null;
+/** Settles once a running restore of this device's saved unlock has finished;
+ * at once when none is running. Never waits for a sign-in. */
+export const whenUnlockRestoreSettled = (): Promise<void> => (restoreInFlight ? restoreInFlight.then(() => undefined, () => undefined) : Promise.resolve());
 // api-origin publishes on readiness too (on web, once, with nothing changed).
 // Only a different server invalidates the account: resetting it on a no-op
 // publish after AuthProvider resolved it left every private-scoped request
@@ -193,10 +196,10 @@ export function privateAccountChanged(userId: string | null): void {
   // erase the saved unlock (and its marker), so a restore that finishes after
   // them installs nothing; a lock from the API origin settling does not.
   const at = ++restoring, origin = privateDataOrigin();
-  void restoreUnlockedKeys<UnlockedIdentity>(origin, userId)
+  restoreInFlight = restoreUnlockedKeys<UnlockedIdentity>(origin, userId)
     .then((secrets) => { if (at === restoring && secrets && !session && origin === privateDataOrigin() && hasSavedUnlock(origin, userId)) { try { installPrivateSession(userId, secrets); } catch { void forgetUnlockedKeys(origin, userId); } } })
     .catch(() => undefined)
-    .finally(() => { if (at === restoring) publish(); });
+    .finally(() => { if (at === restoring) { restoreInFlight = null; publish(); } });
 }
 
 /** Private workspace replicas use their own scoped namespace. The legacy

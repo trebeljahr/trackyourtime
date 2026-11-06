@@ -47,7 +47,8 @@ import { getAbsoluteApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
 
 import { KNOWN_WORKSPACES_STORAGE_KEY, publicWorkspaceDirectory, workspaceDirectoryExclusive, strictWorkspaceDirectoryStorage, eraseStoredWorkspaceNames, subscribeWorkspaceNameProtection, type KnownWorkspaces } from "./workspace-name-privacy";
 import { privateRoutingRequired, privateRoutingRequiredOnWeb } from "./private-routing-requirement";
-import { privateSession, subscribePrivateSession, subscribePrivateAccount } from "./private-session";
+import { privateSession, subscribePrivateSession, subscribePrivateAccount, whenUnlockRestoreSettled } from "./private-session";
+import { reconcileJoinedWorkspaces } from "./private-inventory-reconcile";
 export { KNOWN_WORKSPACES_STORAGE_KEY } from "./workspace-name-privacy";
 
 /** Enough for anyone's history of workspaces; the oldest names drop first. */
@@ -321,6 +322,13 @@ export const applyWorkspaceList = async (
   userId: string
 ): Promise<WorkspaceListOutcome> => {
   await whenActiveWorkspaceReady();
+  lastListed = { userId, workspaces: [...workspaces] };
+  // A device that stayed unlocked restores its keys while the account resolves;
+  // decide name protection after that, not before (lib/private-device-key.ts).
+  await whenUnlockRestoreSettled();
+  // With keys, a workspace joined by invitation must enter the signed
+  // inventory before its content can be read (private-inventory-reconcile.ts).
+  await reconcileJoinedWorkspaces(userId, workspaces);
   return workspaceDirectoryExclusive(async () => {
     const scope = { userId, server: getAbsoluteApiOrigin() };
     const required = typeof window !== "undefined" && await privateRoutingRequired(scope);
@@ -395,6 +403,18 @@ const concealLockedWorkspaceNames = () => {
   if (known && protectedScope === scopeKey(known) && !privateSession(known.userId)) { known = publicWorkspaceDirectory(known); publish(); }
 };
 subscribePrivateSession(concealLockedWorkspaceNames);
+/** The last list as the server sent it. A list applied before this device's
+ * keys were unlocked stored only public names; once the keys open (a restored
+ * unlock, a password sign-in), apply it again so the names come back. */
+let lastListed: { userId: string; workspaces: WorkspaceSummary[] } | null = null;
+let namesUnlockedFor: string | null = null;
+subscribePrivateSession(() => {
+  const listed = lastListed;
+  if (!listed || !privateSession(listed.userId)) { namesUnlockedFor = null; return; }
+  if (namesUnlockedFor === listed.userId) return;
+  namesUnlockedFor = listed.userId;
+  void applyWorkspaceList(listed.workspaces, listed.userId).catch(() => undefined);
+});
 subscribePrivateAccount(concealLockedWorkspaceNames);
 subscribeWorkspaceNameProtection((scope) => {
   if (known && scopeKey(known) === scopeKey(scope)) { protectedScope = scopeKey(scope); concealLockedWorkspaceNames(); }

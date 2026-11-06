@@ -223,6 +223,15 @@ test.describe("Weekly timesheet", () => {
       "data-state",
       "running",
     );
+    // A full reload cancels a start that has not left yet; with private keys
+    // the route check runs before it is sent, so wait for the server to hold it.
+    const api = `http://127.0.0.1:${process.env.E2E_SERVER_PORT ?? "49761"}`;
+    await expect
+      .poll(() => page.evaluate(async (base) => {
+        const response = await fetch(`${base}/api/trpc/entries.current?input=${encodeURIComponent("{}")}`, { credentials: "include" });
+        return (await response.json()).result?.data?.id ?? null;
+      }, api), { timeout: 20_000 })
+      .not.toBeNull();
 
     await page.goto("/app/timesheet");
     await expect(page.getByTestId("running-timer-indicator")).toBeVisible();

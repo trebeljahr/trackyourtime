@@ -1391,7 +1391,7 @@ use the key but not read it; the trust equals staying signed in. Sign-out,
 account deletion and Settings → Lock erase it. This changes the earlier rule
 that account secrets live in memory only.
 
-Five details that fail quietly if broken:
+Six details that fail quietly if broken:
 
 - **The pre-sign-in lookups are plain requests**, not the app's tRPC client:
   its private-content link refuses anything before the account is known.
@@ -1415,6 +1415,16 @@ Five details that fail quietly if broken:
   draft opened while the workspace was still null is not refused when the
   first list fills it in (`sameEntryMutationScope`); a move between two real
   workspaces, another owner or another server still is.
+- **A joined workspace enters the signed inventory before it is opened.**
+  Creating a workspace reserves its id first, but accepting an invitation adds
+  a membership the inventory has never seen, and the content route refuses an
+  unknown id, together with the whole batch it rides in, `workspaces.list`
+  included. `reconcileJoinedWorkspaces` adds listed workspaces the inventory
+  lacks as standard (after accepting, and after every applied workspace list),
+  signs and delivers the update. Standard is the only honest mode while the
+  server refuses every private workspace; joining a private one will need its
+  own verified initialization. A list applied before this device's keys were
+  unlocked keeps only public names; it is applied again once they open.
 
 Email changes do not touch the salt or the envelope. Two-factor and passkey
 sign-in are unchanged; a passkey still unlocks through PRF where available.
