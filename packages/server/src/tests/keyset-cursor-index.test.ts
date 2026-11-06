@@ -21,7 +21,11 @@ const OWNER = "keyset-owner";
 const SUBSCRIPTION = new mongoose.Types.ObjectId();
 const OTHER_SUBSCRIPTION = new mongoose.Types.ObjectId();
 const ROWS = 90;
-const newest = Date.parse("2026-10-01T12:00:00Z");
+// Relative to now, on a whole hour: WebhookDelivery has a 30-day TTL on
+// `createdAt`, and a fixed date aged past it, so mongod's TTL monitor started
+// deleting the fixture mid-test (a short last page, once a minute at random).
+// Three days back keeps every due date (created + 1 day) in the past.
+const newest = Math.floor(Date.now() / 3_600_000) * 3_600_000 - 3 * 86_400_000;
 /** Every third row shares its predecessor's `createdAt`, so the tie-break runs. */
 const createdAt = (n: number): Date => new Date(newest - (n - (n % 3 === 2 ? 1 : 0)) * 3_600_000);
 
