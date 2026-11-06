@@ -15,6 +15,13 @@
 export const TWO_FACTOR_CHALLENGE_RESPONSE_HEADER = "set-two-factor-token";
 export const TWO_FACTOR_CHALLENGE_REQUEST_HEADER = "x-two-factor-token";
 
+/**
+ * Google sign-in for an account with two-factor on ends on the web app's
+ * `/login?two_factor=1`, with the challenge in the API's `two_factor` cookie:
+ * the login page shows the code step, and the verify call carries the cookie.
+ */
+export const TWO_FACTOR_SOCIAL_PARAM = "two_factor";
+
 /** `/two-factor/enable` on an account that already has two-factor on. */
 export const TWO_FACTOR_ALREADY_ENABLED = "TWO_FACTOR_ALREADY_ENABLED";
 /** Disable, regenerate backup codes or delete account was sent no code. */

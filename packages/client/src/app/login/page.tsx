@@ -28,6 +28,7 @@ import {
 } from "@/components/two-factor-challenge";
 import { isTokenShell } from "@/lib/shell";
 import { hasTwoFactorChallenge } from "@/lib/two-factor-challenge";
+import { TWO_FACTOR_SOCIAL_PARAM } from "@starter/shared";
 import { useIsTokenShell } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
 import { translate } from "@/i18n/translate";
@@ -61,6 +62,8 @@ export default function LoginPage() {
   const passkeysSupported = useServerSupports("auth.passkeys");
   useEffect(() => { void refreshServerLevel(); }, []);
   const [step, setStep] = useState<"password" | "two-factor">("password");
+  /** The code step after Google rather than after the password form. */
+  const [socialChallenge, setSocialChallenge] = useState(false);
   // `?next=` (validated by lib/safe-next.ts) and `?email=`, both read in an
   // effect for the same prerender reason as the revoked notice below. The
   // invite page sends people here with both; the protected layout with next.
@@ -76,6 +79,17 @@ export default function LoginPage() {
     if (prefill) setEmail((current) => (current === "" ? prefill : current));
     if (new URLSearchParams(search).has("error")) {
       setError(translate("shell")("auth.login.magicInvalid"));
+    }
+    // Back from Google for an account with two-factor on: the server holds a
+    // challenge in its cookie and sent us here for the code. The marker comes
+    // off the address, so a reload is an ordinary sign-in page again.
+    const params = new URLSearchParams(search);
+    if (params.get(TWO_FACTOR_SOCIAL_PARAM) === "1") {
+      setStep("two-factor");
+      setSocialChallenge(true);
+      params.delete(TWO_FACTOR_SOCIAL_PARAM);
+      const rest = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
     }
   }, []);
 
@@ -208,6 +222,7 @@ export default function LoginPage() {
   async function handleChallenge(outcome: ChallengeOutcome) {
     if (outcome === "expired" || outcome === "too-many-codes") {
       setStep("password");
+      setSocialChallenge(false);
       setPassword("");
       setError(
         translate("shell")(
@@ -228,12 +243,17 @@ export default function LoginPage() {
         <div className="mx-auto w-full max-w-sm space-y-6">
           <AuthHeader
             title={t("auth.twoFactor.title")}
-            subtitle={t("auth.twoFactor.signingInAs", { email })}
+            subtitle={
+              socialChallenge
+                ? t("auth.twoFactor.afterGoogle")
+                : t("auth.twoFactor.signingInAs", { email })
+            }
           />
           <TwoFactorChallenge
             onDone={handleChallenge}
             onCancel={() => {
               setStep("password");
+              setSocialChallenge(false);
               setPassword("");
             }}
           />

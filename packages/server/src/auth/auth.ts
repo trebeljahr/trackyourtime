@@ -362,6 +362,7 @@ export async function initAuth(): Promise<void> {
        * pins the order.
        */
       twoFactorGuard({
+        frontendUrl: env.FRONTEND_URL,
         getSession: async (headers) =>
           (await getAuth().api.getSession({
             headers,

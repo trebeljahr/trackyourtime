@@ -55,6 +55,7 @@ import {
 } from "../auth/second-factor.js";
 import {
   sessionCreationAllowed,
+  socialChallengeLocation,
   TWO_FACTOR_SESSION_PATHS,
   twoFactorGuard,
   type GuardSession,
@@ -122,6 +123,7 @@ function build(): void {
       twoFactorPlugin(),
       bearer(),
       twoFactorGuard({
+        frontendUrl: BASE,
         getSession: async (headers) =>
           (await auth.api.getSession({ headers, query: { disableCookieCache: true } })) as GuardSession | null,
       }),
@@ -703,7 +705,7 @@ describe("a dead session out of the cookie cache", () => {
 
 describe("Google sign-in for a 2FA account", () => {
   /** The real `/callback/google`, end to end, with only Google's token endpoint stubbed. */
-  async function googleCallback(email: string): Promise<Reply> {
+  async function googleCallback(email: string, errorCallbackURL?: string): Promise<Reply> {
     const realFetch = globalThis.fetch;
     const b64 = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64url");
     const now = Math.floor(Date.now() / 1000);
@@ -720,7 +722,9 @@ describe("Google sign-in for a 2FA account", () => {
       return realFetch(input as never, init);
     }) as typeof fetch;
     try {
-      const start = await call("/sign-in/social", { body: { provider: "google", callbackURL: "/track" } });
+      const start = await call("/sign-in/social", {
+        body: { provider: "google", callbackURL: "/track", ...(errorCallbackURL ? { errorCallbackURL } : {}) },
+      });
       assert.equal(start.status, 200, JSON.stringify(start.json));
       const state = new URL(String(start.json?.url)).searchParams.get("state") ?? "";
       return await call(`/callback/google?code=google-code&state=${encodeURIComponent(state)}`, {
@@ -732,16 +736,52 @@ describe("Google sign-in for a 2FA account", () => {
     }
   }
 
-  it("gives a verified 2FA account no session through the callback", async () => {
+  it("gives a verified 2FA account no session, and sends it to the code step instead", async () => {
     const person = await enrol(await signUp());
     // A verified address is what lets better-auth link Google to the account.
     userRow(person.id).emailVerified = true;
     const sessionsBefore = db.session.length;
-    const reply = await googleCallback(person.email);
+    const reply = await googleCallback(person.email, `${BASE}/login`);
     assert.equal(reply.status, 302);
-    assert.match(String(reply.headers.get("location")), /error=/);
-    assert.ok(!jar(reply.headers).includes("session_token"), "no session cookie");
+    const location = new URL(String(reply.headers.get("location")));
+    assert.equal(`${location.origin}${location.pathname}`, `${BASE}/login`);
+    assert.equal(location.searchParams.get("two_factor"), "1");
+    assert.equal(location.searchParams.get("error"), null, "the refusal is not shown as an error");
+    const cookies = jar(reply.headers);
+    assert.ok(!cookies.includes("session_token"), "no session cookie");
+    assert.ok(cookies.includes("two_factor="), "a challenge cookie");
     assert.equal(db.session.length, sessionsBefore, "no session row was written");
+
+    // The code finishes it, through the cookie, the way the web app sends it.
+    const verified = await call("/two-factor/verify-totp", {
+      body: { code: await totpFor(person.id) },
+      headers: { cookie: cookies },
+    });
+    assert.equal(verified.status, 200, JSON.stringify(verified.json));
+    assert.equal((await sessionFor({ cookie: jar(verified.headers, cookies) }))?.user.id, person.id);
+  });
+
+  it("counts wrong codes on a Google challenge like on any other", async () => {
+    const person = await enrol(await signUp());
+    userRow(person.id).emailVerified = true;
+    const cookies = jar((await googleCallback(person.email, `${BASE}/login`)).headers);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const wrong = await call("/two-factor/verify-totp", { body: { code: await wrongTotpFor(person.id) }, headers: { cookie: cookies } });
+      assert.equal(wrong.status, 401);
+    }
+    const sixth = await call("/two-factor/verify-totp", { body: { code: await totpFor(person.id) }, headers: { cookie: cookies } });
+    assert.notEqual(sixth.status, 200);
+  });
+
+  it("sends a callback with no error page of its own to the web app's /login", () => {
+    assert.equal(
+      socialChallengeLocation(`${BASE}/api/auth/error?error=unable_to_create_session`, "https://app.example", `${BASE}/api/auth`),
+      "https://app.example/login?two_factor=1",
+    );
+    assert.equal(
+      socialChallengeLocation("https://app.example/login?error=unable_to_create_session&next=%2Finvite", "https://other.example", `${BASE}/api/auth`),
+      "https://app.example/login?next=%2Finvite&two_factor=1",
+    );
   });
 
   it("still signs in an account without 2FA", async () => {

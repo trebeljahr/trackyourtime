@@ -48,6 +48,7 @@ beforeEach(() => {
       twoFactorPlugin(),
       bearer(),
       twoFactorGuard({
+        frontendUrl: BASE,
         getSession: async (headers) =>
           (await auth.api.getSession({ headers, query: { disableCookieCache: true } })) as GuardSession | null,
       }),

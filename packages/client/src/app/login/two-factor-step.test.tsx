@@ -164,6 +164,29 @@ describe("the two-factor step on /login", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("opens the code step when Google sent the browser back for a code, and drops the marker", async () => {
+    window.history.replaceState(null, "", "/login?two_factor=1");
+    render(<LoginPage />);
+    await screen.findByTestId("login-two-factor");
+    expect(screen.getByText(/signed in with Google/)).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+    expect(signInEmail).not.toHaveBeenCalled();
+
+    enterCode("123456");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/track"));
+    expect(verifyTotp).toHaveBeenCalledWith({ code: "123456" });
+  });
+
+  it("keeps a next link when Google sent the browser back for a code", async () => {
+    window.history.replaceState(null, "", "/login?next=%2Fapp%2Fmembers&two_factor=1");
+    render(<LoginPage />);
+    await screen.findByTestId("login-two-factor");
+    expect(window.location.search).toBe("?next=%2Fapp%2Fmembers");
+    enterCode("123456");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/members"));
+    window.history.replaceState(null, "", "/login");
+  });
+
   it("explains an unverified email and sends a link that lands on the web app", async () => {
     signInEmail.mockResolvedValue({ error: { code: "EMAIL_NOT_VERIFIED", message: "Email not verified" } });
     await submitPassword();

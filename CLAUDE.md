@@ -1297,11 +1297,21 @@ notices.
   `session.create.before`): `/sign-in/email` (deleted at once), both verify
   paths, `/two-factor/disable`, `/change-password`, `/device/token`,
   `/passkey/verify-authentication` (a passkey with user verification is two
-  factors). Anything else gets no session — above all Google's
-  `/callback/google`, which the plugin does not intercept and which signed a
-  2FA account with a verified email straight in; it now redirects with
-  `error=unable_to_create_session`. A future session-minting endpoint is
-  refused until someone adds it on purpose. No request context (a script) is
+  factors). Anything else gets no session. A future session-minting
+  endpoint is refused until someone adds it on purpose.
+- **Google sign-in asks for the code too, and fails closed.** The plugin
+  intercepts only the password paths, so `/callback/:id` signed a 2FA
+  account with a verified email straight in. The allowlist refuses that
+  session and records the user per `Request`; the guard's after-hook on
+  `SOCIAL_CALLBACK_PATH` then writes the same two challenge rows the plugin
+  writes for a password sign-in (`2fa-<id>`, `2fa-attempts-<id>` = "0", ten
+  minutes — so the plugin's five-per-challenge and per-account limits apply),
+  sets the signed `two_factor` cookie and rewrites the error redirect to the
+  web app's `/login?two_factor=1` (`socialChallengeLocation`;
+  `TWO_FACTOR_SOCIAL_PARAM`). `/login` shows the code step, drops the marker
+  from the address, and the verify call carries the cookie (no header: the
+  challenge never reached the page). If the after-hook stops running, the
+  plain refusal stands. Google is web-only, so the cookie path is enough. No request context (a script) is
   allowed. "lists exactly the reviewed session-creating paths" makes a new
   entry a deliberate edit. The magic-link plugin keeps its own earlier
   refusal (`magic-link-guard.ts`), which answers first.

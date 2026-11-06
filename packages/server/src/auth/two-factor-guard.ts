@@ -21,7 +21,14 @@
  *  4. **No trusted devices.** `trustDevice` would let the password alone sign
  *     in from that browser for thirty days, and the trust rows outlive
  *     disabling 2FA. It is forced off; `disableSession` is refused.
- *  5. **The cookie cache cannot stand in for a session on `/api/auth`.** A
+ *  5. **Google sign-in asks for the code too.** The plugin only intercepts
+ *     the password sign-in paths, so Google's callback signed a 2FA account
+ *     straight in. The session it would create is refused
+ *     (`sessionCreationAllowed`), and the callback's after-hook turns that
+ *     refusal into a challenge: the `two_factor` cookie, and a redirect to the
+ *     web app's `/login?two_factor=1`, which shows the code step. If the
+ *     after-hook ever stops running, the refusal stands: fail closed.
+ *  6. **The cookie cache cannot stand in for a session on `/api/auth`.** A
  *     signed-out or revoked session keeps answering out of the five-minute
  *     `session_data` cookie. The guard looks sessions up with the cache off
  *     and, wherever the two could disagree, fails closed. On every endpoint
@@ -39,8 +46,9 @@
  */
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
-import { constantTimeEqual, makeSignature } from "better-auth/crypto";
+import { constantTimeEqual, generateRandomString, makeSignature } from "better-auth/crypto";
 import {
+  TWO_FACTOR_SOCIAL_PARAM,
   TWO_FACTOR_ALREADY_ENABLED,
   TWO_FACTOR_CHALLENGE_REQUEST_HEADER,
   TWO_FACTOR_CHALLENGE_RESPONSE_HEADER,
@@ -128,9 +136,22 @@ export const TWO_FACTOR_SESSION_PATHS: ReadonlySet<string> = new Set([
   "/passkey/verify-authentication",
 ]);
 
+/** better-auth's route for every social provider's OAuth callback. */
+export const SOCIAL_CALLBACK_PATH = "/callback/:id";
+
+/** How long a challenge lasts: the plugin's `twoFactorCookieMaxAge` default. */
+const CHALLENGE_SECONDS = 10 * 60;
+
+/**
+ * Social sign-ins of 2FA accounts that `sessionCreationAllowed` refused, by
+ * request, for the callback's after-hook to turn into a challenge.
+ */
+const socialChallenges = new WeakMap<Request, string>();
+
 /** The fields of `session.create.before`'s context the allowlist reads. */
 export type SessionCreateContext = {
   path?: string;
+  request?: Request | null;
   context?: {
     internalAdapter?: {
       findUserById: (id: string) => Promise<{ twoFactorEnabled?: boolean | null } | null>;
@@ -149,7 +170,33 @@ export async function sessionCreationAllowed(
   const path = context?.path;
   if (!path || TWO_FACTOR_SESSION_PATHS.has(path)) return true;
   const user = await context.context?.internalAdapter?.findUserById(userId);
-  return user?.twoFactorEnabled !== true;
+  if (user?.twoFactorEnabled !== true) return true;
+  // Google (or any social provider): no session now. The callback's
+  // after-hook asks for the code instead (`twoFactorGuard`).
+  if (path === SOCIAL_CALLBACK_PATH && context.request) socialChallenges.set(context.request, userId);
+  return false;
+}
+
+/**
+ * Where a refused social sign-in goes instead of its error page: the same
+ * page (the web app's `/login`, from the client's `errorCallbackURL`) without
+ * the error, with `?two_factor=1`. A redirect to the API's own error page
+ * (no `errorCallbackURL` was sent) goes to the web app's `/login` instead.
+ */
+export function socialChallengeLocation(location: string, frontendUrl: string, apiBaseUrl: string): string {
+  let target: URL;
+  try {
+    target = new URL(location);
+  } catch {
+    target = new URL("/login", frontendUrl);
+  }
+  if (`${target.origin}${target.pathname}`.startsWith(apiBaseUrl.replace(/\/$/, ""))) {
+    target = new URL("/login", frontendUrl);
+  }
+  target.searchParams.delete("error");
+  target.searchParams.delete("error_description");
+  target.searchParams.set(TWO_FACTOR_SOCIAL_PARAM, "1");
+  return target.toString();
 }
 
 /** The fields of a resolved session the guard reads. */
@@ -159,6 +206,8 @@ export type GuardSession = {
 };
 
 export type TwoFactorGuardDeps = {
+  /** The web app, where a refused social sign-in's code step is. */
+  frontendUrl: string;
   /**
    * The caller's session, looked up with the cookie cache off. A hook cannot
    * resolve a bearer session itself — bearer's header rewrite reaches only
@@ -472,6 +521,32 @@ export function twoFactorGuard(deps: TwoFactorGuardDeps): BetterAuthPlugin {
         },
       ],
       after: [
+        {
+          matcher: (context) => context.path === SOCIAL_CALLBACK_PATH,
+          handler: createAuthMiddleware(async (ctx) => {
+            const request = ctx.request;
+            const userId = request ? socialChallenges.get(request) : undefined;
+            if (!request || !userId) return;
+            socialChallenges.delete(request);
+            const headers = ctx.context.responseHeaders;
+            const location = headers?.get("location");
+            if (!headers || !location) return;
+            // The rows the plugin writes for a password sign-in's challenge,
+            // so its verify endpoints treat this one exactly the same: five
+            // wrong codes, the account lock, ten minutes.
+            const identifier = `2fa-${generateRandomString(20)}`;
+            const expiresAt = new Date(Date.now() + CHALLENGE_SECONDS * 1000);
+            await ctx.context.internalAdapter.createVerificationValue({ value: userId, identifier, expiresAt });
+            await ctx.context.internalAdapter.createVerificationValue({
+              value: "0",
+              identifier: `2fa-attempts-${identifier}`,
+              expiresAt,
+            });
+            const cookie = ctx.context.createAuthCookie(TWO_FACTOR_COOKIE, { maxAge: CHALLENGE_SECONDS });
+            await ctx.setSignedCookie(cookie.name, identifier, ctx.context.secret, cookie.attributes);
+            headers.set("location", socialChallengeLocation(location, deps.frontendUrl, ctx.context.baseURL));
+          }),
+        },
         {
           matcher: (context) => context.path === "/sign-in/email",
           handler: createAuthMiddleware(async (ctx) => {

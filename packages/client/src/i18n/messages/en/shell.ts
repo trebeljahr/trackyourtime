@@ -177,6 +177,7 @@ export const shell = {
     twoFactor: {
       title: "Two-factor authentication",
       signingInAs: "Signing in as {email}",
+      afterGoogle: "You signed in with Google. Enter a code from your authenticator app to finish.",
       nativeUnsupported:
         "This account uses two-factor authentication. Use Sign in with your browser below.",
       /** The desktop app can: through the browser, below the form. */

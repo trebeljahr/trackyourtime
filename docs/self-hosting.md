@@ -836,9 +836,9 @@ password form cannot ask for a code. Its **Sign in with the web app** button
 works, because you approve the sign-in in a browser that already passed the
 second step. The Raycast client pairs the same way, so it is not affected. A
 passkey sign-in asks for no code, because the passkey already checks the
-device PIN or biometric. Google sign-in does not work for an account with
-two-factor authentication; use the password and a code. Devices that are
-already signed in stay signed in.
+device PIN or biometric. Google sign-in asks for a code too: after Google,
+the sign-in page asks for the authenticator code or a backup code. Devices
+that are already signed in stay signed in.
 
 Turning two-factor authentication off, making new backup codes and deleting
 the account need the password and a code. Creating an API token needs a code
