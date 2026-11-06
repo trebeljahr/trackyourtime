@@ -9,11 +9,15 @@
  * which also keeps `hooks/use-sync.ts` from importing better-auth, the toast
  * layer and the offline queue just to answer one close code.
  *
- * `signOut()` is the wrapper from `lib/auth-client`, so both halves of the
- * credential go: better-auth's own session store and cookie on web, and the
+ * `signOutRevokedDevice()` is the wrapper from `lib/auth-client`, so both
+ * halves of the credential go: better-auth's own session store and cookie on web, and the
  * Keychain item on native (its `finally`, plus the explicit
  * `clearNativeToken` below for the case where the request throws before
  * better-auth gets that far).
+ *
+ * What it keeps is this device's saved private-data unlock: after a password
+ * reset it is what lets the next sign-in here re-lock the keys under the new
+ * password (see `signOutRevokedDevice`).
  *
  * The offline queue is read and left alone — see `lib/session-revoked.ts` for
  * why those rows outlive the session that made them.
@@ -21,7 +25,7 @@
 
 import { toast } from "@/components/ui/sonner";
 import { translate } from "@/i18n/translate";
-import { authClient, signOut } from "@/lib/auth-client";
+import { authClient, signOutRevokedDevice } from "@/lib/auth-client";
 import { clearNativeToken } from "@/lib/native-session";
 import { refreshPendingCount } from "@/lib/offline";
 import { handleSessionRevoked } from "@/lib/session-revoked";
@@ -49,7 +53,7 @@ export const revokeThisDevice = (
     },
     resume,
     pendingCount: refreshPendingCount,
-    signOut: () => signOut(),
+    signOut: () => signOutRevokedDevice(),
     clearToken: clearNativeToken,
     notify: ({ pending }) =>
       toast.error(translate("shell")("auth.revoked.title"), {

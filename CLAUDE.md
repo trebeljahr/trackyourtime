@@ -1329,11 +1329,20 @@ notices.
   without `--commit`, `--keep-sessions`) clears them with the flag, the
   `twoFactor` row and, by default, every session; its header has the mongosh
   equivalent. All of them expire within fifteen minutes on their own.
-- **Password reset does not revoke sessions**, deliberately unlike the old
-  2FA branch: password unlock re-seals the private-data keys from a device
-  that is still signed in after a reset (`markPasswordKeysStale`,
-  `components/private-keys-notice.tsx`). The reset proves the inbox, not the
-  second factor, so the next sign-in still asks for a code.
+- **A password reset signs every device out and keeps 2FA on.**
+  `revokeSessionsOnPasswordReset: true` and `/reset-password` in
+  `SESSION_REVOKING_PATHS` (sockets close now). The reset proves the inbox,
+  not the second factor, so the next sign-in still asks for a code. Password
+  unlock depended on a device staying signed in to re-seal the private-data
+  keys under the new password; now a device signed out because the server
+  ended its session (`revokeThisDevice` → `signOutRevokedDevice`) keeps its
+  saved unlock, and signing in there again re-seals at once
+  (`finishPasswordUnlock`). Only an explicit sign-out, Lock and account
+  deletion erase it (`lib/sign-out.test.ts`, e2e "a reset signs the device
+  out, and signing in there again re-locks the keys"). The client cannot
+  tell a reset from Settings → Devices, so a device signed out from there
+  keeps its unlock too. `admin reset-password` counts sessions before the
+  endpoint deletes them.
 - **`x-trackyourtime-client` must be on the verify request.** The session that
   survives a 2FA sign-in is created by verify, and `session-lifetime.ts` stamps
   the client from that request; the auth client sends it on every call.

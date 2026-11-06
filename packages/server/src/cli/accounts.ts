@@ -204,11 +204,12 @@ export type PasswordReset = { userId: string; email: string; sessionsRevoked: nu
  * rules, the hash, and a credential account created for an account that never
  * had a password (a Google-only sign-up).
  *
- * Sessions are deleted here rather than by the endpoint because
- * `revokeSessionsOnPasswordReset` is off in `auth/auth.ts`, which this package
- * does not change. Deleting the rows ends every bearer token at once; a
- * browser can keep answering from better-auth's five-minute cookie cache, and
- * the server's minute-by-minute socket re-check closes open sync sockets.
+ * The endpoint deletes every session itself (`revokeSessionsOnPasswordReset`
+ * in `auth/auth.ts`), so they are counted BEFORE it runs, and deleted here
+ * again for an instance built without that option. Deleting the rows ends
+ * every bearer token at once; the two-factor guard keeps a browser from
+ * answering out of the cookie cache on `/api/auth`, and the server's
+ * minute-by-minute socket re-check closes open sync sockets.
  */
 export async function resetPassword(
   auth: AdminAuth,
@@ -219,6 +220,7 @@ export async function resetPassword(
   if (!found) throw new CliError(`no account with the email ${input.email}`);
   const { user } = found;
 
+  const sessions = await context.internalAdapter.listSessions(user.id);
   const token = randomBytes(24).toString("base64url");
   const identifier = `reset-password:${token}`;
   await context.internalAdapter.createVerificationValue({
@@ -238,7 +240,6 @@ export async function resetPassword(
     throw new CliError(`could not set the password: ${authErrorMessage(error)}`);
   }
 
-  const sessions = await context.internalAdapter.listSessions(user.id);
   await context.internalAdapter.deleteUserSessions(user.id);
   return { userId: user.id, email: user.email, sessionsRevoked: sessions.length };
 }

@@ -41,9 +41,18 @@ vi.mock("@/lib/running-mirror", () => ({
   writeRunningMirror: (entry: unknown) => writeRunningMirror(entry),
 }));
 
+// Which of the two sign-outs erases this device's saved private-data unlock.
+const lockPrivateData = vi.fn();
+const lockAndForgetPrivateData = vi.fn();
+vi.mock("./private-session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./private-session")>()),
+  lockPrivateData: () => lockPrivateData(),
+  lockAndForgetPrivateData: () => lockAndForgetPrivateData(),
+}));
+
 const { QUERY_SNAPSHOT_KEY } = await import("./query-persistence");
 const { createAppQueryClient } = await import("./query-client");
-const { onSignOut, signOut } = await import("./auth-client");
+const { onSignOut, signOut, signOutRevokedDevice } = await import("./auth-client");
 const activeWorkspace = await import("./active-workspace");
 const offline = await import("./offline");
 
@@ -123,6 +132,33 @@ describe("signOut", () => {
     expect(activeWorkspace.getActiveWorkspaceId()).toBeNull();
     expect(queryClient.getQueryData([["entries", "list"], { type: "query" }])).toBeUndefined();
     expect(writeRunningMirror).toHaveBeenCalledWith(null);
+  });
+
+  it("erases the saved private-data unlock when the person signs out", async () => {
+    lockPrivateData.mockClear();
+    lockAndForgetPrivateData.mockClear();
+    await signOut();
+    expect(lockAndForgetPrivateData).toHaveBeenCalledTimes(1);
+    expect(lockPrivateData).not.toHaveBeenCalled();
+  });
+
+  it("keeps it when the server ended the session, and forgets the rest the same way", async () => {
+    // After a password reset that saved unlock is the only copy of the keys
+    // that still opens; the next sign-in here re-locks them under the new
+    // password instead of asking for the recovery key.
+    lockPrivateData.mockClear();
+    lockAndForgetPrivateData.mockClear();
+    window.localStorage.setItem(QUERY_SNAPSHOT_KEY, "saved catalog");
+    queryClient.setQueryData([["entries", "list"], { type: "query" }], ["A's entry"]);
+
+    await signOutRevokedDevice();
+
+    expect(lockPrivateData).toHaveBeenCalledTimes(1);
+    expect(lockAndForgetPrivateData).not.toHaveBeenCalled();
+    expect(clearNativeToken).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData([["entries", "list"], { type: "query" }])).toBeUndefined();
+    expect(writeRunningMirror).toHaveBeenCalledWith(null);
+    expect(window.localStorage.getItem(QUERY_SNAPSHOT_KEY)).toBeNull();
   });
 
   it("still forgets everything when the server never heard the sign-out", async () => {

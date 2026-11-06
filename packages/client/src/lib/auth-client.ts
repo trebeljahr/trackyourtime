@@ -2,7 +2,7 @@ import { finishPasswordUnlock, forgetPasswordUnlock, passwordSecretForSignedIn, 
 import { eraseCachedPrivateIdentity } from "./private-identity-cache";
 import { eraseRecoveryBackupFolders } from "./recovery-backup-folder";
 import { erasePrivateIndexedStorage } from "./private-indexed-storage";
-import { lockAndForgetPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
+import { lockAndForgetPrivateData, lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { fetchAuthWithTimeout } from "./auth-request";
 import { createAuthClient } from "better-auth/react";
@@ -393,8 +393,9 @@ const forgetAccountOnDevice = async (): Promise<void> => {
  * QUEUE is left alone, deliberately, because those rows are time no server has
  * ever seen.
  */
-export const signOut: typeof authClient.signOut = async (...args) => {
-  lockAndForgetPrivateData();
+const endSession = (forgetDeviceUnlock: boolean): typeof authClient.signOut => async (...args) => {
+  if (forgetDeviceUnlock) lockAndForgetPrivateData();
+  else lockPrivateData();
   forgetPasswordUnlock();
   forgetTwoFactorChallenge();
   loginSession = null;
@@ -416,6 +417,25 @@ export const signOut: typeof authClient.signOut = async (...args) => {
     }
   }
 };
+
+export const signOut: typeof authClient.signOut = endSession(true);
+
+/**
+ * Sign out because the server already ended this session — a password reset,
+ * "sign out other devices", Settings → Devices — not because the person here
+ * asked to.
+ *
+ * Everything `signOut` does, except that this device keeps its saved
+ * private-data unlock (`lib/private-device-key.ts`). After a password reset
+ * that is the only copy of the keys that still opens: the envelope is sealed
+ * under the old password, so signing in here with the new one re-locks the
+ * keys under it (`finishPasswordUnlock`) instead of asking for the recovery
+ * key. The unlock is still erased by an explicit sign-out, Lock and account
+ * deletion. The server cannot say why a session ended, so a device signed out
+ * from Settings → Devices keeps it too; nobody can use it there without
+ * signing in as this person again.
+ */
+export const signOutRevokedDevice: typeof authClient.signOut = endSession(false);
 
 /** Why a deletion was refused, in the terms the settings dialog acts on. */
 export type AccountDeletionRefusal =

@@ -112,6 +112,14 @@ export async function initAuth(): Promise<void> {
        */
       requireEmailVerification: isEmailDeliveryConfigured(),
       /**
+       * A reset is the "I lost control of this account" action, and it proves
+       * only the inbox: every session ends, and the next sign-in still asks
+       * for the second factor. A device signed out this way keeps its saved
+       * private-data unlock (`lib/revoke-this-device.ts`), so signing in there
+       * again re-locks the keys under the new password.
+       */
+      revokeSessionsOnPasswordReset: true,
+      /**
        * Password unlock: the account keys' password envelope was sealed under
        * the old password. Flag it so a device that still holds the keys can
        * seal them again (auth/password-kdf.ts → markPasswordKeysStale).

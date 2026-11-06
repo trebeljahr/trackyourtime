@@ -18,7 +18,8 @@ import type { OfflineStartInput } from "@starter/core";
  */
 
 const signOut = vi.fn(async () => undefined);
-vi.mock("@/lib/auth-client", () => ({ signOut: () => signOut() }));
+// The revoked-device variant: it keeps the saved private-data unlock.
+vi.mock("@/lib/auth-client", () => ({ signOutRevokedDevice: () => signOut() }));
 
 const clearNativeToken = vi.fn(async () => undefined);
 vi.mock("@/lib/native-session", () => ({

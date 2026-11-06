@@ -253,7 +253,7 @@ export const shell = {
       expired: "This reset link has expired or was already used. Request a new one.",
       requestNew: "Request a new link",
       /** Password unlock: what a reset means for the encrypted data. */
-      keys: "Your encrypted data opens with your password. After a reset, a device where you are still signed in updates it for the new password. On other devices, keep your recovery key at hand.",
+      keys: "Your encrypted data opens with your password. A reset signs you out on every device. Sign in again with the new password on a device where you had your data open, and it updates the data for the new password. On other devices, keep your recovery key at hand.",
     },
   },
   /** The phone app's server choice on /login and /signup. */
@@ -291,8 +291,8 @@ export const shell = {
     saved: "I've saved it",
     later: "Later",
     recoverTitle: "Your password was reset",
-    recoverDetail: "Your encrypted data still opens with the old password, so this device cannot open it yet. Enter your recovery key. Or open Track Your Time on a device where you are still signed in, and enter the new password there.",
-    recoverNeither: "Without the recovery key or a signed-in device, nobody can open the encrypted data, including us.",
+    recoverDetail: "Your encrypted data still opens with the old password, so this device cannot open it yet. Enter your recovery key. Or sign in with the new password on a device where you had your data open before the reset.",
+    recoverNeither: "Without the recovery key or such a device, nobody can open the encrypted data, including us.",
     recoveryKey: "Recovery key",
     unlock: "Open with recovery key",
     wrongRecovery: "That recovery key does not open this account's keys.",

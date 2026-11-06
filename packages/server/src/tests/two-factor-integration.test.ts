@@ -75,11 +75,13 @@ let db: MemoryDb;
 let auth: any;
 let sweeps = 0;
 let sent: { url: string; to: string }[] = [];
+let resetTokens: string[] = [];
 let seq = 0;
 
 function build(): void {
   db = { user: [], session: [], account: [], verification: [], twoFactor: [], deviceCode: [] };
   sent = [];
+  resetTokens = [];
   sweeps = 0;
   auth = betterAuth({
     database: memoryAdapter(db as never),
@@ -90,6 +92,10 @@ function build(): void {
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ token }: { token: string }) => {
+        resetTokens.push(token);
+      },
       // scrypt costs far more per call than anything tested here.
       password: {
         hash: async (password: string) => `plain:${password}`,
@@ -310,6 +316,10 @@ describe("auth/auth.ts wiring", () => {
     assert.ok(twoFactorAt > 0 && bearerAt > 0 && guardAt > 0, "all three are registered");
     assert.ok(twoFactorAt < bearerAt, "twoFactorPlugin() before bearer()");
     assert.ok(bearerAt < guardAt, "bearer() before twoFactorGuard()");
+  });
+
+  it("signs every device out on a password reset", () => {
+    assert.match(source, /revokeSessionsOnPasswordReset: true/);
   });
 
   it("applies the session-creation allowlist", () => {
@@ -790,6 +800,26 @@ describe("account controls", () => {
     });
     assert.equal(changed.status, 200, JSON.stringify(changed.json));
     assert.ok(changed.headers.get("set-auth-token"));
+  });
+
+  it("a password reset signs every device out, sweeps sockets and keeps 2FA on", async () => {
+    const person = await enrol(await signUp());
+    const other = (await verifyWithHeader((await challenge(person)).value, await totpFor(person.id))).headers.get("set-auth-token");
+    assert.ok(other);
+    const asked = await call("/request-password-reset", { body: { email: person.email, redirectTo: `${BASE}/reset-password` } });
+    assert.equal(asked.status, 200, JSON.stringify(asked.json));
+    const sweepsBefore = sweeps;
+    const reset = await call("/reset-password", { body: { newPassword: "a brand new passphrase", token: resetTokens.at(-1) } });
+    assert.equal(reset.status, 200, JSON.stringify(reset.json));
+
+    assert.equal(await sessionFor(bearerHeaders(person.token)), null);
+    assert.equal(await sessionFor(bearerHeaders(other)), null);
+    assert.equal(db.session.filter((row) => row.userId === person.id).length, 0);
+    assert.ok(sweeps > sweepsBefore, "the socket sweep ran");
+    // The reset proved the inbox, not the second factor.
+    assert.equal(userRow(person.id).twoFactorEnabled, true);
+    const next = await call("/sign-in/email", { body: { email: person.email, password: "a brand new passphrase" } });
+    assert.equal(next.json?.twoFactorRedirect, true);
   });
 
   it("change-email mails a verification link to the new address", async () => {

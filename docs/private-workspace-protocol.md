@@ -1376,20 +1376,25 @@ capability `auth.passwordKeysRepair`, for the reset repair in step 5).
    parameters for a valid reset link, so the new password is derived under
    the same salt. The old envelope no longer opens, so better-auth's
    `onPasswordReset` sets `passwordKeysStale` on the user (only for accounts
-   with parameters). Three ways back, all in `lib/password-unlock.ts` and
+   with parameters). A reset also ends every session
+   (`revokeSessionsOnPasswordReset`), but a device signed out because the
+   server ended its session keeps its saved unlock (`signOutRevokedDevice`
+   in `lib/auth-client.ts`; an explicit sign-out, Lock and account deletion
+   still erase it). Three ways back, all in `lib/password-unlock.ts` and
    shown by `components/private-keys-notice.tsx` above the page:
    - a device that stayed unlocked and signs in again re-seals the keys at
-     once;
-   - a device that stayed unlocked and is still signed in (resets revoke no
-     sessions) reads `accountPassword.keysStatus` once per load and asks for
-     the new password; `accountPassword.verify` (10 per 15 minutes per user)
-     checks it before anything is sealed, so a typo cannot replace the
-     envelope with one nobody can open;
+     once — after a reset, the common way back;
+   - a device that stayed unlocked and is still signed in (only a server
+     whose resets revoke no sessions, or a session minted after the reset)
+     reads `accountPassword.keysStatus` once per load and asks for the new
+     password; `accountPassword.verify` (10 per 15 minutes per user) checks
+     it before anything is sealed, so a typo cannot replace the envelope
+     with one nobody can open;
    - a device that cannot open the keys holds the new password's wrapping key
      in memory and asks for the recovery key; once the keys open by any route,
      `repairKeysAfterUnlock` seals them under the new password and rebuilds
      the inventory. The notice says plainly that without the recovery key or a
-     signed-in device nobody can open the encrypted data.
+     device that had the data open nobody can open the encrypted data.
    Every successful re-seal (`rewrapKeysForPassword`, also after a password
    change) and every password open clears the flag
    (`accountPassword.keysRewrapped`). The reset page says what a reset means

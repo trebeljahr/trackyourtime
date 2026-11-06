@@ -192,6 +192,9 @@ beforeEach(() => {
     logger: { disabled: true },
     emailAndPassword: {
       enabled: true,
+      // As in auth/auth.ts: the endpoint itself signs every device out, so
+      // the CLI must count sessions before it runs.
+      revokeSessionsOnPasswordReset: true,
       // scrypt costs about a second per call, and hashing is not the subject.
       password: {
         hash: async (password: string) => `plain:${password}`,

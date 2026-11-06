@@ -139,20 +139,18 @@ test.describe("Password unlock", () => {
     await third.close();
   });
 
-  test("a device that stayed unlocked updates the keys after a reset made elsewhere", async ({ page, browser, request }) => {
+  test("a reset signs the device out, and signing in there again re-locks the keys under the new password", async ({ page, browser, request }) => {
     const email = `stale-${Date.now()}@example.com`;
     await signUpAndSaveRecoveryKey(page, email);
     await resetPassword(browser, request, email);
 
-    await page.reload();
+    // The reset ended every session; the sweep closes this tab's socket and
+    // the app signs itself out. It keeps the device's saved unlock.
+    await page.waitForURL(/\/login/, { timeout: 30_000 });
+    await signInViaUI(page, { email, password: NEW_PASSWORD });
     await expectTrackerWithoutGate(page);
-    const notice = page.getByTestId("update-keys-after-reset");
-    await expect(notice).toBeVisible({ timeout: 20_000 });
-    await page.getByTestId("update-keys-password").fill(PASSWORD);
-    await notice.getByRole("button", { name: "Update keys" }).click();
-    await expect(notice.getByRole("alert")).toBeVisible();
-    await page.getByTestId("update-keys-password").fill(NEW_PASSWORD);
-    await notice.getByRole("button", { name: "Update keys" }).click();
+    // No recovery key asked for: the saved unlock opened the keys and the
+    // app sealed them under the new password.
     await expect(page.getByTestId("private-keys-notice")).toBeHidden({ timeout: 20_000 });
 
     const other = await browser.newContext();

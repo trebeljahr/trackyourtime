@@ -144,6 +144,7 @@ export function emailVerificationOptions(
  */
 export const SESSION_REVOKING_PATHS: ReadonlySet<string> = new Set([
   "/change-password",
+  "/reset-password",
   "/revoke-session",
   "/revoke-sessions",
   "/revoke-other-sessions",

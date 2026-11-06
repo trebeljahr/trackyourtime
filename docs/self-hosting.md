@@ -844,8 +844,9 @@ Turning two-factor authentication off, making new backup codes and deleting
 the account need the password and a code. Creating an API token needs a code
 when the account last entered one more than ten minutes ago. Ten wrong codes
 lock password sign-in for 15 minutes; a new password stops whoever is
-guessing. If a person loses both the app and the backup codes, run
-[`reset-two-factor`](#reset-two-factor).
+guessing. A password reset through the emailed link signs the account out on
+every device and keeps two-factor authentication on. If a person loses both
+the app and the backup codes, run [`reset-two-factor`](#reset-two-factor).
 
 **Google sign-in** needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The
 redirect URI to register with Google is
