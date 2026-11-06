@@ -41,6 +41,12 @@ updates:
         update-types: ["version-update:semver-minor"]
       - dependency-name: "@types/chrome"
         update-types: ["version-update:semver-minor"]
+      # better-auth is pinned on purpose and every upgrade carries a schema
+      # migration (CLAUDE.md, docs/versioning.md): a person takes it.
+      - dependency-name: "better-auth"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "@better-auth/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
     groups:
       npm-minor-patch:
         applies-to: version-updates
