@@ -11,6 +11,7 @@ import { isTokenShell } from "@/lib/shell";
 import { AppShell } from "@/components/app-shell";
 import { loginRedirectHref } from "@/lib/safe-next";
 import { PrivateWorkspaceBoundary } from "./private-workspace-boundary";
+import { captureBrowserKeyRequest } from "@/lib/browser-key-request";
 
 type Verdict = "checking" | "in" | "out";
 
@@ -27,6 +28,9 @@ export function ProtectedLayout({
   // Web confirms cached cookie sessions with the server. Native session
   // requests already bypass the cookie cache, so share that first verdict.
   const [recheck, setRecheck] = React.useState<Verdict>("checking");
+  // A browser sign-in's key request rides in the fragment, which a redirect
+  // to /login would drop (lib/browser-key-request.ts).
+  React.useLayoutEffect(() => captureBrowserKeyRequest(), []);
 
   React.useEffect(() => {
     if (!sessionReady) return;

@@ -362,6 +362,27 @@ export async function finishPasswordUnlock(userId: string): Promise<void> {
   }
 }
 
+/**
+ * A browser sign-in (lib/browser-key-request.ts, `startBrowserSignIn` in
+ * core) delivered this account's keys: open them here once the account has
+ * resolved, then rebuild the workspace list like a password sign-in does.
+ * Never throws; without keys the device stays on standard storage.
+ */
+export async function finishDeliveredKeys(userId: string, delivered: unknown): Promise<void> {
+  try {
+    const { whenPrivateAccountReady, privateDataOrigin, privateOperationScope, privateSession } = await import("./private-session");
+    if (await whenPrivateAccountReady() !== userId) return;
+    if (!privateSession(userId)) {
+      const check = privateOperationScope(userId);
+      const { installPrivateDeviceTransfer } = await import("./private-device");
+      await installPrivateDeviceTransfer(userId, privateDataOrigin(), delivered, check);
+    }
+    await openInventoryAndWorkspace(userId);
+  } catch (error) {
+    console.warn("[auth] could not open the keys the browser sent", error);
+  }
+}
+
 /** After a second factor: the session's own user, never throwing. */
 export async function finishPasswordUnlockForSession(): Promise<void> {
   try {

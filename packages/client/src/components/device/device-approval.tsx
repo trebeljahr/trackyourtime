@@ -19,12 +19,14 @@ import { Label } from "@/components/ui/label";
 import { translate } from "@/i18n/translate";
 import { useT } from "@/i18n/use-t";
 import { decideDeviceCode, type DeviceAuthError } from "@/lib/device-approve";
+import { deliverBrowserKeys, forgetBrowserKeyRequest, prepareBrowserKeys } from "@/lib/browser-key-request";
+import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 
 type Outcome =
   | { kind: "idle" }
   | { kind: "working" }
-  | { kind: "approved" }
+  | { kind: "approved"; keys: "sent" | "none" | "failed" }
   | { kind: "denied" }
   | { kind: "error"; message: string };
 
@@ -54,6 +56,7 @@ const readError = (error: DeviceAuthError, fallback: string): string => {
  */
 export function DeviceApproval(): React.JSX.Element {
   const utils = trpc.useUtils();
+  const { user } = useAuth();
   const t = useT("settings");
   const prefill = useSearchParams().get("user_code") ?? "";
   const [code, setCode] = React.useState(prefill);
@@ -77,9 +80,17 @@ export function DeviceApproval(): React.JSX.Element {
     const userCode = parsed.data.userCode;
     setOutcome({ kind: "working" });
 
+    // Browser sign-in: open the key relay before approving, so the client
+    // can tell "keys are coming" from "no keys" the moment it is signed in.
+    const keys = action === "approve" && user ? await prepareBrowserKeys(user.id).catch(() => null) : null;
+    if (action === "deny") forgetBrowserKeyRequest();
     const result = await decideDeviceCode(userCode, action);
     if (result.ok) {
-      setOutcome({ kind: action === "approve" ? "approved" : "denied" });
+      if (action === "approve") {
+        let sent: "sent" | "none" | "failed" = "none";
+        if (keys) sent = await deliverBrowserKeys(keys).then(() => "sent" as const, () => "failed" as const);
+        setOutcome({ kind: "approved", keys: sent });
+      } else setOutcome({ kind: "denied" });
       // The newly paired client is now a device — refresh the settings list.
       void utils.devices.list.invalidate();
       return;
@@ -107,6 +118,7 @@ export function DeviceApproval(): React.JSX.Element {
     return (
       <ResultCard
         approved={outcome.kind === "approved"}
+        keys={outcome.kind === "approved" ? outcome.keys : "none"}
         onReset={() => {
           setCode("");
           setOutcome({ kind: "idle" });
@@ -188,9 +200,9 @@ export function DeviceApproval(): React.JSX.Element {
   );
 }
 
-type ResultCardProps = { approved: boolean; onReset: () => void };
+type ResultCardProps = { approved: boolean; keys: "sent" | "none" | "failed"; onReset: () => void };
 
-function ResultCard({ approved, onReset }: ResultCardProps): React.JSX.Element {
+function ResultCard({ approved, keys, onReset }: ResultCardProps): React.JSX.Element {
   const Icon = approved ? CheckCircle2 : XCircle;
   const t = useT("settings");
   return (
@@ -214,6 +226,9 @@ function ResultCard({ approved, onReset }: ResultCardProps): React.JSX.Element {
               ? t("device.result.approvedDescription")
               : t("device.result.deniedDescription")}
           </CardDescription>
+          {keys !== "none" && <p className={keys === "sent" ? "text-sm" : "text-sm text-destructive"} role={keys === "sent" ? "status" : "alert"} data-testid="device-result-keys">
+            {t(keys === "sent" ? "device.result.keysSent" : "device.result.keysFailed")}
+          </p>}
         </CardHeader>
         <CardContent className="flex gap-2">
           <Button asChild data-testid="device-result-settings">

@@ -6,7 +6,7 @@ import {
   AuthError,
   checkServer,
   pollForDeviceSession,
-  startDeviceAuthorization,
+  startBrowserSignIn,
   type DeviceAuthorization,
 } from "@starter/core";
 
@@ -16,6 +16,7 @@ import { useIsCapacitor, useIsElectron } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
 import { getAbsoluteApiOrigin, whenApiOriginReady } from "@/lib/api-origin";
 import { setNativeToken } from "@/lib/native-session";
+import { finishDeliveredKeys } from "@/lib/password-unlock";
 
 /**
  * "Sign in with your browser", on /login in the desktop and mobile apps.
@@ -39,7 +40,7 @@ export const MOBILE_CLIENT_ID = "trackyourtime-mobile";
 type Phase =
   | { kind: "idle" }
   | { kind: "starting" }
-  | { kind: "waiting"; authorization: DeviceAuthorization };
+  | { kind: "waiting"; authorization: Pick<DeviceAuthorization, "userCode" | "verificationUri" | "verificationUriComplete"> };
 
 export type BrowserSignInFailure = "denied" | "expired" | "failed" | "cancelled";
 
@@ -118,7 +119,7 @@ export function BrowserSignIn({
 
   if (!desktop && !mobile) return null;
 
-  const openApproval = async (authorization: DeviceAuthorization): Promise<void> => {
+  const openApproval = async (authorization: Pick<DeviceAuthorization, "verificationUri" | "verificationUriComplete">): Promise<void> => {
     const url = authorization.verificationUriComplete || authorization.verificationUri;
     if (!url) throw new Error("Missing verification URL");
     if (desktop) {
@@ -143,19 +144,26 @@ export function BrowserSignIn({
         clientId: mobile ? MOBILE_CLIENT_ID : DESKTOP_CLIENT_ID,
         fetchImpl: deviceFetch,
       } as const;
-      const authorization = await startDeviceAuthorization(options);
+      // One approval signs in and, when the browser holds this account's
+      // keys, delivers them sealed (lib/browser-key-request.ts).
+      const flow = await startBrowserSignIn(options);
+      controller.signal.addEventListener("abort", flow.cancel);
       if (controller.signal.aborted) return;
-      setPhase({ kind: "waiting", authorization });
-      await openApproval(authorization);
+      setPhase({ kind: "waiting", authorization: { userCode: flow.userCode, verificationUri: flow.url, verificationUriComplete: flow.url } });
+      await openApproval({ verificationUri: flow.url, verificationUriComplete: flow.url });
 
-      const session = await pollForDeviceSession(options, authorization.deviceCode, {
-        intervalSeconds: authorization.intervalSeconds,
-        timeoutSeconds: authorization.expiresInSeconds,
+      const session = await pollForDeviceSession(options, flow.deviceCode, {
+        intervalSeconds: flow.intervalSeconds,
+        timeoutSeconds: flow.expiresInSeconds,
         signal: controller.signal,
         sleepImpl: abortableSleep(controller.signal),
       });
       if (controller.signal.aborted) return;
+      const { userId, keys } = await flow.collectKeys(session.token, { signal: controller.signal, sleepImpl: abortableSleep(controller.signal) })
+        .catch(() => ({ userId: session.userId, keys: null }));
+      if (controller.signal.aborted) return;
       await setNativeToken(session.token);
+      if (keys && userId) void finishDeliveredKeys(userId, keys);
       await onSignedIn();
     } catch (caught) {
       if (controller.signal.aborted) return;

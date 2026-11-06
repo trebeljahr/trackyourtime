@@ -936,6 +936,8 @@ export const settings = {
       approvedTitle: "Device connected",
       approvedDescription:
         "You can go back to that app — it is signed in and syncing. It now appears under Settings → Devices, where you can sign it out any time.",
+      keysSent: "Your encrypted data now opens in that app too. The keys went to it sealed; the server cannot read them.",
+      keysFailed: "The app is signed in, but this browser could not send it the keys to your encrypted data. Sign in to that app again to retry.",
       deniedTitle: "Code declined",
       deniedDescription: "Nothing was connected. If you did not start this, no action is needed.",
       openSettings: "Open settings",

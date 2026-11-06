@@ -903,6 +903,8 @@ export const settings: Translation<typeof source> = {
       approvedTitle: "Gerät verbunden",
       approvedDescription:
         "Du kannst zu der App zurückgehen – sie ist angemeldet und synchronisiert. Sie steht jetzt unter Einstellungen → Geräte, wo du sie jederzeit abmelden kannst.",
+      keysSent: "Deine verschlüsselten Daten öffnen sich jetzt auch in dieser App. Die Schlüssel gingen versiegelt dorthin; der Server kann sie nicht lesen.",
+      keysFailed: "Die App ist angemeldet, aber dieser Browser konnte ihr die Schlüssel zu deinen verschlüsselten Daten nicht schicken. Melde dich in der App noch einmal an, um es erneut zu versuchen.",
       deniedTitle: "Code abgelehnt",
       deniedDescription: "Es wurde nichts verbunden. Wenn du das nicht selbst gestartet hast, musst du nichts tun.",
       openSettings: "Einstellungen öffnen",

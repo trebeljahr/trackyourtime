@@ -33,13 +33,18 @@ export function privateDeviceWebOrigin(): string {
 /** Private keys leave the browser only in the receiving app's encrypted box.
  * The confirmation code is displayed locally; never include it in an API call. */
 export async function sealPrivateDeviceUnlock(userId: string, invite: PrivateDeviceInvite, identity: PrivateIdentity) {
-  const assertCurrent = privateOperationScope(userId);
   if (invite.server !== privateDataOrigin() || invite.userId !== userId) throw new Error("This request belongs to another server or account");
+  return withPrivateDeviceTransfer(userId, identity, (value) => encryptPrivateDeviceApproval(invite, value));
+}
+/** What another device needs to open this account: its keys and this device's
+ * trusted workspace state, sealed by `seal` while the keys are still open. */
+export async function withPrivateDeviceTransfer<R>(userId: string, identity: PrivateIdentity, seal: (value: PrivateDeviceTransfer) => Promise<R>): Promise<R> {
+  const assertCurrent = privateOperationScope(userId);
   const current = checkedPrivateSession(userId, identity);
   const workspaceTrust = await capturePrivateDeviceWorkspaceTrust(userId); assertCurrent();
   if (privateSession(userId) !== current) throw new Error("Private data is locked");
-  const value = privateDeviceTransferSchema.parse({ v: workspaceTrust && "timer" in workspaceTrust ? 3 : 2, server: invite.server, userId, keys: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey }, secrets: current, workspaceTrust });
-  const result = await encryptPrivateDeviceApproval(invite, value);
+  const value = privateDeviceTransferSchema.parse({ v: workspaceTrust && "timer" in workspaceTrust ? 3 : 2, server: privateDataOrigin(), userId, keys: { publicKey: identity.publicKey, signingPublicKey: identity.signingPublicKey }, secrets: current, workspaceTrust });
+  const result = await seal(value);
   assertCurrent(); if (privateSession(userId) !== current) throw new Error("Private data is locked");
   return result;
 }
@@ -55,20 +60,26 @@ export async function createPrivateDeviceUnlock(userId: string) {
     async accept(box: unknown) { waiting(); await receiver.accept(box); waiting(); },
     async confirm(code: string) {
       waiting();
-      const value = privateDeviceTransferSchema.parse(receiver.confirm(code));
-      if (value.server !== server || value.userId !== userId) throw new Error("Invalid private identity transfer");
-      assertIdentityKeys(value.keys, value.secrets);
-      if (value.workspaceTrust) {
-        await requirePrivateRouting({ server, userId }, () => { try { waiting(); return true; } catch { return false; } }); waiting();
-        // Restore with confirmation-authenticated temporary keys. Publishing a
-        // session first could let an old standard policy leak private filters.
-        await restorePrivateDeviceWorkspaceTrust(userId, value.workspaceTrust, { server, secrets: value.secrets, check: waiting }); waiting();
-      } else {
-        const required = await privateRoutingRequired({ server, userId }); waiting(); if (required) throw new Error("This account needs its trusted workspace checkpoint before unlocking this device");
-        await requirePrivateRouting({ server, userId }, () => { try { waiting(); return true; } catch { return false; } }); waiting();
-      }
-      installVerifiedPrivateSession(userId, value.keys, value.secrets);
+      await installPrivateDeviceTransfer(userId, server, receiver.confirm(code), waiting);
     },
     cancel: () => { canceled = true; receiver.cancel(); },
   };
+}
+
+/** Open this device with keys another, trusted device sent: verify them,
+ * restore that device's workspace trust, then publish the session. */
+export async function installPrivateDeviceTransfer(userId: string, server: string, received: unknown, waiting: () => void): Promise<void> {
+  const value = privateDeviceTransferSchema.parse(received);
+  if (value.server !== server || value.userId !== userId) throw new Error("Invalid private identity transfer");
+  assertIdentityKeys(value.keys, value.secrets);
+  if (value.workspaceTrust) {
+    await requirePrivateRouting({ server, userId }, () => { try { waiting(); return true; } catch { return false; } }); waiting();
+    // Restore with confirmation-authenticated temporary keys. Publishing a
+    // session first could let an old standard policy leak private filters.
+    await restorePrivateDeviceWorkspaceTrust(userId, value.workspaceTrust, { server, secrets: value.secrets, check: waiting }); waiting();
+  } else {
+    const required = await privateRoutingRequired({ server, userId }); waiting(); if (required) throw new Error("This account needs its trusted workspace checkpoint before unlocking this device");
+    await requirePrivateRouting({ server, userId }, () => { try { waiting(); return true; } catch { return false; } }); waiting();
+  }
+  installVerifiedPrivateSession(userId, value.keys, value.secrets);
 }

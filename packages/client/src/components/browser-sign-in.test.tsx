@@ -66,6 +66,9 @@ beforeEach(() => {
         },
       });
     }
+    // After the token: who signed in, and no key request (the browser sent none).
+    if (url.endsWith("/get-session")) return json({ status: 200, body: { user: { id: "u1" } } });
+    if (url.includes("/api/trpc/privacy.")) return json({ status: 404, body: { error: { data: { code: "NOT_FOUND" } } } });
     const next = tokenAnswers.shift() ?? { status: 400, body: { error: "authorization_pending" } };
     return json(next);
   });
@@ -108,7 +111,8 @@ describe("BrowserSignIn", () => {
 
     fireEvent.click(await screen.findByTestId("browser-sign-in"));
     expect(await screen.findByTestId("browser-sign-in-code")).toHaveTextContent("ABCD-EFGH");
-    expect(openExternal).toHaveBeenCalledWith("https://time.example.test/app/device?user_code=ABCD-EFGH");
+    // The key request rides in the fragment, which no server ever sees.
+    expect(openExternal).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/time\.example\.test\/app\/device\?user_code=ABCD-EFGH#keys=[A-Za-z0-9_-]+$/));
 
     await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1), { timeout: 5000 });
     expect(setNativeToken).toHaveBeenCalledWith("approved-token");
@@ -128,7 +132,7 @@ describe("BrowserSignIn", () => {
 
     fireEvent.click(await screen.findByTestId("browser-sign-in"));
     await waitFor(() => expect(openMobileBrowser).toHaveBeenCalledWith({
-      url: "https://time.example.test/app/device?user_code=ABCD-EFGH",
+      url: expect.stringMatching(/^https:\/\/time\.example\.test\/app\/device\?user_code=ABCD-EFGH#keys=/),
     }));
     await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1));
     expect(setNativeToken).toHaveBeenCalledWith("mobile-token");
