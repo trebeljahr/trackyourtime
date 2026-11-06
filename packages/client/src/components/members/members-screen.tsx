@@ -285,7 +285,9 @@ export function MembersScreen({ navigate }: MembersScreenProps): React.JSX.Eleme
       <LeaveWorkspace
         workspaceName={workspace.name}
         block={leaveBlockFor(workspace.role, rows, workspace.kind)}
-        onLeave={() => leave.mutateAsync(undefined)}
+        // An object, not undefined: the private mutation intent refuses a
+        // workspace write without an input object to stamp the workspace on.
+        onLeave={() => leave.mutateAsync({})}
         navigate={navigate}
       />
 
