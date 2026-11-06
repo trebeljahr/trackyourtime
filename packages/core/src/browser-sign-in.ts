@@ -16,7 +16,7 @@
  */
 import { versionHeaders } from "@starter/shared";
 import { startDeviceAuthorization, CLIENT_HEADER, AuthError, type SessionAuthOptions } from "./session-auth.js";
-import { browserKeysUrl, createBrowserKeyReceiver, type BrowserKeyRequest } from "./privacy/browser-keys.js";
+import { browserKeysUrl, newBrowserKeyRequest, openBrowserKeys, type BrowserKeyRequest, type BrowserKeyRequestState } from "./privacy/browser-keys.js";
 
 export type BrowserSignIn<T> = {
   /** Open this in the person's browser. It carries the key request in its fragment. */
@@ -39,51 +39,71 @@ export type CollectOptions = {
 
 const sleepFor = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+const trpcCall = (options: SessionAuthOptions) => {
+  const doFetch = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const base = options.baseUrl.replace(/\/$/, "");
+  const headers = (token: string) => ({ "content-type": "application/json", authorization: `Bearer ${token}`, [CLIENT_HEADER]: options.clientId, ...versionHeaders(options.clientVersion) });
+  return {
+    async session(token: string): Promise<string | null> {
+      const response = await doFetch(`${base}/api/auth/get-session`, { method: "GET", headers: headers(token) });
+      const user = (await response.json().catch(() => null) as { user?: { id?: unknown } } | null)?.user;
+      return response.ok && typeof user?.id === "string" && user.id ? user.id : null;
+    },
+    async call(token: string, path: string, input: unknown) {
+      const response = await doFetch(`${base}/api/trpc/${path}`, { method: "POST", headers: headers(token), body: JSON.stringify(input) });
+      const body = await response.json().catch(() => ({})) as { result?: { data?: unknown }; error?: { data?: { code?: string } } };
+      return { status: response.status, code: body.error?.data?.code ?? null, data: body.result?.data };
+    },
+  };
+};
+
+/**
+ * After the device token arrived: who signed in, and the keys if the
+ * approving browser sent them. Removes the relay slot either way.
+ */
+export async function collectBrowserKeys<T = unknown>(options: SessionAuthOptions, token: string, state: BrowserKeyRequestState, wait: CollectOptions = {}): Promise<{ userId: string; keys: T | null }> {
+  const sleep = wait.sleepImpl ?? sleepFor;
+  const api = trpcCall(options);
+  const userId = await api.session(token);
+  if (!userId) throw new AuthError("The new session could not be read", "NO_SESSION");
+  const requestId = state.request.requestId;
+  try {
+    for (;;) {
+      if (wait.signal?.aborted || Date.now() >= state.request.expiresAt) return { userId, keys: null };
+      const status = await api.call(token, "privacy.deviceUnlockStatus", { requestId });
+      // The browser creates the request before approving the sign-in, so a
+      // missing one means it sent no keys (an account without keys, or keys
+      // it could not open).
+      if (status.status === 404 || status.code === "NOT_FOUND") return { userId, keys: null };
+      if (status.status >= 400) throw new AuthError("The key request could not be read", status.code ?? `HTTP_${status.status}`);
+      const box = (status.data as { box?: unknown } | undefined)?.box;
+      if (box) return { userId, keys: await openBrowserKeys<T>(state, userId, box) };
+      await sleep(wait.intervalMs ?? 1500);
+    }
+  } finally {
+    await api.call(token, "privacy.cancelDeviceUnlock", { requestId }).catch(() => undefined);
+  }
+}
+
 export async function startBrowserSignIn<T = unknown>(options: SessionAuthOptions): Promise<BrowserSignIn<T>> {
   const authorization = await startDeviceAuthorization(options);
   const approvalUrl = authorization.verificationUriComplete || authorization.verificationUri;
   if (!approvalUrl) throw new AuthError("The server gave no approval address", "PARSE_ERROR");
-  const receiver = await createBrowserKeyReceiver<T>(options.baseUrl);
-  const doFetch = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const base = options.baseUrl.replace(/\/$/, "");
-  const headers = (token: string) => ({ "content-type": "application/json", authorization: `Bearer ${token}`, [CLIENT_HEADER]: options.clientId, ...versionHeaders(options.clientVersion) });
-  const trpc = async (token: string, path: string, input: unknown) => {
-    const response = await doFetch(`${base}/api/trpc/${path}`, { method: "POST", headers: headers(token), body: JSON.stringify(input) });
-    const body = await response.json().catch(() => ({})) as { result?: { data?: unknown }; error?: { data?: { code?: string } } };
-    return { status: response.status, code: body.error?.data?.code ?? null, data: body.result?.data };
-  };
+  const state = await newBrowserKeyRequest(options.baseUrl);
+  let active = true;
+  const cancel = () => { active = false; state.privateKey.d = ""; };
   return {
-    url: browserKeysUrl(approvalUrl, receiver.request),
+    url: browserKeysUrl(approvalUrl, state.request),
     userCode: authorization.userCode,
     deviceCode: authorization.deviceCode,
     intervalSeconds: authorization.intervalSeconds,
     expiresInSeconds: authorization.expiresInSeconds,
-    request: receiver.request,
-    cancel: receiver.cancel,
-    async collectKeys(token, wait = {}) {
-      const sleep = wait.sleepImpl ?? sleepFor;
-      const session = await doFetch(`${base}/api/auth/get-session`, { method: "GET", headers: headers(token) });
-      const user = (await session.json().catch(() => null) as { user?: { id?: unknown } } | null)?.user;
-      if (!session.ok || typeof user?.id !== "string" || !user.id) { receiver.cancel(); throw new AuthError("The new session could not be read", "NO_SESSION"); }
-      const userId = user.id, requestId = receiver.request.requestId;
-      try {
-        for (;;) {
-          if (wait.signal?.aborted) return { userId, keys: null };
-          if (Date.now() >= receiver.request.expiresAt) return { userId, keys: null };
-          const status = await trpc(token, "privacy.deviceUnlockStatus", { requestId });
-          // The browser creates the request before approving the sign-in, so a
-          // missing one means it sent no keys (an account without keys, or keys
-          // it could not open).
-          if (status.status === 404 || status.code === "NOT_FOUND") return { userId, keys: null };
-          if (status.status >= 400) throw new AuthError("The key request could not be read", status.code ?? `HTTP_${status.status}`);
-          const box = (status.data as { box?: unknown } | undefined)?.box;
-          if (box) return { userId, keys: await receiver.open(userId, box) };
-          await sleep(wait.intervalMs ?? 1500);
-        }
-      } finally {
-        receiver.cancel();
-        await trpc(token, "privacy.cancelDeviceUnlock", { requestId }).catch(() => undefined);
-      }
+    request: state.request,
+    cancel,
+    async collectKeys(token, wait) {
+      if (!active) throw new AuthError("This sign-in was cancelled", "CANCELLED");
+      try { return await collectBrowserKeys<T>(options, token, state, wait); }
+      finally { cancel(); }
     },
   };
 }

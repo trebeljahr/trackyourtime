@@ -9,9 +9,9 @@ import {
   openExtensionPreferences,
   showToast,
 } from "@raycast/api";
-import { pollForDeviceSession, startDeviceAuthorization, type DeviceAuthorization } from "../vendor/index.js";
+import { pollForDeviceSession, startBrowserSignIn, type DeviceAuthorization } from "../vendor/index.js";
 import { useEffect, useRef, useState } from "react";
-import { CLIENT_ID, getStoredSession, signOut, storeSession } from "../lib/auth.js";
+import { CLIENT_ID, getStoredSession, signOut, storeAccountKeys, storeSession } from "../lib/auth.js";
 import { DEFAULT_ORIGINS, apiUrl, hostLabel, usesLocalDefaults, webLink, webUrl } from "../lib/preferences.js";
 import { getTrackYourTime } from "../lib/api.js";
 import { adoptUnownedHere } from "../lib/offline.js";
@@ -53,24 +53,37 @@ export function SignIn(): React.JSX.Element {
       const options = { baseUrl: apiUrl(), clientId: CLIENT_ID, clientVersion: APP_VERSION } as const;
 
       try {
-        const authorization = await startDeviceAuthorization(options);
+        // One approval in the browser signs Raycast in and, when that browser
+        // holds the account's keys, sends them sealed through the fragment of
+        // the URL opened here (`startBrowserSignIn` in core).
+        const flow = await startBrowserSignIn(options);
+        abort.signal.addEventListener("abort", flow.cancel);
         if (cancelled) return;
+        const authorization: DeviceAuthorization = {
+          deviceCode: flow.deviceCode,
+          userCode: flow.userCode,
+          verificationUri: flow.url,
+          verificationUriComplete: flow.url,
+          expiresInSeconds: flow.expiresInSeconds,
+          intervalSeconds: flow.intervalSeconds,
+        };
         setPhase({ kind: "pairing", authorization });
 
         // Opening the prefilled page is the whole point of the flow — the
         // user should not have to retype a code they can just confirm.
-        if (authorization.verificationUriComplete) {
-          await open(authorization.verificationUriComplete);
-        }
+        await open(flow.url);
 
-        const session = await pollForDeviceSession(options, authorization.deviceCode, {
-          intervalSeconds: authorization.intervalSeconds,
-          timeoutSeconds: authorization.expiresInSeconds,
+        const session = await pollForDeviceSession(options, flow.deviceCode, {
+          intervalSeconds: flow.intervalSeconds,
+          timeoutSeconds: flow.expiresInSeconds,
           signal: abort.signal,
         });
         if (cancelled) return;
+        const delivered = await flow.collectKeys(session.token, { signal: abort.signal }).catch(() => null);
+        if (cancelled) return;
 
-        await storeSession(session);
+        await storeSession({ ...session, userId: session.userId ?? delivered?.userId ?? null });
+        if (delivered?.keys) await storeAccountKeys(delivered.userId, delivered.keys);
 
         /*
          * Claim and send whatever this Mac queued before it had an account to

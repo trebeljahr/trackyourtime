@@ -29,6 +29,13 @@ const SERVER_KEY = "trackyourtime.session.server";
 const ORIGIN_KEY = "trackyourtime.originId";
 const REJECTED_KEY = "trackyourtime.session.rejected";
 const VERIFIED_USER_KEY = "trackyourtime.session.verifiedUser";
+/**
+ * The account keys the approving browser sent at pairing
+ * (`startBrowserSignIn` in core), with the server and account they belong
+ * to. Raycast's LocalStorage is encrypted, like the token beside it. Nothing
+ * reads them yet: encrypted workspaces come to Raycast in a later phase.
+ */
+const ACCOUNT_KEYS_KEY = "trackyourtime.session.accountKeys";
 const listeners = new Set<() => void>();
 
 export const onSessionChanged = (listener: () => void): (() => void) => {
@@ -149,7 +156,17 @@ export async function storeSession(session: IssuedSession): Promise<void> {
   await LocalStorage.setItem(SERVER_KEY, apiUrl());
   await LocalStorage.removeItem(REJECTED_KEY);
   await LocalStorage.removeItem(VERIFIED_USER_KEY);
+  await LocalStorage.removeItem(ACCOUNT_KEYS_KEY);
   notifySessionChanged();
+}
+
+/** Keep the keys a pairing delivered, bound to this server and account. */
+export async function storeAccountKeys(userId: string, keys: unknown): Promise<void> {
+  await LocalStorage.setItem(ACCOUNT_KEYS_KEY, JSON.stringify({ v: 1, server: apiUrl(), userId, keys }));
+}
+
+export async function hasAccountKeys(): Promise<boolean> {
+  return (await LocalStorage.getItem<string>(ACCOUNT_KEYS_KEY)) !== undefined;
 }
 
 /**
@@ -173,6 +190,7 @@ export async function signOut(): Promise<void> {
   await LocalStorage.removeItem(SERVER_KEY);
   await LocalStorage.removeItem(REJECTED_KEY);
   await LocalStorage.removeItem(VERIFIED_USER_KEY);
+  await LocalStorage.removeItem(ACCOUNT_KEYS_KEY);
 
   // The cached reads and the optimistic overlay both describe one account's
   // workspace, so they go — the next person to pair must not see the last

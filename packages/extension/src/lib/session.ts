@@ -83,4 +83,21 @@ export async function saveSession(session: SessionInput): Promise<void> {
 
 export async function clearSession(): Promise<void> {
   await storage().removeItem(SESSION_STORAGE_KEY);
+  await storage().removeItem(ACCOUNT_KEYS_STORAGE_KEY);
+}
+
+/**
+ * The account keys the approving browser sent at sign-in
+ * (`collectBrowserKeys` in core), beside the token in memory-only storage and
+ * forgotten with it. Nothing reads them yet: encrypted workspaces come to the
+ * extension in a later phase.
+ */
+export const ACCOUNT_KEYS_STORAGE_KEY = "trackyourtime.session.accountKeys";
+
+export async function saveAccountKeys(server: string, userId: string, keys: unknown): Promise<void> {
+  await storage().setItem(ACCOUNT_KEYS_STORAGE_KEY, JSON.stringify({ v: 1, server, userId, keys }));
+}
+
+export async function hasAccountKeys(): Promise<boolean> {
+  return (await storage().getItem(ACCOUNT_KEYS_STORAGE_KEY)) !== null;
 }

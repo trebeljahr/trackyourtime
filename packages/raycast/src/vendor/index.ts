@@ -3,6 +3,7 @@
 // declare them. Run `pnpm vendor:raycast` after changing packages/core or packages/shared.
 export { ApiError, createApiClient, isTransportFailure } from "./core/api-client.js";
 export type { ApiClient } from "./core/api-client.js";
+export { startBrowserSignIn } from "./core/browser-sign-in.js";
 export { durableEntryEnvelope, durableQueuedWrite } from "./core/durable-entry.js";
 export { defaultManualRange } from "./core/entry-fields.js";
 export { buildOptimisticEntry, decorateEntry, stoppedEntryShape } from "./core/entry-shape.js";
@@ -22,7 +23,7 @@ export { buildQuickStartInput, repairQuickStart } from "./core/quick-start.js";
 export { SELF_HOSTING_UPGRADING_URL, createServerLevelCache } from "./core/server-level.js";
 export type { ServerLevel, ServerLevelCache } from "./core/server-level.js";
 export { MIN_SERVER_API_LEVEL, sameServerOrigin } from "./core/server-origin.js";
-export { AuthError, pollForDeviceSession, signOutSession, startDeviceAuthorization } from "./core/session-auth.js";
+export { AuthError, pollForDeviceSession, signOutSession } from "./core/session-auth.js";
 export type { DeviceAuthorization, IssuedSession } from "./core/session-auth.js";
 export type { KeyValueStorage } from "./core/storage.js";
 export { readStoredClient, readStoredFavorite, readStoredProject, readStoredSettings, readStoredTag, readStoredTask } from "./core/stored-catalog.js";

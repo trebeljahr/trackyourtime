@@ -8,7 +8,8 @@ import {
   loadDeviceSignInError,
   loadPendingDeviceAuth,
 } from "../lib/device-auth-store";
-import { loadSession } from "../lib/session";
+import { clearSession, hasAccountKeys, loadSession } from "../lib/session";
+import { browserKeyRequestFromHash, sealBrowserKeys } from "@starter/core";
 import { loadPopupSnapshot } from "../lib/popup-snapshot";
 import {
   API,
@@ -72,7 +73,8 @@ describe("startDeviceSignIn", () => {
     expect(state.signedIn).toBe(false);
     expect(state.pendingDeviceAuth).toEqual({
       userCode: "ABCDEFGH",
-      verificationUrl: server.verificationUrl,
+      // The key request rides in the fragment, which no server ever sees.
+      verificationUrl: expect.stringMatching(new RegExp(`^${server.verificationUrl.replace(/[.?]/g, "\\$&")}#keys=[A-Za-z0-9_-]+$`)),
       expiresAt: expect.any(Number),
     });
     // Never the device code.
@@ -102,6 +104,30 @@ describe("startDeviceSignIn", () => {
     expect(fakeChrome.alarms.has(DEVICE_AUTH_ALARM)).toBe(false);
     expect(await loadPopupSnapshot()).toMatchObject({ signedIn: true, email: "u@example.com" });
     expect(await attemptPendingDeviceSignIn()).toBeNull();
+    // The browser sent no keys: none are kept.
+    expect(await hasAccountKeys()).toBe(false);
+  });
+
+  test("keeps the keys the approving browser sealed for this sign-in, and forgets them on sign-out", async () => {
+    await startDeviceSignIn();
+    const record = (await loadPendingDeviceAuth())!;
+    const request = browserKeyRequestFromHash(new URL(record.verificationUrl!).hash)!;
+    server.deviceUnlockBox = await sealBrowserKeys(request, "user-u", { secrets: "the account keys" });
+    server.token = "approved";
+    expect(await attemptPendingDeviceSignIn()).toBe("signed-in");
+    expect(await hasAccountKeys()).toBe(true);
+    await clearSession();
+    expect(await hasAccountKeys()).toBe(false);
+  });
+
+  test("refuses keys sealed for another account", async () => {
+    await startDeviceSignIn();
+    const record = (await loadPendingDeviceAuth())!;
+    const request = browserKeyRequestFromHash(new URL(record.verificationUrl!).hash)!;
+    server.deviceUnlockBox = await sealBrowserKeys(request, "somebody-else", { secrets: "x" });
+    server.token = "approved";
+    expect(await attemptPendingDeviceSignIn()).toBe("signed-in");
+    expect(await hasAccountKeys()).toBe(false);
   });
 
   test("popup-owned exchanges leave the full data load to the response handler", async () => {

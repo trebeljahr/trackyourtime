@@ -92,33 +92,52 @@ export async function sealBrowserKeys(requestValue: BrowserKeyRequest, userId: s
   return box as PrivateDeviceApproval;
 }
 
+/**
+ * The client's whole side of one request, as plain data: a client whose
+ * process can stop between steps (the extension's service worker) keeps it in
+ * memory-only storage and picks it up again. Never write it to disk.
+ */
+export type BrowserKeyRequestState = { request: BrowserKeyRequest; privateKey: PublicKey };
+
+export async function newBrowserKeyRequest(server: string, now = Date.now): Promise<BrowserKeyRequestState> {
+  const pair = await createKeyPair();
+  const secret = randomSecret();
+  try {
+    const request = checkRequest({ v: 1, requestId: crypto.randomUUID(), server: new URL(server).origin, publicKey: pair.publicKey, expiresAt: now() + BROWSER_KEYS_TTL_MS, secret: encodeSecret(secret) }, now);
+    return { request, privateKey: pair.privateKey };
+  } finally { secret.fill(0); }
+}
+
+/** Open the relayed box for `userId`, the account the sign-in returned. */
+export async function openBrowserKeys<T>(state: BrowserKeyRequestState, userId: string, approval: unknown, now = Date.now): Promise<T> {
+  const request = checkRequest(state.request, now);
+  if (typeof userId !== "string" || !userId) throw new BrowserKeysError("Unknown account");
+  const expected = await pairingTag(request, userId);
+  const payload = await unsealForRecipient<{ v: number; value: T; pairing: string }>(state.privateKey, approval as RecipientBox, binding(request, userId));
+  if (payload?.v !== 1 || !Object.hasOwn(payload, "value") || payload.pairing !== expected) throw new BrowserKeysError("These keys did not come from the browser that approved the sign-in");
+  return payload.value;
+}
+
 export type BrowserKeyReceiver<T> = {
   request: BrowserKeyRequest;
+  state: BrowserKeyRequestState;
   /** Open the relayed box for `userId`, the account the sign-in returned. Once. */
   open: (userId: string, approval: unknown) => Promise<T>;
   cancel: () => void;
 };
 
-/** The client's side: a fresh request, kept in memory until opened or cancelled. */
+/** The client's side, kept in memory until opened or cancelled. */
 export async function createBrowserKeyReceiver<T>(server: string, now = Date.now): Promise<BrowserKeyReceiver<T>> {
-  const pair = await createKeyPair();
-  const secret = randomSecret();
-  const request = checkRequest({ v: 1, requestId: crypto.randomUUID(), server: new URL(server).origin, publicKey: pair.publicKey, expiresAt: now() + BROWSER_KEYS_TTL_MS, secret: encodeSecret(secret) }, now);
-  secret.fill(0);
+  const state = await newBrowserKeyRequest(server, now);
   let active = true;
-  const cancel = () => { active = false; pair.privateKey.d = ""; request.secret = ""; };
+  const cancel = () => { active = false; state.privateKey.d = ""; state.request.secret = ""; };
   return {
-    request,
+    request: state.request,
+    state,
     async open(userId, approval) {
       if (!active) throw new BrowserKeysError("This key request is closed");
-      try {
-        checkRequest(request, now);
-        if (typeof userId !== "string" || !userId) throw new BrowserKeysError("Unknown account");
-        const expected = await pairingTag(request, userId);
-        const payload = await unsealForRecipient<{ v: number; value: T; pairing: string }>(pair.privateKey, approval as RecipientBox, binding(request, userId));
-        if (payload?.v !== 1 || !Object.hasOwn(payload, "value") || payload.pairing !== expected) throw new BrowserKeysError("These keys did not come from the browser that approved the sign-in");
-        return payload.value;
-      } finally { cancel(); }
+      try { return await openBrowserKeys<T>(state, userId, approval, now); }
+      finally { cancel(); }
     },
     cancel,
   };

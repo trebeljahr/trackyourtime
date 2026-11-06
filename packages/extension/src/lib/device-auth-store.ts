@@ -15,6 +15,7 @@
  * Only the service worker touches these. The popup sees the user code and the
  * expiry on the snapshot — never the device code.
  */
+import type { BrowserKeyRequestState } from "@starter/core";
 import { sameServerOrigin } from "@starter/core";
 import { chromeStorage, sessionStorageArea } from "./chrome-storage";
 
@@ -51,6 +52,12 @@ export type PendingDeviceAuth = {
   /** Epoch ms. */
   expiresAt: number;
   intervalSeconds: number;
+  /**
+   * The one-time key request carried in the approval URL's fragment
+   * (`newBrowserKeyRequest` in core), including its private key. Memory-only
+   * storage, like the token; manual sign-ins only.
+   */
+  keyRequest?: BrowserKeyRequestState;
 };
 
 /** Why the popup's own device sign-in ended without a session. */
@@ -70,6 +77,13 @@ const finite = (value: unknown): number | null =>
  * direction of "none": a record missing anything is no authorization at all,
  * because an exchange with half a record cannot succeed.
  */
+/** Shape only; `openBrowserKeys` checks the request itself before use. */
+const keyRequestOf = (value: unknown): BrowserKeyRequestState | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const state = value as { request?: { requestId?: unknown }; privateKey?: { d?: unknown } };
+  return typeof state.request?.requestId === "string" && typeof state.privateKey?.d === "string" && state.privateKey.d ? value as BrowserKeyRequestState : null;
+};
+
 export const decodePendingDeviceAuth = (raw: string | null): PendingDeviceAuth | null => {
   if (raw === null) return null;
   try {
@@ -107,6 +121,7 @@ export const decodePendingDeviceAuth = (raw: string | null): PendingDeviceAuth |
       forUserId: purpose === "web-confirmed" ? forUserId : null,
       expiresAt,
       intervalSeconds: Math.max(1, intervalSeconds),
+      ...(keyRequestOf(record.keyRequest) ? { keyRequest: keyRequestOf(record.keyRequest)! } : {}),
     };
   } catch {
     return null;

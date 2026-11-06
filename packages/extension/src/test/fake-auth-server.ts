@@ -26,11 +26,14 @@ export type FakeAuthServer = {
   revoked: string[];
   calls: string[];
   issued: number;
+  /** The sealed keys `privacy.deviceUnlockStatus` relays; null means the browser sent none. */
+  deviceUnlockBox: unknown;
 };
 
 export const API = "http://127.0.0.1:9";
 
 export const createFakeAuthServer = (): FakeAuthServer => ({
+  deviceUnlockBox: null,
   webUrl: "http://localhost:3392",
   healthFails: false,
   mutationsFail: false,
@@ -145,6 +148,12 @@ export const installFakeAuthServer = (server: FakeAuthServer): void => {
           return json(200, {
             result: { data: user === undefined ? null : { userId: user.id, workspaceId: "ws-1" } },
           });
+        }
+        // Browser sign-in keys: the approving browser sent none, unless a test says so.
+        if (procedure === "privacy.deviceUnlockStatus") {
+          return server.deviceUnlockBox === null
+            ? json(404, { error: { data: { code: "NOT_FOUND" } } })
+            : json(200, { result: { data: { box: server.deviceUnlockBox } } });
         }
         if (init?.method === "POST") return json(200, { result: { data: null } });
         if (procedure === "entries.current") return json(200, { result: { data: null } });

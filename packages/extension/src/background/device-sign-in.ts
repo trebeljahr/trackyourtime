@@ -22,6 +22,9 @@
  */
 import {
   AuthError,
+  browserKeysUrl,
+  collectBrowserKeys,
+  newBrowserKeyRequest,
   isLoopbackHost,
   requestDeviceToken,
   startDeviceAuthorization,
@@ -47,6 +50,7 @@ import {
   type PendingDeviceAuth,
 } from "../lib/device-auth-store";
 import { clearLinkBlock, clearSignOutMarker } from "../lib/sign-out-marker";
+import { saveAccountKeys } from "../lib/session";
 import { BackgroundError } from "./errors";
 import { buildState } from "./state";
 import {
@@ -192,6 +196,12 @@ const exchangeOnce = async (record: PendingDeviceAuth, publishSnapshot: boolean)
     return endWithout(record, "failed", "failed");
   }
 
+  // The approving browser may have sealed the account keys for this request
+  // (lib/browser-key-request.ts in the web app). A sign-in never fails on them.
+  const delivered = record.keyRequest && user
+    ? await collectBrowserKeys(authOptions(current.apiUrl), issued.token, record.keyRequest, { intervalMs: 1000 }).catch(() => null)
+    : null;
+
   await clearPendingDeviceAuth();
   await clearDeviceAlarm();
   await clearDeviceAuthFailure();
@@ -205,6 +215,7 @@ const exchangeOnce = async (record: PendingDeviceAuth, publishSnapshot: boolean)
     email: user?.email ?? null,
     source: sourceFor(record.purpose),
   });
+  if (delivered?.keys && delivered.userId === user?.userId) await saveAccountKeys(current.apiUrl, delivered.userId, delivered.keys);
   // Approval can finish with no popup open. Prepare its first signed-in frame
   // now, and notify an open popup through the snapshot storage change.
   // The pending code is already cleared, so this read cannot exchange it again.
@@ -314,7 +325,10 @@ export async function startDeviceSignIn(): Promise<void> {
         "The server sent an approval page address the extension will not open.",
       );
     }
-    started.record.verificationUrl = started.authorization.verificationUriComplete;
+    // The key request rides in the fragment, which no server ever sees.
+    const keyRequest = await newBrowserKeyRequest(current.apiUrl);
+    started.record.keyRequest = keyRequest;
+    started.record.verificationUrl = browserKeysUrl(started.authorization.verificationUriComplete, keyRequest.request);
     await savePendingDeviceAuth(started.record);
     await clearDeviceSignInError();
     return started;
