@@ -13,10 +13,10 @@ vi.mock("./app-version", () => ({ APP_VERSION: "test" }));
 const session = await import("./private-session");
 const { privateAccountInventoryStorageHost, privateWorkspaceStorageHost, privateDirectoryStore } = await import("./private-replica");
 const { privateAccountWorkspaceInventorySync } = await import("./private-inventory-sync");
-const { workspaceContentRoute, currentWorkspaceContentRoute, readPrivateWorkspaceQuery, assertStandardContentRequest, isWorkspaceContentProcedure, assertStandardWorkspaceContent } = await import("./private-content-route");
+const { forgetWorkspaceContentRoutes, workspaceContentRoute, currentWorkspaceContentRoute, readPrivateWorkspaceQuery, assertStandardContentRequest, isWorkspaceContentProcedure, assertStandardWorkspaceContent } = await import("./private-content-route");
 const { privateRoutingRequired, requirePrivateRouting } = await import("./private-routing-requirement");
 const { confirmStandardDeviceAccess } = await import("./private-device-access");
-beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged("owner"); });
+beforeEach(() => { forgetWorkspaceContentRoutes(); vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); state.origin = "https://api.example.test"; session.lockPrivateData(); session.privateAccountChanged("owner"); });
 afterEach(() => { session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function fixture() {
   const f = await privateRecoveryFixture(); session.installPrivateSession("owner", f.secrets);
@@ -43,7 +43,20 @@ it("durably requires unlock after lock, restart, missing inventory and a new unl
   const f = await fixture(), route = await workspaceContentRoute("owner", "workspace"); expect(await privateRoutingRequired({ server: state.origin, userId: "owner" })).toBe(true);
   session.lockPrivateData(); expect(() => route.check()).toThrow(); await expect(workspaceContentRoute("owner", "workspace")).rejects.toThrow("Unlock private data");
   session.installPrivateSession("owner", f.secrets); expect(() => route.check()).toThrow(); expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("encrypted");
-  vi.stubGlobal("indexedDB", new IDBFactory()); await expect(workspaceContentRoute("owner", "workspace")).rejects.toThrow("inventory is missing");
+  // Storage wiped behind the hosts' back: only a forgotten decision reads it again.
+  vi.stubGlobal("indexedDB", new IDBFactory()); forgetWorkspaceContentRoutes(); await expect(workspaceContentRoute("owner", "workspace")).rejects.toThrow("inventory is missing");
+});
+it("reuses a keyed decision without reopening storage, and reads again after an inventory write", async () => {
+  const f = await fixture();
+  expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("encrypted");
+  const opened = vi.spyOn(indexedDB, "open");
+  expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("encrypted");
+  expect(opened).not.toHaveBeenCalled();
+  const account = await privateAccountInventoryStorageHost("owner");
+  try { const sync = await privateAccountWorkspaceInventorySync("owner", account.storage, account.exclusive); await sync.update(f.enrollment.inventory.workspaces.map((row) => ({ ...row }))); } finally { account.close(); }
+  opened.mockClear();
+  expect((await workspaceContentRoute("owner", "workspace")).mode).toBe("encrypted");
+  expect(opened).toHaveBeenCalled();
 });
 it("keeps explicitly confirmed standard accounts compatible but refuses corrupted public metadata and unavailable storage", async () => {
   await confirmStandardDeviceAccess({ server: state.origin, userId: "owner" }, () => true);

@@ -1,3 +1,4 @@
+import { bumpPrivateInventoryRevision } from "./private-inventory-revision";
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import { createPrivateAccountInventoryStore, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateInitialProjection, PRIVATE_ACCOUNT_INVENTORY_SCOPE, privateReplicaIdentityFromDirectory, signPrivateAccountInventory, signPrivateWorkspacePolicy, type KeyValueStorage, type PrivateAccountWorkspace, type PrivateDirectoryTrust, type PrivateProjectionTransport, type PrivateWorkspacePolicyCheckpoint, type QueueExclusive, type VerifiedPrivateAccountInventory, type VerifiedPrivateDirectory, type VerifiedPrivateProjectionSnapshot } from "@starter/core";
 import { privateDataOrigin, privateOperationScope, privateSession, privateSessionVersion, subscribePrivateSession } from "./private-session";
@@ -84,7 +85,17 @@ export function loadPrivateWorkspaceProjection(userId: string, workspaceId: stri
 /** One durable host for both encrypted adapters. Closing/locking never deletes
  * queued work. Reopen after unlocking; stale handles cannot resume a save. */
 export function privateWorkspaceStorageHost(userId: string, workspaceId: string) { return privateStorageHost(userId, workspaceId); }
-export function privateAccountInventoryStorageHost(userId: string) { return privateStorageHost(userId, PRIVATE_ACCOUNT_INVENTORY_SCOPE); }
+/** Every write through this host moves the inventory revision, so the content
+ * route's decision cache cannot outlive a changed inventory. */
+export async function privateAccountInventoryStorageHost(userId: string) {
+  const host = await privateStorageHost(userId, PRIVATE_ACCOUNT_INVENTORY_SCOPE), storage = host.storage;
+  return { ...host, storage: {
+    ...storage,
+    getItem: (key: string) => storage.getItem(key),
+    setItem: async (key: string, value: string) => { try { await storage.setItem(key, value); } finally { bumpPrivateInventoryRevision(); } },
+    removeItem: async (key: string) => { try { await storage.removeItem(key); } finally { bumpPrivateInventoryRevision(); } },
+  } as typeof storage };
+}
 export function privateAccountTimerStorageHost(userId: string) { return privateStorageHost(userId, PRIVATE_ACCOUNT_TIMER_SCOPE); }
 /** No API response initializes this store. Enrollment/recovery must restore an
  * independently authenticated timer digest before account timer access. */

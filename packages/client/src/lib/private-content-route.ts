@@ -14,6 +14,21 @@ import { privateDisplayPreferences } from "./private-display-preferences";
 import { privateWorkspaceMemberMetadata } from "./private-member-metadata";
 import { notePrivateView } from "./private-view-lifecycle";
 import { privateDeviceAccessRevision, requireStandardDeviceAccess } from "./private-device-access";
+import { privateInventoryRevision } from "./private-inventory-revision";
+/**
+ * A keyed device's decision per workspace, for at most ROUTE_CACHE_MS and only
+ * while nothing it depends on has moved: the unlock (session version), the
+ * routing and device-access revisions, and the inventory revision (any local
+ * inventory write, in any tab). Reading and verifying the signed inventory
+ * costs about 100 ms per request; the server's legacy write barrier still
+ * refuses plaintext writes to a private workspace whatever a client decides.
+ */
+const ROUTE_CACHE_MS = 15_000;
+const routeCache = new Map<string, { mode: "standard" | "encrypted"; at: number }>();
+/** Tests, and anything that changes local storage behind the hosts' back. */
+export function forgetWorkspaceContentRoutes(): void { routeCache.clear(); }
+const routeCacheKey = (server: string, userId: string, workspaceId: string | null, version: number, routing: number, device: number) =>
+  JSON.stringify([server, userId, workspaceId, version, routing, device, privateInventoryRevision()]);
 /** All content-bearing app routers, including queries whose filters contain
  * descriptions, client names, or other private values. Unsupported private
  * procedures fail here, before batching, durable entry storage or HTTP. */
@@ -44,7 +59,9 @@ async function resolveWorkspaceContentRoute(userId: string, workspaceId: string 
   for (let attempt = 0; attempt < 3; attempt++) {
     const at = privateRoutingRevision(), deviceAt = privateDeviceAccessRevision(), required = await privateRoutingRequired(scope); alive();
     let mode: "standard" | "encrypted" = "standard";
-    if (!privateSession(userId)) {
+    const cacheKey = routeCacheKey(server, userId, workspaceId, version, at, deviceAt), cached = routeCache.get(cacheKey);
+    if (privateSession(userId) && cached && Date.now() - cached.at < ROUTE_CACHE_MS) mode = cached.mode;
+    else if (!privateSession(userId)) {
       if (required) throw new PrivateContentUnavailableError();
       await requireStandardDeviceAccess(scope); alive();
     } else {
@@ -58,6 +75,10 @@ async function resolveWorkspaceContentRoute(userId: string, workspaceId: string 
           mode = accountWorkspacePolicy(profile.inventory, { server, userId }, workspaceId).mode;
         }
       } finally { host.close(); }
+      // Keyed before the read: a write during it moved the revision, and the
+      // entry is then never found again.
+      if (routeCache.size > 200) routeCache.clear();
+      routeCache.set(cacheKey, { mode, at: Date.now() });
     }
     if (privateRoutingRevision() !== at || privateDeviceAccessRevision() !== deviceAt) continue;
     const check = () => { alive(); if (privateRoutingRevision() !== at || privateDeviceAccessRevision() !== deviceAt) throw new PrivateContentUnavailableError("Workspace encryption policy changed before this operation could finish"); };

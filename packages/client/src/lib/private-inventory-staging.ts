@@ -1,6 +1,7 @@
 import { createPrivateAccountInventorySync, decodeSecret, PRIVATE_ACCOUNT_INVENTORY_SCOPE } from "@starter/core";
 import { openPrivateIndexedStorage } from "./private-indexed-storage";
 import { requirePrivateRouting } from "./private-routing-requirement";
+import { bumpPrivateInventoryRevision } from "./private-inventory-revision";
 import type { UnlockedIdentity } from "./private-session";
 /** A locally confirmed setup or device payload may verify/save an inventory
  * without exposing its temporary keys as an unlocked application session. */
@@ -17,6 +18,6 @@ export async function stagePrivateAccountInventory(scope: { server: string; user
         return { master, signingPrivateKey: secrets.signingPrivateKey, signingPublicKey: { kty, crv, x, y }, current, release: () => master.fill(0) };
       },
     });
-    check(); return { ...sync, close: host.close };
+    check(); return { ...sync, close: () => { host.close(); bumpPrivateInventoryRevision(); } };
   } catch (error) { host.close(); throw error; }
 }
