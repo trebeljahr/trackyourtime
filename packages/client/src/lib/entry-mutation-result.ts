@@ -26,7 +26,11 @@ export const entryMutationScope = (): EntryMutationScope => ({
 
 export const sameEntryMutationScope = (scope: EntryMutationScope): boolean => {
   const current = entryMutationScope();
-  return scope.workspaceId === current.workspaceId && scope.owner === current.owner && scope.server === current.server;
+  // A draft opened before the active workspace resolved (null: the session
+  // default) has not seen a switch when the first workspace list fills it in.
+  // A move between two real workspaces, an owner or a server change still is.
+  const workspace = scope.workspaceId === null || scope.workspaceId === current.workspaceId;
+  return workspace && scope.owner === current.owner && scope.server === current.server;
 };
 
 export type EntrySaveLocation = "server" | "offline" | "private";

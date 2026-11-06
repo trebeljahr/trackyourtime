@@ -1,5 +1,6 @@
 "use client";
 
+import { finishPasswordUnlockForSession } from "@/lib/password-unlock";
 import * as React from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -60,6 +61,9 @@ export function TwoFactorChallenge({
         setVerifying(false);
         return;
       }
+      // The password step already derived the key; finish unlocking now that a
+      // session exists (lib/password-unlock.ts).
+      await finishPasswordUnlockForSession();
       await onDone("verified");
     } catch {
       setError(t("auth.twoFactor.unexpected"));

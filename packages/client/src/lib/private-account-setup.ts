@@ -1,5 +1,6 @@
+import type { PasswordKdfParams } from "@starter/shared";
 import { signPrivateAccountInventory, emptyPrivateTimerCheckpoint, privateRecordDigest } from "@starter/core";
-import { newPrivateIdentity, installVerifiedPrivateSession, privateAccountId, privateDataOrigin, privateSession, privateSessionVersion, whenPrivateAccountReady } from "./private-session";
+import { newPrivateIdentity, sealIdentityForPassword, installVerifiedPrivateSession, privateAccountId, privateDataOrigin, privateSession, privateSessionVersion, whenPrivateAccountReady } from "./private-session";
 import { privateBoundRpc } from "./private-scoped-rpc";
 import { privateRoutingRequired, requirePrivateRouting } from "./private-routing-requirement";
 import { stagePrivateAccountInventory } from "./private-inventory-staging";
@@ -10,10 +11,12 @@ const prepared = new WeakMap<Setup, { draft: Draft; scope: { server: string; use
 /** Explicit first key setup only. Missing inventory after importing existing
  * keys must use trusted-device recovery, never this fresh-standard enrollment.
  * No plaintext record is migrated or changed by setting up account keys. */
-export async function preparePrivateAccountSetup(userId: string): Promise<Setup> {
+export async function preparePrivateAccountSetup(userId: string, options?: { password?: { kdf: PasswordKdfParams; wrappingKey: Uint8Array } }): Promise<Setup> {
   if (await whenPrivateAccountReady() !== userId) throw new Error("Sign in before setting up private keys");
   const scope = { server: privateDataOrigin(), userId }, version = privateSessionVersion();
   const draft = await newPrivateIdentity(userId);
+  // Password unlock: the same keys also open with the password on any device.
+  if (options?.password) draft.identity.password = { kdf: structuredClone(options.password.kdf), envelope: await sealIdentityForPassword(userId, options.password.wrappingKey, draft.secrets) };
   const check = () => { draft.assertCurrent(); if (privateAccountId() !== userId || privateDataOrigin() !== scope.server || privateSessionVersion() !== version || privateSession(userId)) throw new Error("Private account setup changed before completion"); };
   const current = () => { try { check(); return true; } catch { return false; } };
   check(); if (await privateRoutingRequired(scope)) throw new Error("Restore this account's trusted keys and inventory instead of creating replacement keys"); check();

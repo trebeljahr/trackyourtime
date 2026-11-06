@@ -162,6 +162,15 @@ test.describe("Timer", () => {
     await page.getByTestId("tracker-description").fill("Reading the RFC");
     await page.getByTestId("tracker-toggle").click();
     await expect(runningBar(page)).toHaveCount(1);
+    // The guard ignores a reading while the start is still optimistic (its
+    // row has no workspace yet), so wait for the server to hold the timer.
+    const api = `http://127.0.0.1:${process.env.E2E_SERVER_PORT ?? "49761"}`;
+    await expect
+      .poll(() => page.evaluate(async (base) => {
+        const response = await fetch(`${base}/api/trpc/entries.current?input=${encodeURIComponent("{}")}`, { credentials: "include" });
+        return (await response.json()).result?.data?.id ?? null;
+      }, api), { timeout: 20_000 })
+      .not.toBeNull();
 
     // The detector is the OS in real life, so the test injects a reading
     // instead of idling for a real minute. `__trackYourTimeIdle` feeds exactly the

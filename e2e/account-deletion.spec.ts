@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { logManualEntry, signInViaUI, signUpViaUI, LOGIN_URL } from "./helpers";
+import { logManualEntry, passwordForApi, signInViaUI, signUpViaUI, LOGIN_URL } from "./helpers";
 import { cleanDatabase, closeDbConnection, getDb } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -108,7 +108,7 @@ test.describe("Account deletion", () => {
     // A client with no cookie jar at all — what the mobile shells are.
     const api = await playwright.request.newContext({ baseURL: API });
     const signIn = await api.post("/api/auth/sign-in/email", {
-      data: { email, password: PASSWORD },
+      data: { email, password: await passwordForApi(API, email, PASSWORD) },
       headers: { "x-trackyourtime-client": "trackyourtime-mobile" },
     });
     expect(signIn.ok()).toBe(true);
@@ -124,7 +124,7 @@ test.describe("Account deletion", () => {
     expect((await noPassword.json()).code).toBe("PASSWORD_REQUIRED");
 
     const deleted = await bare.post("/api/auth/delete-user", {
-      data: { password: PASSWORD },
+      data: { password: await passwordForApi(API, email, PASSWORD) },
       headers,
     });
     expect(deleted.status()).toBe(200);

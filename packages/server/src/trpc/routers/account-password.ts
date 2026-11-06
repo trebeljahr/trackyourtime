@@ -4,7 +4,7 @@ import { passwordKdfSchema } from "@starter/shared";
 import { router, publicProcedure, protectedProcedure } from "../trpc.js";
 import { env } from "../../config/env.js";
 import { getAuth } from "../../auth/auth.js";
-import { normalizeLoginEmail, passwordKdfFor, PasswordUpgradeRefused, upgradeToLoginSecret, type PasswordUpgradeContext } from "../../auth/password-kdf.js";
+import { normalizeLoginEmail, parsePasswordKdf, passwordKdfFor, PasswordUpgradeRefused, upgradeToLoginSecret, type PasswordUpgradeContext } from "../../auth/password-kdf.js";
 
 /**
  * Password unlock (auth/password-kdf.ts). `kdf` is public on purpose: clients
@@ -20,6 +20,20 @@ export const accountPasswordRouter = router({
       const found = await context.internalAdapter.findUserByEmail(normalizeLoginEmail(input.email), { includeAccounts: true });
       const hasPassword = !!found?.accounts?.some((account: { providerId: string; password?: string | null }) => account.providerId === "credential" && !!account.password);
       return passwordKdfFor(input.email, (found?.user ?? null) as Record<string, unknown> | null, hasPassword, env.BETTER_AUTH_SECRET);
+    }),
+
+  /** The reset page derives the new password under the account's existing
+   * parameters. Null for an invalid/expired link or a legacy account, which
+   * then resets with the typed password as before. Possession of the link
+   * is the authorization; the parameters themselves are not secret. */
+  kdfForReset: publicProcedure
+    .input(z.object({ token: z.string().min(1).max(512) }).strict())
+    .query(async ({ input }) => {
+      const context = await getAuth().$context;
+      const verification = await context.internalAdapter.findVerificationValue(`reset-password:${input.token}`);
+      if (!verification || new Date(verification.expiresAt).getTime() < Date.now()) return null;
+      const user = await context.internalAdapter.findUserById(verification.value);
+      return parsePasswordKdf((user as Record<string, unknown> | null)?.passwordKdf);
     }),
 
   upgrade: protectedProcedure

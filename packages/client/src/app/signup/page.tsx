@@ -1,5 +1,6 @@
 "use client";
 
+import { finishPasswordUnlock, signUpWithPasswordUnlock } from "@/lib/password-unlock";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -54,14 +55,21 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const result = await signUp.email({
-        name,
-        email,
-        password,
-        // Where the verification link lands, when this server requires one.
-        // Carries `next`, so an invitee who must verify first still comes
-        // back to the invitation after following the link and signing in.
-        callbackURL: webCallbackUrl(authPageHref("login", { next })),
+      // The typed password stays on the device where the server supports
+      // password unlock; the server gets the derived login secret and the
+      // public KDF parameters (lib/password-unlock.ts).
+      const result = await signUpWithPasswordUnlock(email, password, async (secret, passwordKdf) => {
+        const attempt = await signUp.email({
+          name,
+          email,
+          password: secret,
+          ...(passwordKdf ? { passwordKdf } : {}),
+          // Where the verification link lands, when this server requires one.
+          // Carries `next`, so an invitee who must verify first still comes
+          // back to the invitation after following the link and signing in.
+          callbackURL: webCallbackUrl(authPageHref("login", { next })),
+        } as Parameters<typeof signUp.email>[0]);
+        return Object.assign(attempt, { ok: !attempt.error });
       });
       if (result.error) {
         setError(authErrorMessage(result.error, "signup"));
@@ -72,7 +80,8 @@ export default function SignupPage() {
       } else {
         // Populate the session store before navigating, or the protected
         // layout reads an empty session and redirects back to /login.
-        await getSession();
+        const session = await getSession();
+        if (session.data?.user) await finishPasswordUnlock(session.data.user.id);
         router.replace(
           safeNextFromSearch(window.location.search) ?? POST_AUTH_REDIRECT,
         );

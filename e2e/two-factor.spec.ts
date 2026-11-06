@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
-import { LOGIN_URL, TRACK_URL, waitForAppReady, signUpViaUI } from "./helpers";
+import { LOGIN_URL, TRACK_URL, passwordForApi, waitForAppReady, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -101,7 +101,7 @@ test.describe("Two-factor authentication", () => {
 
     // A token client (the extension's signInWithPassword) gets no token.
     const response = await request.post(`${API}/api/auth/sign-in/email`, {
-      data: { email, password: PASSWORD },
+      data: { email, password: await passwordForApi(API, email, PASSWORD) },
       headers: { "x-trackyourtime-client": "trackyourtime-extension", origin: `http://127.0.0.1:${process.env.E2E_CLIENT_PORT ?? "49762"}` },
     });
     expect(response.ok()).toBe(true);

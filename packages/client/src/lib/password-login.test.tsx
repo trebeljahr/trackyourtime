@@ -158,6 +158,15 @@ afterEach(() => {
 });
 
 
+// Password unlock has its own tests (password-unlock.test.ts); here the typed
+// password goes straight through, so these tests keep pinning session
+// hydration to exactly one auth request.
+vi.mock("@/lib/password-unlock", () => ({
+  signInWithPasswordUnlock: (_email: string, password: string, attempt: (secret: string) => unknown) => attempt(password),
+  finishPasswordUnlock: async () => {},
+  forgetPasswordUnlock: () => {},
+  passwordSecretForSignedIn: async (password: string) => password,
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 vi.mock("@/components/app-shell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 // The private-data device gate between the layout and the shell has its own

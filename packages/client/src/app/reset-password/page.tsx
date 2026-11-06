@@ -1,5 +1,6 @@
 "use client";
 
+import { resetPasswordSecret } from "@/lib/password-unlock";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -45,7 +46,10 @@ function ResetPasswordForm() {
       // better-auth's client resolves a refusal as `{ error }` rather than
       // throwing, so an expired token has to be read off the result — the
       // catch below only ever sees a request that never got an answer.
-      const result = await authClient.resetPassword({ newPassword, token });
+      // Password unlock: the new password goes out derived under the
+      // account's parameters (lib/password-unlock.ts). Encrypted data then
+      // opens with the recovery key, or on a device that stayed unlocked.
+      const result = await authClient.resetPassword({ newPassword: await resetPasswordSecret(token, newPassword), token });
       if (result.error) {
         setError(authErrorMessage(result.error, "reset"));
         setExpired(result.error.code === "INVALID_TOKEN");

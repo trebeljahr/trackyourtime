@@ -1,5 +1,6 @@
 "use client";
 
+import { newPasswordSecretFor, passwordKdfOf, passwordSecretFor, rewrapKeysForPassword } from "@/lib/password-unlock";
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 
@@ -102,18 +103,39 @@ export function ChangePasswordRow({ hasPassword }: { hasPassword: boolean | null
     }
     setBusy(true);
     setError(null);
+    // Password unlock (lib/password-unlock.ts): both passwords go out derived
+    // under the account's parameters, and the keys are re-sealed under the new
+    // one. A legacy account or an older server sends them as typed.
+    const signedIn = authClient.$store?.atoms?.session?.get?.().data?.user;
+    const email = signedIn?.email ?? "", userId = signedIn?.id ?? "";
+    const derived = await (async () => {
+      const kdf = email ? await passwordKdfOf(email) : null;
+      return { kdf, current: kdf ? await passwordSecretFor(email, current) : current, next: await newPasswordSecretFor(kdf, next) };
+    })().catch(() => null);
+    if (!derived) {
+      setBusy(false);
+      setError(passwordRefusal("FAILED"));
+      return;
+    }
     const { error: refusal } = await authClient
       .changePassword({
-        currentPassword: current,
-        newPassword: next,
+        currentPassword: derived.current,
+        newPassword: derived.next.secret,
         revokeOtherSessions: false,
       })
       .catch(() => ({ error: { code: "FAILED" } }));
     if (refusal) {
+      derived.next.wrappingKey?.fill(0);
       setBusy(false);
       setError(passwordRefusal(refusal.code));
       return;
     }
+    if (derived.kdf && derived.next.wrappingKey && userId) {
+      // Best effort: a device that stays unlocked repairs a missed re-seal at
+      // its next sign-in (finishPasswordUnlock).
+      await rewrapKeysForPassword(userId, derived.kdf, derived.next.wrappingKey).catch(() => false);
+    }
+    derived.next.wrappingKey?.fill(0);
     if (revokeOthers) {
       const { error: revokeRefusal } = await authClient
         .revokeOtherSessions()

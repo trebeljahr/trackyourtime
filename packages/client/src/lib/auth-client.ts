@@ -1,7 +1,8 @@
+import { finishPasswordUnlock, forgetPasswordUnlock, passwordSecretForSignedIn, signInWithPasswordUnlock } from "./password-unlock";
 import { eraseCachedPrivateIdentity } from "./private-identity-cache";
 import { eraseRecoveryBackupFolders } from "./recovery-backup-folder";
 import { erasePrivateIndexedStorage } from "./private-indexed-storage";
-import { lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
+import { lockAndForgetPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { fetchAuthWithTimeout } from "./auth-request";
 import { createAuthClient } from "better-auth/react";
@@ -240,7 +241,12 @@ export async function signInWithPassword(email: string, password: string) {
   loginSession = null;
   const revision = ++authRevision;
   try {
-    const result = await signIn.email({ email, password }, { disableSignal: true });
+    // The typed password stays on the device where the server supports
+    // password unlock (lib/password-unlock.ts); the key step runs below.
+    const result = await signInWithPasswordUnlock(email, password, async (secret) => {
+      const attempt = await signIn.email({ email, password: secret }, { disableSignal: true });
+      return Object.assign(attempt, { ok: !attempt.error });
+    });
     if (revision !== authRevision) throw new Error("Authentication changed during login");
     if (result.error || isTwoFactorChallenge(result.data)) return result;
     const data = result.data as typeof result.data & { session?: SessionData["session"] };
@@ -251,11 +257,14 @@ export async function signInWithPassword(email: string, password: string) {
       loginSession = { data: session, until: Date.now() + 15_000, origin: getApiOrigin(), token: getNativeToken() };
       const atom = authClient.$store.atoms.session;
       atom.set({ ...atom.get(), data: session, error: null, isPending: false, isRefetching: false });
+      await finishPasswordUnlock(session.user.id);
     } else {
       // Older self-hosted servers do not yet include the session in sign-in.
       finish();
       loginPending = null;
       await authClient.$store.atoms.session.get().refetch();
+      const userId = authClient.$store.atoms.session.get().data?.user.id;
+      if (userId) await finishPasswordUnlock(userId);
     }
     return result;
   } finally {
@@ -362,7 +371,8 @@ const forgetAccountOnDevice = async (): Promise<void> => {
  * ever seen.
  */
 export const signOut: typeof authClient.signOut = async (...args) => {
-  lockPrivateData();
+  lockAndForgetPrivateData();
+  forgetPasswordUnlock();
   loginSession = null;
   authRevision++;
   await loginPending;
@@ -443,8 +453,9 @@ export const deleteAccount = async (args: {
 }): Promise<{ ok: true } | { ok: false; reason: AccountDeletionRefusal }> => {
   const deletedServer = getApiOrigin() || (typeof window !== "undefined" ? window.location.origin : "");
   try {
+    const password = args.password ? await passwordSecretForSignedIn(args.password) : undefined;
     const { error } = await authClient.deleteUser(
-      args.password ? { password: args.password } : {},
+      password ? { password } : {},
     );
     if (error) return { ok: false, reason: accountDeletionRefusal(error.code) };
   } catch {
@@ -453,7 +464,7 @@ export const deleteAccount = async (args: {
 
   loginSession = null;
   authRevision++;
-  lockPrivateData();
+  lockAndForgetPrivateData();
   // The account is gone whatever happens below; a local cleanup that throws
   // must not report the deletion as failed.
   await Promise.allSettled([

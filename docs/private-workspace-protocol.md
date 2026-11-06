@@ -1330,8 +1330,9 @@ on the device before anything is sent:
 - `PrivateIdentity.password = { kdf, envelope }` holds the identity sealed with
   the wrapping key. Optional: identities enrolled earlier have none.
 
-Built so far: the core primitive, its tests, the schema field, and step 1
-(server, API 42, capability `auth.passwordUnlock`). Still to build: steps 2–6.
+Built so far: steps 1–4 and most of 5 (API 42, capability
+`auth.passwordUnlock`). Still to build: the recovery-key step of a reset and
+the recovery key card.
 
 1. **Pre-sign-in parameters (built).** `accountPassword.kdf({ email })` is
    public and answers `{ state, kdf }`. Parameters live on the better-auth
@@ -1347,24 +1348,73 @@ Built so far: the core primitive, its tests, the schema field, and step 1
    new hash, and clears the flag; each cut-off answers `pending`, where the
    client tries the typed password and then the derived one.
    `auth/password-kdf.ts`, `tests/password-kdf-integration.test.ts`.
-2. **Sign-up.** The client creates the salt, derives both values, signs up with
-   the login secret, then creates and enrolls the identity with its password
-   envelope and recovery envelope in the same flow. No question is asked.
-3. **Existing accounts.** The pre-sign-in answer marks a legacy account. The
-   client signs in once with the typed password, changes the stored password
-   to the login secret, and enrolls (or adds a password envelope to) the
-   identity. Raw passwords then never reach the server again.
-4. **Every password form** derives first: web, desktop and phone `/login` and
-   `/signup`, the extension popup and `signInWithPassword` in core, password
-   change (rewraps the envelope under the new password in the same signed
-   identity update), account deletion (sends the login secret).
-5. **Password reset by email** sets a new login secret. The old envelope cannot
-   be opened without the old password, so the reset page asks for the recovery
-   key (or approval from a signed-in device) to rewrap. Without either, the
-   person gets a new empty identity and is told plainly that encrypted data
-   from before is unreadable.
-6. **Recovery key card** after sign-up and after the first upgraded sign-in:
-   download, copy, "I've saved it"; dismissable; also in Settings.
+2. **Sign-up (built).** `signUpWithPasswordUnlock` creates the salt, derives
+   both values and signs up with the login secret and `passwordKdf`. A
+   password outside the server's bounds (8–128) is sent as typed, so the
+   server refuses it with its usual message; a derived secret would always
+   fit and hide a too-short password.
+3. **Sign-in and existing accounts (built).** `signInWithPasswordUnlock` asks
+   `accountPassword.kdf` first: `ready` sends only the login secret, `legacy`
+   the typed password once, `pending` the typed one and then the derived one.
+   After a session exists (`finishPasswordUnlock`, also after a second
+   factor) a legacy account is upgraded, then the keys open with the password
+   envelope or, for an account without keys, are created silently through the
+   same setup Settings uses, with the password envelope added before
+   enrollment. A new device rebuilds the signed account inventory with
+   `bootstrapFromServer`: the whole history, the first version anchored to its
+   own digest under the account signing key and every later one verified as
+   an update. The server can withhold the newest versions (the freshness limit
+   every password-unlocked client has); it cannot forge, reorder or fork them.
+   Failures never fail the sign-in; the device-access boundary decides.
+4. **Every password form (built).** Account deletion, turning two-factor on
+   or off and the current password of a change go out through
+   `passwordSecretFor`; a change derives the new password under the same
+   parameters and re-seals the keys (`rewrapKeysForPassword`). Core's
+   `signInWithPassword` (extension popup, moving between servers) derives
+   too, without zod, because Raycast vendors it; it never upgrades or opens
+   keys. An older server without the endpoint gets the typed password.
+5. **Password reset (built, partly).** `accountPassword.kdfForReset` answers
+   the parameters for a valid reset link, so the new password is derived. The
+   old envelope no longer opens: a device that stayed unlocked re-seals it at
+   its next sign-in, otherwise the recovery key opens the keys. A reset page
+   that asks for the recovery key, and a plain explanation when neither is
+   available, are still to build.
+6. **Recovery key card (to build).** Keys created at sign-in keep their
+   recovery key in memory (`recoveryKeyToSave`) for a card: download, copy,
+   "I've saved it"; dismissable; also in Settings.
+
+**Staying unlocked on a device.** Keys opened with the password are sealed
+with a non-extractable AES-GCM key kept as a `CryptoKey` in IndexedDB
+(`lib/private-device-key.ts`), and restored before the account counts as
+resolved, so a reload never shows the unlock form. Script on this origin can
+use the key but not read it; the trust equals staying signed in. Sign-out,
+account deletion and Settings → Lock erase it. This changes the earlier rule
+that account secrets live in memory only.
+
+Five details that fail quietly if broken:
+
+- **The pre-sign-in lookups are plain requests**, not the app's tRPC client:
+  its private-content link refuses anything before the account is known.
+  `accountPassword` is an account router in `private-content-route.ts` for
+  the calls made after sign-in (`upgrade`).
+- **An unknown server level is learned first** (`refreshServerLevel`). A
+  fresh `/signup` has none yet, and treating "unknown" as "older server" sent
+  the typed password.
+- **The first inventory version is delivered at once** after silent key
+  creation (`flushOne`). Nothing else sends it before another device signs in,
+  and that device can only rebuild from server history.
+- **The origin store also publishes when it merely becomes ready.** Only a
+  real change of `privateDataOrigin()` unresolves the account and locks keys;
+  otherwise a restored unlock was dropped with nothing left to resolve the
+  account, and the app stayed on its startup screen. A restore is superseded
+  only by a later account change, and installs only while this device's
+  saved-unlock marker still exists (sign-out and Lock erase it).
+- **With keys, a content request must name a workspace.** The content route
+  refuses the null "session default" once a trusted inventory exists, so the
+  key step ends by applying `workspaces.list` before the app shows. An entry
+  draft opened while the workspace was still null is not refused when the
+  first list fills it in (`sameEntryMutationScope`); a move between two real
+  workspaces, another owner or another server still is.
 
 Email changes do not touch the salt or the envelope. Two-factor and passkey
 sign-in are unchanged; a passkey still unlocks through PRF where available.

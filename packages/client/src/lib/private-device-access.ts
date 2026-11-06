@@ -18,6 +18,8 @@ function storage(): KeyValueStorage {
 const listeners = new Set<() => void>(); let revision = 0;
 const changed = () => { revision++; for (const listener of listeners) listener(); };
 export const privateDeviceAccessRevision = () => revision;
+/** Another step changed what this device can open (e.g. a bootstrapped inventory): re-read it. */
+export const notifyPrivateDeviceAccessChanged = (): void => changed();
 export const subscribePrivateDeviceAccess = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 if (typeof window !== "undefined") window.addEventListener("storage", (event) => { if (event.key === null || event.key.startsWith(PREFIX)) changed(); });
 /** Public per-device user choice only. API mode claims, password login and an

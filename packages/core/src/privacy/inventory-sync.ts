@@ -206,6 +206,48 @@ export async function createPrivateAccountInventorySync(options: Scope & {
         return { inventory: saved.profile, pending: 0 };
       });
     },
+    /**
+     * Password unlock on a new device: rebuild the account inventory from the
+     * server's complete signed history. The first version must verify as the
+     * enrollment and every later one as an update, all under the account's
+     * signing key, which this device just opened with the password. The
+     * server can still withhold the newest versions (a freshness limit, as in
+     * every password-unlocked client); it cannot forge, reorder or fork them.
+     * Refuses when any local inventory state exists.
+     */
+    bootstrapFromServer: (transport: PrivateInventoryTransport) => use(async (access) => {
+      // Enrollment verification only accepts an object this device signed. Here
+      // the trust root is the account signing key itself: revision 1, verified
+      // against its own signed digest.
+      const firstServerInventory = async (signed: SignedPrivateAccountInventory, access: Access) => {
+        if (signed.inventory.revision !== 1) throw new PrivateAccountInventoryMissingError();
+        return verifyPrivateAccountInventoryCheckpoint(signed, scope, access.signingPublicKey, { revision: 1, digest: await privateRecordDigest(signed.inventory) }, access.alive);
+      };
+      if (await load(access)) throw new Error("A local account inventory already exists. Pull instead of bootstrapping.");
+      let checkpoint: PrivateInventoryTransportCheckpoint = { revision: 0, root: null };
+      let confirmed: VerifiedPrivateAccountInventory | null = null, last: SignedPrivateInventoryVersion | null = null;
+      for (let guard = 0; ; guard++) {
+        if (guard > 2_500) throw new Error("Account inventory history is too long to bootstrap");
+        const page = await transport.versions({ after: checkpoint.revision }); access.check();
+        if (!Number.isSafeInteger(page.through) || page.through < checkpoint.revision || !Array.isArray(page.versions) || page.versions.length > 4) throw new Error("Account inventory feed is malformed");
+        for (const raw of page.versions) {
+          const opened = await open(signedPrivateInventoryVersionSchema.parse(raw), checkpoint, access);
+          if (opened.checkpoint.revision > page.through) throw new Error("Account inventory feed exceeds its boundary");
+          confirmed = confirmed
+            ? await verifyPrivateAccountInventoryUpdate(opened.inventory, confirmed, scope, access.signingPublicKey, access.alive)
+            : await firstServerInventory(opened.inventory, access);
+          checkpoint = opened.checkpoint; last = opened.signed;
+        }
+        if (checkpoint.revision === page.through) {
+          if (page.next !== null || checkpoint.root !== page.root) throw new Error("Account inventory feed omitted revisions or changed its root");
+          break;
+        }
+        if (page.next !== checkpoint.revision || !page.versions.length) throw new Error("Account inventory feed omitted revisions");
+      }
+      if (!confirmed || !last) throw new PrivateAccountInventoryMissingError();
+      const saved = await save({ v: 1, local: confirmed.signed, confirmed: { checkpoint, version: last }, pending: [], conflict: null }, access);
+      return { inventory: saved.profile, checkpoint };
+    }),
     pull: (transport: PrivateInventoryTransport, through?: number) => use((access) => receive(transport, access, through)),
     flushOne: (transport: PrivateInventoryTransport) => use(async (access) => {
       const value = await required(access); if (value.state.conflict) throw new PrivateInventoryConflictError();

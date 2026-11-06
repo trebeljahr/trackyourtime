@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { MongoClient } from "mongodb";
 import { test, expect, type Page } from "@playwright/test";
-import { logManualEntry, signOutViaUI, signUpViaUI } from "./helpers";
+import { logManualEntry, passwordForApi, signOutViaUI, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 /**
@@ -115,7 +115,7 @@ const targetEntries = async (email: string): Promise<number> => {
   const signIn = await fetch(`${TARGET}/api/auth/sign-in/email`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: PASSWORD }),
+    body: JSON.stringify({ email, password: await passwordForApi(TARGET, email, PASSWORD) }),
   });
   const token = signIn.headers.get("set-auth-token");
   expect(token, "the target should issue a session token").toBeTruthy();

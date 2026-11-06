@@ -17,7 +17,7 @@ import { privateDeviceAccessRevision, requireStandardDeviceAccess } from "./priv
 /** All content-bearing app routers, including queries whose filters contain
  * descriptions, client names, or other private values. Unsupported private
  * procedures fail here, before batching, durable entry storage or HTTP. */
-const accountRouters = new Set(["health", "privacy", "profile", "devices", "billing"]);
+const accountRouters = new Set(["health", "privacy", "profile", "devices", "billing", "accountPassword"]);
 /** Procedures the server runs outside any workspace (MIXED_SCOPE in the
  * server's workspace-scoping guard): the invitee is not a member yet, and the
  * preview is read signed out. They carry no workspace content of the caller. */

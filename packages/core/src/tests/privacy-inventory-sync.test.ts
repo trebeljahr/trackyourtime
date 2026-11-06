@@ -263,3 +263,37 @@ it("quarantines a validly signed but nonconsecutive inner profile instead of tru
   assert.deepEqual(await reopened.status(), { checkpoint: local.checkpoint, pending: 0, conflict: true });
   assert.deepEqual((await reopened.exportPending()).conflict, f.versions[1]);
 });
+it("bootstraps a new password-unlocked device from the complete signed server history", async () => {
+  const f = await fixture(); await f.enroll();
+  for (let i = 0; i < 5; i++) await f.sync.update([...rows, ...Array.from({ length: i + 1 }, (_, n) => ({ workspaceId: `extra-${n}`, mode: "standard" as const }))]);
+  while ((await f.sync.flushOne(f.transport)).pending) { /* deliver every version */ }
+  assert.equal(f.versions.length, 6);
+  const deviceFiles = new Map<string, string>();
+  const device = await createPrivateAccountInventorySync({ ...f.options, storage: {
+    getItem: async (name) => deviceFiles.get(name) ?? null,
+    setItem: async (name, value) => { deviceFiles.set(name, value); },
+    removeItem: async (name) => { deviceFiles.delete(name); },
+  } });
+  await assert.rejects(device.read(), PrivateAccountInventoryMissingError);
+  const result = await device.bootstrapFromServer(f.transport);
+  assert.equal(result.checkpoint.revision, 6);
+  const local = await device.read(), original = await f.sync.read();
+  assert.equal(local.inventory.checkpoint.digest, original.inventory.checkpoint.digest);
+  assert.equal(accountWorkspacePolicy(local.inventory, scope, "extra-4").mode, "standard");
+  await assert.rejects(device.bootstrapFromServer(f.transport), /already exists/);
+});
+it("refuses to bootstrap from a history signed by another key, or with a gap", async () => {
+  const f = await fixture(); await f.enroll();
+  await f.sync.update([...rows, { workspaceId: "later", mode: "standard" }]);
+  while ((await f.sync.flushOne(f.transport)).pending) { /* deliver */ }
+  const other = await createSigningPair(), files = new Map<string, string>();
+  const storage: KeyValueStorage = { getItem: async (n) => files.get(n) ?? null, setItem: async (n, v) => { files.set(n, v); }, removeItem: async (n) => { files.delete(n); } };
+  const stranger = await createPrivateAccountInventorySync({ ...f.options, storage, resolveIdentity: () => ({ ...f.options.resolveIdentity()!, signingPublicKey: other.publicKey }) });
+  await assert.rejects(stranger.bootstrapFromServer(f.transport));
+  const gapFiles = new Map<string, string>();
+  const gapStorage: KeyValueStorage = { getItem: async (n) => gapFiles.get(n) ?? null, setItem: async (n, v) => { gapFiles.set(n, v); }, removeItem: async (n) => { gapFiles.delete(n); } };
+  const gapped = await createPrivateAccountInventorySync({ ...f.options, storage: gapStorage });
+  const skipping: PrivateInventoryTransport = { ...f.transport, versions: async (input) => { const page = await f.transport.versions(input); return input.after === 0 ? { ...page, versions: page.versions.slice(1) } : page; } };
+  await assert.rejects(gapped.bootstrapFromServer(skipping));
+  await assert.rejects(gapped.read(), PrivateAccountInventoryMissingError);
+});

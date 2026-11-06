@@ -1,5 +1,6 @@
 "use client";
 
+import { passwordSecretForSignedIn } from "@/lib/password-unlock";
 import * as React from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { encode } from "uqr";
@@ -150,8 +151,9 @@ export function EnableTwoFactorDialog({
     if (!password || busy) return;
     setBusy(true);
     setError(null);
+    const secret = await passwordSecretForSignedIn(password).catch(() => password);
     const { data, error: refusal } = await authClient.twoFactor
-      .enable({ password })
+      .enable({ password: secret })
       .catch(() => ({ data: null, error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal || !data) {
@@ -317,8 +319,9 @@ export function DisableTwoFactorDialog({
     if (!password || busy) return;
     setBusy(true);
     setError(null);
+    const secret = await passwordSecretForSignedIn(password).catch(() => password);
     const { error: refusal } = await authClient.twoFactor
-      .disable({ password })
+      .disable({ password: secret })
       .catch(() => ({ error: { code: "FAILED" } }));
     setBusy(false);
     if (refusal) {

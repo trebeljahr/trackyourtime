@@ -31,6 +31,9 @@ function stubFetch(queue: StubResponse[]): {
 } {
   const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Password sign-in first asks for the account's KDF parameters
+    // (password unlock); an old server's 404 keeps the typed password.
+    if (String(input).includes("/api/trpc/accountPassword.kdf")) return new Response("{}", { status: 404 });
     calls.push({ url: String(input), init });
     const next = queue.shift();
     if (!next) throw new Error(`unexpected extra request to ${String(input)}`);

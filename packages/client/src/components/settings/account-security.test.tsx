@@ -29,6 +29,15 @@ const changeEmail = vi.fn<(args: unknown) => Promise<Result>>();
 const revokeOtherSessions = vi.fn<() => Promise<Result>>();
 
 vi.mock("@/components/ui/sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// Password unlock has its own tests; an account without parameters (legacy
+// or an older server) sends both passwords as typed, which these tests pin.
+vi.mock("@/lib/password-unlock", () => ({
+  passwordKdfOf: async () => null,
+  passwordSecretFor: async (_email: string, password: string) => password,
+  newPasswordSecretFor: async (_kdf: unknown, password: string) => ({ secret: password, wrappingKey: null }),
+  rewrapKeysForPassword: async () => false,
+  passwordSecretForSignedIn: async (password: string) => password,
+}));
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
     useSession: () => session,

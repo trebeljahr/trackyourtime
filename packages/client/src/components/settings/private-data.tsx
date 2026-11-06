@@ -9,7 +9,7 @@ import * as React from "react";
 import { signPrivateChange } from "@starter/core";
 import { authClient } from "@/lib/auth-client";
 import { downloadBlob } from "@/lib/download";
-import { evaluatePrivatePasskey, lockPrivateData, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
+import { evaluatePrivatePasskey, lockAndForgetPrivateData, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
 import { preparePrivateAccountSetup, finishPrivateAccountSetup } from "@/lib/private-account-setup";
 import { useIsTokenShell } from "@/hooks/use-shell";
 import { useAuth } from "@/hooks/use-auth";
@@ -115,7 +115,7 @@ function PrivateDataForUser({ id, unlockOnly, hideDeviceUnlock }: { id: string; 
             assertCurrent(); if (privateSession(id) !== current) throw new Error("Private data is locked");
             await updateIdentity.mutateAsync({ identity: next, revision, signature }); await remember(next); await account.refetch();
           } finally { secret.fill(0); }
-        })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockPrivateData}>{t("privateData.lock")}</Button></div>
+        })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockAndForgetPrivateData}>{t("privateData.lock")}</Button></div>
       </div>}
       {!unlockOnly && <PrivateActivity userId={id} />}
       {!unlockOnly && identity && <PrivateKeyCode userId={id} />}

@@ -123,3 +123,17 @@ export async function logManualEntry(
   await expect(row.getByTestId("entry-duration")).toHaveValue(duration);
   return row;
 }
+
+/**
+ * What a raw HTTP sign-in must send as the password: the derived login
+ * secret for an account that uses password unlock (every account signed up
+ * through the UI), the typed password otherwise. Mirrors core's
+ * `signInWithPassword` (docs/private-workspace-protocol.md → "Password unlock").
+ */
+export async function passwordForApi(apiBase: string, email: string, password: string): Promise<string> {
+  const { derivePasswordKeys } = await import("../packages/core/src/privacy/crypto");
+  const response = await fetch(`${apiBase}/api/trpc/accountPassword.kdf?input=${encodeURIComponent(JSON.stringify({ email }))}`);
+  const answer = (await response.json()).result?.data as { state: string; kdf: Parameters<typeof derivePasswordKeys>[1] } | undefined;
+  if (!answer || answer.state !== "ready") return password;
+  return (await derivePasswordKeys(password, answer.kdf)).loginSecret;
+}

@@ -21,6 +21,7 @@
  * Raycast password store) — never a plain config file.
  */
 import { versionHeaders } from "@starter/shared";
+import { derivePasswordKeys, type PasswordKdf } from "./privacy/crypto.js";
 
 /** Which client is signing in. Labels the row in Settings → Devices. */
 export type ClientId =
@@ -120,7 +121,42 @@ export async function signInWithPassword(
   options: SessionAuthOptions,
   credentials: PasswordCredentials,
 ): Promise<IssuedSession> {
-  return issueSession(options, "/sign-in/email", credentials, "Sign-in failed");
+  const attempts = await passwordAttempts(options, credentials);
+  for (let i = 0; ; i++) {
+    try {
+      return await issueSession(options, "/sign-in/email", { email: credentials.email, password: attempts[i]! }, "Sign-in failed");
+    } catch (error) {
+      if (i + 1 < attempts.length && error instanceof AuthError && error.code === "INVALID_EMAIL_OR_PASSWORD") continue;
+      throw error;
+    }
+  }
+}
+
+/**
+ * Password unlock (docs/private-workspace-protocol.md): what to send as the
+ * password, in order. An account that uses password unlock receives only the
+ * derived login secret; a legacy account its typed password; an upgrade cut
+ * off midway both. A server without the endpoint (older self-host) gets the
+ * typed password, as before. This helper never upgrades an account or opens
+ * keys: the web app does that at its next sign-in.
+ */
+async function passwordAttempts(options: SessionAuthOptions, credentials: PasswordCredentials): Promise<string[]> {
+  const doFetch = resolveFetch(options.fetchImpl);
+  type KdfAnswer = { state?: unknown; kdf?: unknown };
+  let answer = null as KdfAnswer | null;
+  try {
+    const url = `${options.baseUrl.replace(/\/+$/, "")}/api/trpc/accountPassword.kdf?input=${encodeURIComponent(JSON.stringify({ email: credentials.email }))}`;
+    const response = await doFetch(url, { method: "GET", headers: { [CLIENT_HEADER]: options.clientId, ...versionHeaders(options.clientVersion) } });
+    if (response.ok) answer = ((await readJson(response)) as { result?: { data?: KdfAnswer } }).result?.data ?? null;
+  } catch { answer = null; }
+  // A plain shape check, not the shared zod schema: Raycast vendors this file
+  // and keeps zod out of its runtime. derivePasswordKeys validates again.
+  const kdf = answer?.kdf as PasswordKdf | undefined;
+  const valid = !!kdf && typeof kdf === "object" && kdf.v === 1 && kdf.kdf === "PBKDF2-SHA256" && kdf.iterations === 600000 && typeof kdf.salt === "string" && /^[A-Za-z0-9_-]{22}$/.test(kdf.salt);
+  if (!answer || !valid || answer.state === "legacy") return [credentials.password];
+  const { loginSecret, wrappingKey } = await derivePasswordKeys(credentials.password, kdf!);
+  wrappingKey.fill(0);
+  return answer.state === "pending" ? [credentials.password, loginSecret] : [loginSecret];
 }
 
 export type SignUpDetails = PasswordCredentials & { name: string };
