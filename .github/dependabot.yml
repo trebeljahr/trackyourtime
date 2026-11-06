@@ -1,46 +1,427 @@
-# Dependency updates.
-#
-# Two ecosystems, both weekly. Minor and patch updates are grouped into one
-# pull request per ecosystem so the tracker stays readable; majors are left
-# ungrouped, because those are the ones that need reading one at a time.
+# npm dependency updates. Minor and patch updates arrive as one grouped PR a
+# week; .github/workflows/dependency-updates.yml tests it, squash-merges it and
+# deploys. Security fixes arrive as one grouped PR too, as soon as GitHub knows
+# about them. Major updates are left out on purpose: they need a person.
 version: 2
-
+# One entry per workspace package: Dependabot checks every dependency one at
+# a time, and in a workspace this size each update costs pnpm tens of seconds,
+# so one job for the whole tree can run past Dependabot's time limit. Each
+# entry is its own job and its own grouped PR; all share the root
+# pnpm-lock.yaml.
 updates:
-  # This is a pnpm workspace: pnpm-workspace.yaml lists `packages/*` and
-  # `docs-site`, and there is a single pnpm-lock.yaml at the root. Dependabot
-  # resolves workspaces from that root lockfile, so one entry at "/" covers the
-  # root package.json plus packages/{client,server,shared,core,extension,
-  # raycast} and docs-site. Pointing separate entries at those directories
-  # would ask Dependabot to resolve manifests that have no lockfile of their
-  # own. electron/package.json is `{"type": "commonjs"}` with no dependencies
-  # and is not a workspace member, so there is nothing there to update.
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: npm
+    directory: /
+    # The root manifest only; the packages below have their own entries.
+    exclude-paths:
+      - "packages/**"
+      - "docs-site/**"
     schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    # A new release waits a week before it is proposed, so a hijacked or broken
+    # version has time to be pulled first. Security updates skip the wait.
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
     groups:
-      npm-minor-and-patch:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
     commit-message:
-      prefix: "chore"
-      include: "scope"
-    labels:
-      - "dependencies"
-
-  # For the github-actions ecosystem the directory must be "/" — Dependabot
-  # looks under .github/workflows itself. Covers the action versions pinned in
-  # build-and-deploy.yml and the three release workflows.
-  - package-ecosystem: "github-actions"
-    directory: "/"
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/client
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/core
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/extension
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/invoice-pdf
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/mcp
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/raycast
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/server
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /packages/shared
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: npm
+    directory: /docs-site
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # 0.x packages: a "minor" bump is a breaking release under semver.
+      # pdfkit draws the invoices; sharp and esbuild build images and bundles.
+      - dependency-name: "pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/pdfkit"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "esbuild"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "uqr"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "class-variance-authority"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@hatchkit/dev-plugin-next"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/chrome"
+        update-types: ["version-update:semver-minor"]
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  # Action versions: weekly, grouped, never auto-merged.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
     open-pull-requests-limit: 3
     groups:
       actions-minor-and-patch:
@@ -49,8 +430,3 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    labels:
-      - "dependencies"

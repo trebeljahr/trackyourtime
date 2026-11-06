@@ -11,12 +11,16 @@ on:
   #
   # That boundary is enforced per job, not by the `needs:` chain. build-server,
   # build-client and deploy each carry their own
-  # `if: github.event_name == 'push'` IN ADDITION to their `needs:`, so the two
+  # push-or-main-dispatch `if:` IN ADDITION to their `needs:`, so the two
   # upstream jobs running on a PR cannot pull them in. Do not remove those
   # three `if:` lines, and do not add a job that depends on verify/e2e without
   # deciding explicitly which events it runs on.
   pull_request:
     types: [opened, synchronize, reopened]
+  # dependency-updates.yml starts it after merging a Dependabot PR: a merge
+  # made with GITHUB_TOKEN does not trigger the push event. On main it builds
+  # and deploys exactly like a push.
+  workflow_dispatch:
 
 # The group was the constant `main-deploy`, which with cancel-in-progress
 # would have let PR runs cancel a main deploy mid-flight (and each other).
@@ -30,7 +34,8 @@ on:
 # A newer push waits instead; GitHub keeps only the newest waiting run, so a
 # burst of pushes still deploys once more, not once per push.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # A dispatch on main shares the push group, so the two never deploy at once.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && 'pull_request' || 'push' }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Image names are spelled out, never derived from the repository name. A
@@ -200,7 +205,7 @@ jobs:
   # fail with a 403. The `if:` is what keeps this job off pull requests; the
   # `needs:` does not, since verify and e2e now run on both events.
   build-server:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     needs: [verify, e2e]
     steps:
@@ -234,7 +239,7 @@ jobs:
   # zone's routes, DNS or another Worker. With neither Cloudflare secret set
   # (a fork) the upload is skipped with a notice.
   build-client:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     needs: [verify, e2e]
     # No package write: nothing here goes to GHCR any more.
@@ -366,7 +371,7 @@ jobs:
   # ::notice:: that nothing was deployed — that is not a PR safety net, it is
   # how a fork without Coolify or Cloudflare behaves.
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     needs: [build-server, build-client]
     # Shared with hosted-rollback.yml, and never cancelled: a deploy stopped
