@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 
+const subscribeNothing = (): (() => void) => () => undefined;
+
 /** Re-render on any change to the keys' notices or to this device's unlocked keys. */
 function useKeysNoticeState(): void {
   const [, redraw] = React.useReducer((v: number) => v + 1, 0);
@@ -33,8 +35,8 @@ export function PrivateKeysNotice(): React.JSX.Element | null {
   const { user } = useAuth();
   const id = user?.id ?? null;
   useKeysNoticeState();
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  // False in the prerendered HTML and during hydration, true afterwards.
+  const mounted = React.useSyncExternalStore(subscribeNothing, () => true, () => false);
   const [later, setLater] = React.useState<ReadonlySet<string>>(new Set());
   const unlocked = !!id && !!privateSession(id);
   React.useEffect(() => { if (id && unlocked) void checkPasswordKeysStale(id); }, [id, unlocked]);
