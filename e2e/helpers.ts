@@ -34,6 +34,7 @@ export async function signUpViaUI(
   await page.getByTestId("signup-submit").click();
   // Wait for navigation to the tracker
   await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+  await waitForAppReady(page);
 }
 
 export async function signInViaUI(
@@ -45,6 +46,25 @@ export async function signInViaUI(
   await page.getByTestId("login-password").fill(opts.password);
   await page.getByTestId("login-submit").click();
   await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+  await waitForAppReady(page);
+}
+
+/**
+ * Wait until the app is open for this device and knows its workspace.
+ *
+ * `PrivateWorkspaceBoundary` keeps the app hidden until the device has
+ * enrolled (in standard storage, by itself, while no workspace can be
+ * private). An editor records its account and workspace when it opens and
+ * refuses to save if they differ later, so opening one before the first
+ * workspace list lands makes it refuse. Every test is a new device.
+ */
+export async function waitForAppReady(page: Page) {
+  await page.waitForFunction(() => {
+    const gate = document.querySelector<HTMLElement>('[data-testid="private-workspace-locked"]');
+    return gate !== null && gate.hidden &&
+      window.localStorage.getItem("trackyourtime.active-workspace") !== null &&
+      window.localStorage.getItem("trackyourtime.known-workspaces") !== null;
+  }, null, { timeout: 15_000 });
 }
 
 export async function signOutViaUI(page: Page) {

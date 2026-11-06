@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
-import { LOGIN_URL, TRACK_URL, signUpViaUI } from "./helpers";
+import { LOGIN_URL, TRACK_URL, waitForAppReady, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 const PASSWORD = "SecurePassword123!";
@@ -77,6 +77,7 @@ test.describe("Two-factor authentication", () => {
     await page.getByTestId("two-factor-code").fill(totp(secret));
     await page.getByTestId("two-factor-submit").click();
     await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+    await waitForAppReady(page);
 
     await signOut(page);
 
@@ -87,6 +88,7 @@ test.describe("Two-factor authentication", () => {
     await page.getByTestId("two-factor-code").fill(backup);
     await page.getByTestId("two-factor-submit").click();
     await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+    await waitForAppReady(page);
 
     await signOut(page);
 

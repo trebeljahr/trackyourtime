@@ -9,7 +9,7 @@ import {
   type Page,
 } from "@playwright/test";
 
-import { isEntryWrite, TRACK_URL, logManualEntry, signUpViaUI } from "./helpers";
+import { waitForAppReady, isEntryWrite, TRACK_URL, logManualEntry, signUpViaUI } from "./helpers";
 import { cleanDatabase, closeDbConnection } from "./db-utils";
 
 /*
@@ -258,6 +258,7 @@ test.describe("Teams", () => {
 
     // Accepting lands in the joined workspace, with a switcher to leave it by.
     await member.waitForURL(TRACK_URL, { timeout: 15_000 });
+    await waitForAppReady(member);
     const switcher = member.getByTestId("workspace-switcher");
     await expect(switcher).toBeVisible();
     await expect(switcher).toContainText(SHARED_WORKSPACE);
@@ -577,6 +578,7 @@ test.describe("Teams", () => {
     await expect(member.getByTestId("invite-ready")).toBeVisible();
     await member.getByTestId("invite-accept").click();
     await member.waitForURL(TRACK_URL, { timeout: 15_000 });
+    await waitForAppReady(member);
     await expect(member.getByTestId("workspace-switcher")).toContainText(SHARED_WORKSPACE);
 
     // Rejoining starts from closed defaults, not the flags held before removal.
@@ -633,6 +635,7 @@ test.describe("Teams", () => {
     await expect(leave).toBeVisible();
     await leave.getByTestId("confirm-accept").click();
     await owner.waitForURL(TRACK_URL, { timeout: 15_000 });
+    await waitForAppReady(owner);
 
     // The former owner lands back in their personal workspace, which never
     // held the shared work.

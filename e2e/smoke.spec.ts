@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { signUpViaUI, TRACK_URL } from "./helpers";
+import { waitForAppReady, signUpViaUI, TRACK_URL } from "./helpers";
 
 test.describe("Smoke tests", () => {
   test("landing page explains the product to a signed-out visitor", async ({
@@ -31,6 +31,7 @@ test.describe("Smoke tests", () => {
 
     await openApp.click();
     await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+    await waitForAppReady(page);
   });
 
   test("a pre-move app address redirects under /app/", async ({ request }) => {
