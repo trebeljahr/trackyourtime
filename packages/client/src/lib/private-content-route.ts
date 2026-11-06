@@ -18,7 +18,11 @@ import { privateDeviceAccessRevision, requireStandardDeviceAccess } from "./priv
  * descriptions, client names, or other private values. Unsupported private
  * procedures fail here, before batching, durable entry storage or HTTP. */
 const accountRouters = new Set(["health", "privacy", "profile", "devices", "billing"]);
-export const isWorkspaceContentProcedure = (path: string) => !accountRouters.has(path.split(".")[0]!) && path !== "workspaces.list";
+/** Procedures the server runs outside any workspace (MIXED_SCOPE in the
+ * server's workspace-scoping guard): the invitee is not a member yet, and the
+ * preview is read signed out. They carry no workspace content of the caller. */
+const outsideWorkspace = new Set(["workspaces.list", "invitations.preview", "invitations.accept", "invitations.decline"]);
+export const isWorkspaceContentProcedure = (path: string) => !accountRouters.has(path.split(".")[0]!) && !outsideWorkspace.has(path);
 export type WorkspaceContentRoute = { mode: "standard" | "encrypted"; scope: { server: string; userId: string; workspaceId: string | null }; check: () => void };
 /** Never route from an API mode or an unverified backup. This reads signed
  * local inventory. The marker only requires unlock; it cannot authorize an

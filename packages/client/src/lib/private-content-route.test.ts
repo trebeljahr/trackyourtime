@@ -68,10 +68,13 @@ it("rechecks complete HTTP batches and GET filters, including unsupported future
   await expect(assertStandardContentRequest(`${state.origin}/api/trpc/reports.rows,privacy.identity?batch=1`, { method: "POST", body: JSON.stringify(input) })).rejects.toThrow("cannot use the standard HTTP");
   await expect(assertStandardContentRequest(`${state.origin}/api/trpc/tags.list?input=${encodeURIComponent(JSON.stringify(input["0"]))}`)).rejects.toThrow("cannot use the standard HTTP");
   expect(isWorkspaceContentProcedure("future.content")).toBe(true); expect(isWorkspaceContentProcedure("privacy.identity")).toBe(false); expect(isWorkspaceContentProcedure("workspaces.list")).toBe(false);
+  for (const path of ["invitations.preview", "invitations.accept", "invitations.decline"]) expect(isWorkspaceContentProcedure(path)).toBe(false);
+  expect(isWorkspaceContentProcedure("invitations.create")).toBe(true);
   const check = await assertStandardContentRequest(`${state.origin}/api/trpc/privacy.identity,health.version?batch=1`, { body: "{}" }); check();
 });
 it("cancels a pending account lookup instead of sending anonymous workspace requests", async () => {
-  state.changed?.(); const abort = new AbortController(), pending = currentWorkspaceContentRoute("workspace", abort.signal); abort.abort(new Error("Canceled lookup"));
+  // A different server forgets the account until the new one resolves it.
+  state.origin = "https://other.example.test"; state.changed?.(); const abort = new AbortController(), pending = currentWorkspaceContentRoute("workspace", abort.signal); abort.abort(new Error("Canceled lookup"));
   await expect(pending).rejects.toThrow("Canceled lookup"); session.privateAccountChanged(null); await expect(currentWorkspaceContentRoute("workspace")).rejects.toThrow("Sign in");
 });
 
