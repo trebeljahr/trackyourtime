@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createKeyPair, decryptBackup, deriveSecret, encryptBackup, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient } from "../privacy/crypto.js";
+import { createKeyPair, decryptBackup, derivePasswordKeys, deriveSecret, encodeSecret, encryptBackup, LOGIN_SECRET_PREFIX, newPasswordKdf, randomSecret, seal, sealForRecipient, unseal, unsealForRecipient } from "../privacy/crypto.js";
 
 describe("private data encryption", () => {
   it("authenticates the key, content and account/record context", async () => {
@@ -37,3 +37,32 @@ describe("private data encryption", () => {
     await assert.rejects(decryptBackup({ ...box, iterations: 999999999 } as never, password));
   });
 });
+
+describe("account password keys", () => {
+  const kdf = { v: 1, kdf: "PBKDF2-SHA256", iterations: 600000, salt: "AAECAwQFBgcICQoLDA0ODw" } as const;
+  it("pins the derivation, so every client and server version agrees on the login secret", async () => {
+    const keys = await derivePasswordKeys("correct horse battery staple", kdf);
+    assert.equal(keys.loginSecret, "tyt1.JkPMFziAI6O74KfRtJm_UoH5AKfjj6XOHJHKv5xvBEE");
+    assert.equal(encodeSecret(keys.wrappingKey), "6Kd3XMyG3acf1Px00Rf3BNT8J9ydKA-tKjHYMlnugio");
+  });
+  it("keeps the wrapping key out of the login secret and depends on password and salt", async () => {
+    const keys = await derivePasswordKeys("correct horse battery staple", kdf);
+    assert.ok(keys.loginSecret.startsWith(LOGIN_SECRET_PREFIX));
+    assert.ok(!keys.loginSecret.includes(encodeSecret(keys.wrappingKey)));
+    assert.equal(keys.wrappingKey.length, 32);
+    assert.notEqual((await derivePasswordKeys("correct horse battery stable", kdf)).loginSecret, keys.loginSecret);
+    const other = newPasswordKdf();
+    assert.notEqual(other.salt, kdf.salt);
+    assert.notEqual((await derivePasswordKeys("correct horse battery staple", other)).loginSecret, keys.loginSecret);
+  });
+  it("treats composed and decomposed Unicode passwords as the same password", async () => {
+    const composed = await derivePasswordKeys("Gr\u00fc\u00dfe-Passwort", kdf), decomposed = await derivePasswordKeys("Gru\u0308\u00dfe-Passwort", kdf);
+    assert.equal(composed.loginSecret, decomposed.loginSecret);
+  });
+  it("refuses unknown parameters and empty passwords instead of guessing", async () => {
+    await assert.rejects(derivePasswordKeys("x", { ...kdf, iterations: 1000 } as never));
+    await assert.rejects(derivePasswordKeys("x", { ...kdf, salt: "AAEC" }));
+    await assert.rejects(derivePasswordKeys("", kdf));
+  });
+});
+

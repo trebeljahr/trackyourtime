@@ -44,6 +44,35 @@ async function passwordKey(password: string, salt: Uint8Array): Promise<Uint8Arr
   const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   return new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: bytes(salt), iterations: 600000 }, key, 256));
 }
+/** Account password KDF parameters. The salt is random per account and stored by
+ * the server; the server hands it out before sign-in, so it is public. */
+export type PasswordKdf = { v: 1; kdf: "PBKDF2-SHA256"; iterations: 600000; salt: string };
+export function newPasswordKdf(): PasswordKdf {
+  return { v: 1, kdf: "PBKDF2-SHA256", iterations: 600000, salt: encodeSecret(crypto.getRandomValues(new Uint8Array(16))) };
+}
+/** Prefix that marks a derived login secret, so it never looks like a typed password. */
+export const LOGIN_SECRET_PREFIX = "tyt1.";
+/**
+ * Turn the account password into two independent values on the device:
+ * `loginSecret` is what the server receives as the "password" (it stores only
+ * its own hash of it), and `wrappingKey` encrypts the account's private keys
+ * and never leaves the device. Knowing the login secret does not reveal the
+ * wrapping key: both are separate HKDF outputs of the PBKDF2 result.
+ */
+export async function derivePasswordKeys(password: string, kdf: PasswordKdf): Promise<{ loginSecret: string; wrappingKey: Uint8Array<ArrayBuffer> }> {
+  if (kdf?.v !== 1 || kdf.kdf !== "PBKDF2-SHA256" || kdf.iterations !== 600000) throw new Error("Unsupported password key parameters");
+  const salt = decodeSecret(kdf.salt, 16);
+  if (salt.length !== 16) throw new Error("Invalid password salt");
+  const normalized = typeof password === "string" ? password.normalize("NFC") : "";
+  if (normalized.length < 1 || normalized.length > 1024) throw new Error("Password must be 1 to 1024 characters");
+  const key = await crypto.subtle.importKey("raw", encoder.encode(normalized), "PBKDF2", false, ["deriveBits"]);
+  const master = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: bytes(salt), iterations: 600000 }, key, 256));
+  try {
+    const login = await deriveSecret(master, "trackyourtime-login-secret-v1");
+    try { return { loginSecret: LOGIN_SECRET_PREFIX + encodeSecret(login), wrappingKey: await deriveSecret(master, "trackyourtime-password-wrap-v1") }; }
+    finally { login.fill(0); }
+  } finally { master.fill(0); }
+}
 export async function encryptBackup(value: unknown, password: string): Promise<PasswordCiphertext> {
   if (encoder.encode(JSON.stringify(value)).length > 24 * 1024 * 1024) throw new Error("Backup exceeds the supported 24 MiB plaintext limit");
   const salt = crypto.getRandomValues(new Uint8Array(16));

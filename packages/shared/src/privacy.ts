@@ -15,7 +15,11 @@ export const encryptedRecordSchema = z.object({
 export type EncryptedRecord = z.infer<typeof encryptedRecordSchema>;
 export type PrivateCiphertext = z.infer<typeof cipherSchema>;
 const identityEnvelopeSchema = cipherSchema.extend({ data: cipherSchema.shape.data.max(16_384) });
-export const privateIdentitySchema = z.object({ publicKey: publicEncryptionKeySchema, signingPublicKey: publicEncryptionKeySchema, recovery: identityEnvelopeSchema, passkeys: z.array(z.object({ credentialId: z.string().min(1).max(1500), envelope: identityEnvelopeSchema }).strict()).max(20) }).strict();
+/** Account password KDF parameters (`derivePasswordKeys` in core). Public: the server hands them out before sign-in. */
+export const passwordKdfSchema = z.object({ v: z.literal(1), kdf: z.literal("PBKDF2-SHA256"), iterations: z.literal(600000), salt: z.string().regex(/^[A-Za-z0-9_-]{22}$/) }).strict();
+export type PasswordKdfParams = z.infer<typeof passwordKdfSchema>;
+/** `password` is optional: identities enrolled before password unlock carry none. */
+export const privateIdentitySchema = z.object({ publicKey: publicEncryptionKeySchema, signingPublicKey: publicEncryptionKeySchema, recovery: identityEnvelopeSchema, passkeys: z.array(z.object({ credentialId: z.string().min(1).max(1500), envelope: identityEnvelopeSchema }).strict()).max(20), password: z.object({ kdf: passwordKdfSchema, envelope: identityEnvelopeSchema }).strict().optional() }).strict();
 export type PrivateIdentity = z.infer<typeof privateIdentitySchema>;
 /** Device-held signed ciphertext wrappers. Contains no private JWK fields,
  * account master, recovery secret or passkey PRF output. */

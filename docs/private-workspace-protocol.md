@@ -1312,3 +1312,55 @@ standard storage. This is safe only while the server refuses every private
 workspace (the rollout guards above). Private-by-default accounts must replace
 this with a server-known account mode before any workspace can become private.
 Settings → Private data still offers unlock and device approval.
+
+## Password unlock (private by design, phase 1 — design)
+
+Every account becomes private by default (decision 2026-11-06; plan in the
+ai-work-notes vault, `trackyourtime-private-by-design-plan-2026-11-06`).
+Signing in with the password must also open the account's keys, on every
+client, with no extra step. The password is therefore turned into two values
+on the device before anything is sent:
+
+- `derivePasswordKeys(password, kdf)` in core: PBKDF2-SHA256, 600,000
+  iterations, a random 16-byte salt per account, then two HKDF outputs.
+  `loginSecret` (`tyt1.` + base64url) is what better-auth receives and hashes
+  as the "password". `wrappingKey` encrypts the identity and never leaves the
+  device. The login secret does not reveal the wrapping key. A known-answer
+  test pins the derivation so every client and version agree.
+- `PrivateIdentity.password = { kdf, envelope }` holds the identity sealed with
+  the wrapping key. Optional: identities enrolled earlier have none.
+
+Built so far: the core primitive, its tests and the schema field. Still to
+build, in order:
+
+1. **Pre-sign-in parameters.** A public endpoint answers the KDF parameters for
+   an email. Unknown emails get parameters derived from a server secret and
+   the email, so the answer does not reveal whether an account exists.
+   Parameters live on the user, not on the identity, because sign-up and
+   sign-in need them before any identity exists.
+2. **Sign-up.** The client creates the salt, derives both values, signs up with
+   the login secret, then creates and enrolls the identity with its password
+   envelope and recovery envelope in the same flow. No question is asked.
+3. **Existing accounts.** The pre-sign-in answer marks a legacy account. The
+   client signs in once with the typed password, changes the stored password
+   to the login secret, and enrolls (or adds a password envelope to) the
+   identity. Raw passwords then never reach the server again.
+4. **Every password form** derives first: web, desktop and phone `/login` and
+   `/signup`, the extension popup and `signInWithPassword` in core, password
+   change (rewraps the envelope under the new password in the same signed
+   identity update), account deletion (sends the login secret).
+5. **Password reset by email** sets a new login secret. The old envelope cannot
+   be opened without the old password, so the reset page asks for the recovery
+   key (or approval from a signed-in device) to rewrap. Without either, the
+   person gets a new empty identity and is told plainly that encrypted data
+   from before is unreadable.
+6. **Recovery key card** after sign-up and after the first upgraded sign-in:
+   download, copy, "I've saved it"; dismissable; also in Settings.
+
+Email changes do not touch the salt or the envelope. Two-factor and passkey
+sign-in are unchanged; a passkey still unlocks through PRF where available.
+
+**What the server may read about timers.** Only the running timer's start
+time, so the runaway reminder email keeps working. It is stored unencrypted
+while the timer runs and is deleted when the timer stops or once the reminder
+email has been sent. Everything else about an entry is encrypted.
