@@ -34,9 +34,12 @@ import {
   type ApiTokenSummary,
   type CreatedApiToken,
   workspaceScopeSchema,
+  TWO_FACTOR_STEP_UP_REQUIRED,
 } from "@starter/shared";
 import { ApiToken, toClientApiToken } from "../../models/ApiToken.js";
+import { getAuth } from "../../auth/auth.js";
 import { mintApiToken } from "../../auth/api-token.js";
+import { hasLiveStepUp, type SecondFactorAdapter } from "../../auth/second-factor.js";
 import { isDuplicateKeyError } from "../../services/entries/errors.js";
 import { publishSync } from "../../ws/sync.js";
 import { router, workspaceProcedure } from "../trpc.js";
@@ -118,6 +121,26 @@ function requireTokenId(id: string): string {
   return id;
 }
 
+/**
+ * Minting a token with two-factor on needs a code verified in this session
+ * within the last ten minutes (the marker `auth/two-factor-guard.ts` writes on
+ * every successful verify). A `tt_` token outlives a sign-out, a revocation
+ * and a password reset, so a stolen session cookie must not be enough to make
+ * one. `twoFactorEnabled` comes from the user row: the tRPC context looks the
+ * session up with the cookie cache off. Using a token never asks.
+ *
+ * FORBIDDEN with the message `TWO_FACTOR_STEP_UP_REQUIRED`: the client
+ * verifies a code inside the session and retries the same input.
+ */
+export async function assertTwoFactorStepUp(
+  adapter: SecondFactorAdapter,
+  session: { session: { id: string }; user: { twoFactorEnabled?: boolean | null } },
+): Promise<void> {
+  if (session.user.twoFactorEnabled !== true) return;
+  if (await hasLiveStepUp(adapter, session.session.id)) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: TWO_FACTOR_STEP_UP_REQUIRED });
+}
+
 export const apiTokensRouter = router({
   list: workspaceProcedure.input(workspaceScopeSchema).query(
     async ({ ctx }): Promise<ApiTokenSummary[]> => {
@@ -138,6 +161,10 @@ export const apiTokensRouter = router({
   create: workspaceProcedure
     .input(createApiTokenSchema)
     .mutation(async ({ ctx, input }): Promise<CreatedApiToken> => {
+      await assertTwoFactorStepUp(
+        (await getAuth().$context).adapter as SecondFactorAdapter,
+        ctx.session as Parameters<typeof assertTwoFactorStepUp>[1],
+      );
       const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
       if (expiresAt && Number.isNaN(expiresAt.getTime())) {
         throw new TRPCError({

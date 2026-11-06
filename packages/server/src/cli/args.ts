@@ -16,6 +16,7 @@ export type AdminCommand =
   | { kind: "help" }
   | { kind: "create-user"; email: string; name: string; password?: string }
   | { kind: "reset-password"; email: string; password?: string }
+  | { kind: "reset-two-factor"; email: string; commit: boolean; keepSessions: boolean }
   | { kind: "list-workspaces"; json: boolean }
   | { kind: "doctor"; json: boolean }
   | { kind: "migrate"; mode: MigrateMode; json: boolean };
@@ -42,6 +43,12 @@ Commands:
 
   reset-password  --email <address> [--password <password>]
                   Set a new password and sign the account out on every device.
+
+  reset-two-factor --email <address> [--commit] [--keep-sessions]
+                  Turn two-factor authentication off for an account that lost
+                  its authenticator and every backup code, and sign it out on
+                  every device. Without --commit it only says what it would do.
+                  --keep-sessions leaves the account's sessions alone.
 
   list-workspaces [--json]
                   Every workspace: id, name, member count, owner email.
@@ -165,6 +172,26 @@ export function parseAdminArgs(argv: readonly string[]): ParseResult {
           kind: "reset-password",
           email,
           ...(password === undefined ? {} : { password }),
+        },
+      };
+    }
+
+    case "reset-two-factor": {
+      const parsed = parseFlags(rest, {
+        email: { type: "string" },
+        commit: { type: "boolean" },
+        "keep-sessions": { type: "boolean" },
+      });
+      if (!parsed.ok) return parsed;
+      const email = required(parsed.values, "email", name);
+      if (isError(email)) return { ok: false, error: email.error };
+      return {
+        ok: true,
+        command: {
+          kind: "reset-two-factor",
+          email,
+          commit: parsed.values.commit === true,
+          keepSessions: parsed.values["keep-sessions"] === true,
         },
       };
     }

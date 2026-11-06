@@ -10,6 +10,7 @@ import {
   listWorkspaces,
   resetPassword,
 } from "./accounts.js";
+import { formatTwoFactorReset, resetTwoFactor } from "./two-factor.js";
 import { doctorExitCode, formatDoctorReport, runDoctor, type DoctorInputs } from "./doctor.js";
 import { CliError } from "./errors.js";
 import { runMigrate } from "./migrate.js";
@@ -88,6 +89,18 @@ async function execute(command: AdminCommand, io: AdminIo, runtime: AdminRuntime
       io.stdout.write(
         `Set a new password for ${reset.email} and signed out ${reset.sessionsRevoked} ${plural}.\n`,
       );
+      return EXIT_OK;
+    }
+
+    case "reset-two-factor": {
+      const reset = await runtime.withAuth((auth) =>
+        resetTwoFactor(auth, {
+          email: command.email,
+          commit: command.commit,
+          keepSessions: command.keepSessions,
+        }),
+      );
+      io.stdout.write(formatTwoFactorReset(reset, command.keepSessions));
       return EXIT_OK;
     }
 

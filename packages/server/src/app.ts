@@ -11,6 +11,7 @@ import {
   MAX_AVATAR_BYTES,
   MAX_IMPORT_BYTES,
   MIN_CLIENT_API_LEVEL,
+  TWO_FACTOR_CHALLENGE_RESPONSE_HEADER,
 } from "@starter/shared";
 import { getAuth } from "./auth/auth.js";
 import { appRouter } from "./trpc/router.js";
@@ -62,7 +63,7 @@ export function trpcUploadJsonParser(): RequestHandler {
 const CORS_PREFLIGHT_MAX_AGE_SECONDS = 600;
 
 /** Response headers a cross-origin caller may read (see `corsOptions`). */
-const EXPOSED_HEADERS = ["set-auth-token", "Server-Timing", "Content-Disposition"];
+const EXPOSED_HEADERS = ["set-auth-token", TWO_FACTOR_CHALLENGE_RESPONSE_HEADER, "Server-Timing", "Content-Disposition"];
 
 /**
  * CORS for every route. Exported so a test can drive the exact options.

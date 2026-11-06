@@ -36,6 +36,7 @@ import { preferredLocale } from "../services/user-locale.js";
 import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { versionFieldsForNewSession } from "./client-version.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
+import { sessionCreationAllowed, twoFactorGuard, type GuardSession } from "./two-factor-guard.js";
 import {
   clientKindForNewSession,
   expiryForNewSession,
@@ -343,6 +344,22 @@ export async function initAuth(): Promise<void> {
        * secret and then looked up: an unknown token simply matches no session.
        */
       bearer(),
+      /**
+       * What the stock two-factor plugin leaves open: one use per TOTP code,
+       * the challenge as a header for the phone and desktop apps, a code (not
+       * just the password) for disable / regenerate / delete account, no
+       * re-enrolment over a live secret, no trusted devices, and no dead
+       * session out of the cookie cache. MUST come after `twoFactorPlugin()`
+       * and `bearer()`: see `auth/two-factor-guard.ts`; the integration test
+       * pins the order.
+       */
+      twoFactorGuard({
+        getSession: async (headers) =>
+          (await getAuth().api.getSession({
+            headers,
+            query: { disableCookieCache: true },
+          })) as GuardSession | null,
+      }),
       loginSessionPlugin(),
 
       /**
@@ -428,6 +445,10 @@ export async function initAuth(): Promise<void> {
            * `auth/session-lifetime.ts`.
            */
           before: async (session, context) => {
+            // An account with 2FA on gets a session only on the paths that
+            // went through the second factor. Google's callback is the one
+            // that otherwise skips it (auth/two-factor-guard.ts).
+            if (!(await sessionCreationAllowed(session.userId, context as never))) return false;
             const client = clientKindForNewSession(context);
             return {
               data: {
