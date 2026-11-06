@@ -1295,3 +1295,20 @@ remaining per-hook audit of optimistic writes, rollbacks and callback ordering.
 
 Public conversion, private server writes and retirement remain closed. No new
 network API or minimum supported standard-client level is introduced here.
+
+## Silent standard enrollment for unknown devices (2026-11-06)
+
+The app no longer asks a person on a new device to choose between standard
+storage and private workspaces. `PrivateWorkspaceBoundary` enrolls a device
+with no stored decision in standard storage by itself, through the same
+`confirmStandardDeviceAccess` check as before. That check still refuses when
+this device's private routing metadata says the account is private, which
+shows the unlock controls instead. Enrollment failures show the existing
+failure text with a retry; business forms never mount before enrollment.
+
+Limit: private routing metadata is local to a device. A fresh device cannot
+tell from the server that an account has private workspaces, so it enrolls in
+standard storage. This is safe only while the server refuses every private
+workspace (the rollout guards above). Private-by-default accounts must replace
+this with a server-known account mode before any workspace can become private.
+Settings → Private data still offers unlock and device approval.

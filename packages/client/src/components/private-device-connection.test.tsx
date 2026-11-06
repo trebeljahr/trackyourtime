@@ -21,6 +21,7 @@ vi.mock("@/lib/trpc", () => ({ trpc: { privacy: {
   createDeviceUnlock: { useMutation: () => ({ mutateAsync: state.create }) }, deviceUnlockStatus: { useMutation: () => ({ mutateAsync: state.poll }) }, cancelDeviceUnlock: { useMutation: () => ({ mutateAsync: state.cancel }) },
 } } }));
 const session = await import("@/lib/private-session");
+const { requirePrivateRouting } = await import("@/lib/private-routing-requirement");
 const { PrivateWorkspaceBoundary } = await import("./private-workspace-boundary");
 beforeEach(() => { vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("indexedDB", new IDBFactory()); localStorage.clear(); session.lockPrivateData(); session.privateAccountChanged("owner"); state.create.mockReset().mockResolvedValue({}); state.poll.mockReset(); state.cancel.mockReset().mockResolvedValue(undefined); });
 afterEach(() => { cleanup(); session.lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -33,9 +34,11 @@ it("connects a new browser through real code confirmation without cancelling its
   let deliver!: (value: unknown) => void; state.poll.mockImplementation(() => new Promise((resolve) => { deliver = resolve; }));
   const cancellations: boolean[] = []; state.cancel.mockImplementation(async () => { cancellations.push(session.privateSession("owner") !== null); });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // A device that already knows this account is private (an unknown device now enrolls in standard storage by itself).
+  await requirePrivateRouting({ server: "https://api.example.test", userId: "owner" }, () => true);
   const view = render(<QueryClientProvider client={client}><PrivateWorkspaceBoundary userId="owner"><p>Private workspace form</p></PrivateWorkspaceBoundary></QueryClientProvider>);
-  await screen.findByText("Open this account on this device"); expect(screen.queryByText("Private workspace form")).not.toBeInTheDocument(); expect(fetcher).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Open private workspaces")); fireEvent.click(await screen.findByText("Get approval from a trusted device"));
+  await screen.findByText("Unlock private workspace data"); expect(screen.queryByText("Private workspace form")).not.toBeInTheDocument(); expect(fetcher).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByText("Get approval from a trusted device"));
   const link = await screen.findByLabelText("Approval link for your trusted device") as HTMLInputElement;
   await waitFor(() => expect(state.poll).toHaveBeenCalledOnce()); expect(popup).not.toHaveBeenCalled();
   const invite = privateDeviceInviteFromHash(new URL(link.value).hash);

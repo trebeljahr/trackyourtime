@@ -45,16 +45,22 @@ it("does not apply a late account’s requirement to the account now on screen",
   await act(async () => { resume(true); }); expect(screen.getByText("Private draft 0")).toBeInTheDocument(); expect(screen.queryByTestId("unlock-controls")).not.toBeInTheDocument();
 });
 
-it("requires an explicit standard-storage choice on an unknown device before mounting business forms", async () => {
+it("enrolls an unknown device in standard storage without asking anyone to choose", async () => {
   state.unknown = true; render(<PrivateWorkspaceBoundary userId="owner"><Draft /></PrivateWorkspaceBoundary>);
-  const confirm = await screen.findByText("Use standard storage on this device"); expect(confirm).toBeDisabled(); expect(screen.queryByText("Private draft 0")).not.toBeInTheDocument(); expect(screen.queryByTestId("unlock-controls")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(confirm); await screen.findByText("Private draft 0"); expect(state.confirm).toHaveBeenCalledOnce(); expect(state.reset).toHaveBeenCalled();
+  await screen.findByText("Private draft 0"); expect(state.confirm).toHaveBeenCalledOnce(); expect(state.reset).toHaveBeenCalled();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument(); expect(screen.queryByTestId("unlock-controls")).not.toBeInTheDocument();
+});
+it("shows the failure with a retry when silent enrollment is refused, and never mounts forms meanwhile", async () => {
+  state.unknown = true; state.confirm.mockRejectedValueOnce(new Error("Storage denied"));
+  render(<PrivateWorkspaceBoundary userId="owner"><Draft /></PrivateWorkspaceBoundary>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Existing work was kept"); expect(screen.queryByText("Private draft 0")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Try again")); await screen.findByText("Private draft 0"); expect(state.confirm).toHaveBeenCalledTimes(2);
 });
 it("keeps an approval request alive while its routing protection and checkpoint are being saved", async () => {
-  state.unknown = true; render(<PrivateWorkspaceBoundary userId="owner"><Draft /></PrivateWorkspaceBoundary>);
-  fireEvent.click(await screen.findByText("Open private workspaces")); fireEvent.click(await screen.findByText("Approval request 0"));
-  state.required.mockResolvedValue(true); act(() => { state.routing++; for (const listener of state.listeners) listener(); });
-  await screen.findByText("Approval request 1"); expect(state.mounts).toBe(1); expect(state.unmounts).toBe(0); expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  state.required.mockResolvedValue(true); render(<PrivateWorkspaceBoundary userId="owner"><Draft /></PrivateWorkspaceBoundary>);
+  fireEvent.click(await screen.findByText("Approval request 0"));
+  act(() => { state.routing++; for (const listener of state.listeners) listener(); });
+  await screen.findByText("Approval request 1"); expect(state.mounts).toBe(1); expect(state.unmounts).toBe(0); expect(state.confirm).not.toHaveBeenCalled();
   changeKeys(true); await screen.findByText("Private draft 0"); expect(state.unmounts).toBe(1);
 });
 it("keeps forms hidden when keys are unlocked but their trusted workspace copy is missing", async () => {

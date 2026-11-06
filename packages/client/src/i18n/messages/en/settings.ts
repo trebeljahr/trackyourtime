@@ -8,13 +8,6 @@
  */
 export const settings = {
   privateWorkspaceGate: {
-    unknownTitle: "Open this account on this device",
-    unknownDetail: "For private workspaces, unlock your existing keys or get approval from a trusted device. Your account password alone cannot open them.",
-    choosePrivate: "Open private workspaces",
-    standardTitle: "Standard storage",
-    standardDetail: "Use this only if this account has not enabled private workspace encryption. In standard storage, the server can read workspace data.",
-    standardConfirm: "This account uses standard storage. I understand that workspace data is readable by the server.",
-    chooseStandard: "Use standard storage on this device",
     inventoryTitle: "Connect your private workspaces",
     inventoryDetail: "Your keys are unlocked. Approve this device from an already connected device to open your workspaces.",
     lockedTitle: "Unlock private workspace data",

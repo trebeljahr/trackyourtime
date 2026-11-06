@@ -5,13 +5,6 @@ import type { settings as source } from "../en/settings";
 /** German `settings`. Terms follow i18n/GLOSSARY.de.md; voice is „du“. */
 export const settings: Translation<typeof source> = {
   privateWorkspaceGate: {
-    unknownTitle: "Dieses Konto auf diesem Gerät öffnen",
-    unknownDetail: "Entsperre für private Workspaces deine vorhandenen Schlüssel oder hole die Freigabe eines vertrauenswürdigen Geräts ein. Das Kontopasswort allein reicht dafür nicht.",
-    choosePrivate: "Private Workspaces öffnen",
-    standardTitle: "Standardspeicherung",
-    standardDetail: "Nur verwenden, wenn für dieses Konto keine private Workspace-Verschlüsselung aktiviert wurde. Bei der Standardspeicherung kann der Server Workspace-Daten lesen.",
-    standardConfirm: "Dieses Konto nutzt die Standardspeicherung. Mir ist bewusst, dass der Server Workspace-Daten lesen kann.",
-    chooseStandard: "Standardspeicherung auf diesem Gerät verwenden",
     inventoryTitle: "Private Workspaces verbinden",
     inventoryDetail: "Deine Schlüssel sind entsperrt. Gib dieses Gerät über ein bereits verbundenes Gerät frei, um deine Workspaces zu öffnen.",
     lockedTitle: "Private Workspace-Daten entsperren",
