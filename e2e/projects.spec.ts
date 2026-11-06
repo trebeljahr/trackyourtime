@@ -209,11 +209,17 @@ test.describe("Projects catalog", () => {
       "data-state",
       "running",
     );
+    // The catalog count below is read after a navigation, so the stop has to
+    // reach the server first; a stop still in flight replays after the reload.
+    const stopped = page.waitForResponse(
+      (response) => isEntryWrite(response, "entries.stop") && response.ok(),
+    );
     await page.getByTestId("tracker-toggle").click();
     await expect(page.getByTestId("tracker-toggle")).toHaveAttribute(
       "data-state",
       "idle",
     );
+    await stopped;
 
     // The chip on the entry names the project it was tracked against.
     const entry = page
