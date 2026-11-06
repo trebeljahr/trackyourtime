@@ -1468,3 +1468,53 @@ sign-in are unchanged; a passkey still unlocks through PRF where available.
 time, so the runaway reminder email keeps working. It is stored unencrypted
 while the timer runs and is deleted when the timer stops or once the reminder
 email has been sent. Everything else about an entry is encrypted.
+
+## Browser sign-in delivers the keys (private by design, phase 2)
+
+Clients that cannot open the account keys themselves sign in through the
+browser, and the same approval hands them the keys: Raycast, the browser
+extension's "Sign in with the web app", the desktop and phone apps' "Sign in
+with your browser", and any CLI or local helper. There is one flow for all of
+them, `startBrowserSignIn` / `collectBrowserKeys` in core
+(`browser-sign-in.ts`, `privacy/browser-keys.ts`), on top of the RFC 8628
+device flow and the existing private-device relay (`privacy.createDeviceUnlock`,
+`deviceUnlockStatus`, `approveDeviceUnlock`, `cancelDeviceUnlock`). No new
+server endpoint; the server's own `FRONTEND_URL` is the approval page, so a
+self-hosted server works the same way.
+
+1. The client starts a device authorization and makes a one-time request: a
+   P-256 receiving key pair and a 32-byte pairing secret. The public key, the
+   secret, a request id and an expiry go into the approval URL's **fragment**
+   (`#keys=…`), which browsers never send to a server.
+2. The web app moves the fragment into this tab's `sessionStorage` before any
+   redirect (`captureBrowserKeyRequest` in `ProtectedLayout`), so a
+   signed-out visitor keeps it through /login, and removes it from the
+   address bar.
+3. On "Approve", the page opens the relay slot (`createDeviceUnlock`) first,
+   then approves the code, then seals the account keys and this browser's
+   trusted workspace state (`withPrivateDeviceTransfer`, the same transfer the
+   pairing code uses) to the receiving key, with a tag derived from the
+   pairing secret, bound to the request and the approving account
+   (`sealBrowserKeys`), and relays it (`approveDeviceUnlock`). A browser
+   without open keys, or for another server, opens no slot.
+4. With its token, the client asks who signed in (`get-session`) and polls
+   the slot. No slot means "no keys" (the sign-in still stands); a box is
+   opened with the private key and accepted only if the pairing tag matches.
+   The slot is deleted either way.
+
+What this protects: the server relays a box it cannot read, and cannot make a
+box the client accepts, because the pairing secret never reached it. It can
+withhold the box (the client then has no keys) and, as for every web client,
+it serves the page that does the sealing. The fragment passes through the
+operating system's "open URL", like any local sign-in link.
+
+Where the keys are kept: Raycast in its encrypted LocalStorage beside the
+token, the extension in memory-only `chrome.storage.session` beside its token
+(the request state too, so a stopped worker can finish), the desktop and
+phone apps in the same device key store as a password unlock. Each forgets
+them with the session. Nothing in Raycast or the extension reads them yet;
+encrypted workspaces reach those clients in phase 5.
+
+Not yet: the extension's bridge path (the web app approving a code it was
+handed, `web-confirmed`) carries no key request, so that sign-in gives the
+extension no keys.

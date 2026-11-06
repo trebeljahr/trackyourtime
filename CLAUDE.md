@@ -1157,6 +1157,18 @@ comes from the absolute path it was loaded from; `pnpm run dev` derives it and
 trusts it automatically, and `pnpm run extension:id` prints it for any other
 server.
 
+**A browser sign-in also delivers the account keys.** Use
+`startBrowserSignIn` (core `browser-sign-in.ts`) instead of
+`startDeviceAuthorization` for a new client: it puts a one-time key request in
+the approval URL's fragment, and `collectKeys(token)` returns the keys the
+approving browser sealed for it, or null. Three rules that fail quietly:
+open `flow.url` itself, never the server's `verification_uri_complete` (that
+drops the fragment); `ProtectedLayout` must capture the fragment before any
+redirect (`captureBrowserKeyRequest`); and the approving page opens the relay
+slot BEFORE approving the code, because a missing slot is how the client learns
+"no keys" without waiting out the request. Protocol and threat model:
+`docs/private-workspace-protocol.md` → "Browser sign-in delivers the keys".
+
 Raycast and CLIs need **no origin at all**, and have none to give: their `fetch`
 sends neither `Origin` nor `Sec-Fetch-*`, and better-auth's `validateOrigin`
 returns early unless the request carries cookies or those headers. What guards
