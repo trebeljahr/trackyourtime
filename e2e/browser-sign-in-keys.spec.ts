@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { pollForDeviceSession, startBrowserSignIn } from "../packages/core/src/index";
 import { signUpViaUI } from "./helpers";
 import { closeDbConnection } from "./db-utils";
 
@@ -17,6 +16,9 @@ test.afterAll(async () => {
 });
 
 const options = { baseUrl: API, clientId: "trackyourtime-raycast" as const };
+// Loaded dynamically, like `passwordForApi` in helpers.ts: a static import of
+// core's sources beside that dynamic one breaks the second spec in a worker.
+const core = () => import("../packages/core/src/index");
 type Transfer = { userId: string; keys: { publicKey: { x: string }; signingPublicKey: { x: string } }; secrets: { master: string } };
 
 async function identityOf(page: import("@playwright/test").Page) {
@@ -34,6 +36,7 @@ test.describe("Browser sign-in delivers the keys", () => {
     const identity = await identityOf(page);
     expect(identity?.publicKey?.x).toBeTruthy();
 
+    const { pollForDeviceSession, startBrowserSignIn } = await core();
     const flow = await startBrowserSignIn<Transfer>(options);
     const url = new URL(flow.url);
     expect(url.hash.startsWith("#keys=")).toBe(true);
@@ -41,8 +44,9 @@ test.describe("Browser sign-in delivers the keys", () => {
     const requests: string[] = [];
     page.on("request", (request) => requests.push(request.url()));
     await page.goto(url.pathname + url.search + url.hash);
-    expect(new URL(page.url()).hash).toBe("");
     await expect(page.getByTestId("device-code-input")).toHaveValue(flow.userCode);
+    // Moved into this tab's storage and off the address bar.
+    expect(new URL(page.url()).hash).toBe("");
     await page.getByTestId("device-approve").click();
     await expect(page.getByTestId("device-result-keys")).toHaveAttribute("role", "status", { timeout: 20_000 });
     expect(requests.filter((sent) => sent.includes(flow.request.secret))).toEqual([]);
@@ -60,6 +64,7 @@ test.describe("Browser sign-in delivers the keys", () => {
     await signUpViaUI(page, { name: "Keys", email, password: PASSWORD });
     await expect(page.getByTestId("tracker-bar")).toBeVisible({ timeout: 20_000 });
 
+    const { pollForDeviceSession, startBrowserSignIn } = await core();
     const flow = await startBrowserSignIn<Transfer>(options);
     const url = new URL(flow.url);
     const context = await browser.newContext();
@@ -83,6 +88,7 @@ test.describe("Browser sign-in delivers the keys", () => {
   test("a plain device code without a key request signs in and sends no keys", async ({ page }) => {
     const email = `browser-nokeys-${Date.now()}@example.com`;
     await signUpViaUI(page, { name: "Keys", email, password: PASSWORD });
+    const { pollForDeviceSession, startBrowserSignIn } = await core();
     const flow = await startBrowserSignIn(options);
     const url = new URL(flow.url);
     await page.goto(url.pathname + url.search); // an older client: no fragment
