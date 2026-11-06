@@ -1411,7 +1411,7 @@ use the key but not read it; the trust equals staying signed in. Sign-out,
 account deletion and Settings → Lock erase it. This changes the earlier rule
 that account secrets live in memory only.
 
-Six details that fail quietly if broken:
+Seven details that fail quietly if broken:
 
 - **The pre-sign-in lookups are plain requests**, not the app's tRPC client:
   its private-content link refuses anything before the account is known.
@@ -1445,6 +1445,16 @@ Six details that fail quietly if broken:
   server refuses every private workspace; joining a private one will need its
   own verified initialization. A list applied before this device's keys were
   unlocked keeps only public names; it is applied again once they open.
+- **A keyed device's route decision is cached, never across an inventory
+  write.** Reading and verifying the signed inventory took about 100 ms per
+  request. `workspaceContentRoute` keeps a decision per workspace for at most
+  15 seconds, keyed on the unlock, the routing and device-access revisions and
+  `privateInventoryRevision()`. Every write through
+  `privateAccountInventoryStorageHost` and every staged enrollment moves that
+  revision and tells other tabs (BroadcastChannel). A new writer of the account
+  inventory must go through that host, or call
+  `bumpPrivateInventoryRevision()`. The server's legacy write barrier stays the
+  authority for plaintext writes.
 
 Email changes do not touch the salt or the envelope. Two-factor and passkey
 sign-in are unchanged; a passkey still unlocks through PRF where available.
