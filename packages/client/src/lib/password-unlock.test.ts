@@ -7,7 +7,7 @@ const state = vi.hoisted(() => ({
   kdf: vi.fn(), upgrade: vi.fn(), identity: vi.fn(),
   prepare: vi.fn(), finish: vi.fn(), unlock: vi.fn(),
   status: vi.fn(), bootstrap: vi.fn(), close: vi.fn(), notify: vi.fn(),
-  rewrapped: vi.fn(), keysStatus: vi.fn(), verify: vi.fn(), updateIdentity: vi.fn(),
+  rewrapped: vi.fn(), keysStatus: vi.fn(), verify: vi.fn(), updateIdentity: vi.fn(), signedIn: vi.fn(),
   session: {} as object | null,
 }));
 vi.mock("@starter/core", async (original) => ({ ...(await original<typeof import("@starter/core")>()), signPrivateChange: async () => "signature" }));
@@ -26,7 +26,7 @@ vi.mock("./trpc", () => ({ getTRPCClient: () => ({
   workspaces: { list: { query: async () => [] } },
 }) }));
 vi.mock("./private-account-setup", () => ({ preparePrivateAccountSetup: state.prepare, finishPrivateAccountSetup: state.finish }));
-vi.mock("./private-session", () => ({ unlockPrivatePassword: state.unlock, privateSession: () => state.session, sealIdentityForPassword: async () => ({ sealed: true }) }));
+vi.mock("./private-session", () => ({ unlockPrivatePassword: state.unlock, privateSession: () => state.session, sealIdentityForPassword: async () => ({ sealed: true }), privateAccountSignedIn: state.signedIn }));
 vi.mock("./private-inventory-sync", () => ({
   openPrivateAccountInventorySync: async () => ({ status: state.status, bootstrapFromServer: state.bootstrap, close: state.close, flushOne: async () => ({ pending: 0 }) }),
   privateAccountInventoryTransport: () => ({ transport: true }),
@@ -39,8 +39,9 @@ const kdf = { v: 1, kdf: "PBKDF2-SHA256", iterations: 600000, salt: "AAECAwQFBgc
 
 beforeEach(() => {
   state.supports = true; state.level = 42;
-  for (const fn of [state.kdf, state.upgrade, state.identity, state.prepare, state.finish, state.unlock, state.status, state.bootstrap, state.close, state.notify, state.rewrapped, state.keysStatus, state.verify, state.updateIdentity]) fn.mockReset();
+  for (const fn of [state.kdf, state.upgrade, state.identity, state.prepare, state.finish, state.unlock, state.status, state.bootstrap, state.close, state.notify, state.rewrapped, state.keysStatus, state.verify, state.updateIdentity, state.signedIn]) fn.mockReset();
   state.session = {};
+  state.signedIn.mockResolvedValue(true);
   state.identity.mockResolvedValue(null);
   state.prepare.mockResolvedValue({ recoveryKey: "recovery-key" });
   unlock.forgetPasswordUnlock();
@@ -60,6 +61,26 @@ it("sends only the derived login secret to a ready account and creates keys afte
   expect(state.finish).toHaveBeenCalledOnce();
   expect(unlock.recoveryKeyToSave("user-1")).toBe("recovery-key");
   expect(unlock.recoveryKeyToSave("someone-else")).toBeNull();
+});
+
+it("resolves the signed-in account before the key step, and stops when it does not", async () => {
+  // AuthProvider announces the account a React commit later; key setup must not race it.
+  state.kdf.mockResolvedValue({ state: "ready", kdf });
+  const order: string[] = [];
+  state.signedIn.mockImplementation(async (userId: string) => { order.push(`signed-in ${userId}`); return true; });
+  state.identity.mockImplementation(async () => { order.push("identity"); return null; });
+  await unlock.signInWithPasswordUnlock("a@example.test", "typed password", async () => ({ ok: true }));
+  await unlock.finishPasswordUnlock("user-1");
+  expect(order).toEqual(["signed-in user-1", "identity"]);
+  expect(state.prepare).toHaveBeenCalledOnce();
+
+  state.signedIn.mockResolvedValue(false); state.prepare.mockClear(); state.identity.mockClear();
+  unlock.forgetPasswordUnlock();
+  await unlock.signInWithPasswordUnlock("a@example.test", "typed password", async () => ({ ok: true }));
+  await unlock.finishPasswordUnlock("user-1");
+  expect(state.identity).not.toHaveBeenCalled();
+  expect(state.prepare).not.toHaveBeenCalled();
+  expect(unlock.recoveryKeyToSave("user-1")).toBeNull();
 });
 
 it("signs a legacy account in with its typed password once, then upgrades it", async () => {

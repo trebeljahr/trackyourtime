@@ -5,7 +5,7 @@ import { memoryStorage, randomSecret } from "@starter/core";
 const state = vi.hoisted(() => ({ origin: "https://api.example.test", changed: null as (() => void) | null, bridge: null as unknown }));
 vi.mock("./api-origin", () => ({ getApiOrigin: () => state.origin, subscribeApiOrigin: (fn: () => void) => { state.changed = fn; return () => {}; } }));
 vi.mock("./desktop-activity", () => ({ desktopActivity: () => state.bridge }));
-const { installPrivateSession, lockPrivateData, privateAccountId, whenPrivateAccountReady, newPrivateIdentity, privateSession, privateWorkspaceStorage, unlockPrivateRecovery, unlockPrivatePrf, wrapIdentityWithPrf, protectPrivateActivity, privateAccountChanged } = await import("./private-session");
+const { installPrivateSession, lockPrivateData, privateAccountId, whenPrivateAccountReady, newPrivateIdentity, privateSession, privateWorkspaceStorage, unlockPrivateRecovery, unlockPrivatePrf, wrapIdentityWithPrf, protectPrivateActivity, privateAccountChanged, privateAccountSignedIn } = await import("./private-session");
 beforeEach(() => { vi.stubGlobal("crypto", webcrypto); localStorage.clear(); state.origin = "https://api.example.test"; state.bridge = null; lockPrivateData(); privateAccountChanged(null); });
 afterEach(() => { state.bridge = null; lockPrivateData(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("private session keys", () => {
@@ -43,6 +43,15 @@ describe("private session keys", () => {
     await expect(whenPrivateAccountReady()).resolves.toBe("owner");
     state.origin = "https://other.example.test"; state.changed?.();
     expect(privateAccountId()).toBeUndefined();
+  });
+  it("resolves a just-signed-in account before AuthProvider announces it", async () => {
+    // A signed-out page resolved the account as null; until AuthProvider's
+    // effect ran, key setup after sign-up read that null and refused.
+    await expect(whenPrivateAccountReady()).resolves.toBeNull();
+    await expect(privateAccountSignedIn("owner")).resolves.toBe(true);
+    await expect(whenPrivateAccountReady()).resolves.toBe("owner");
+    privateAccountChanged("owner");
+    expect(privateAccountId()).toBe("owner");
   });
   it("binds decryption to this installation and locks on account or server change", async () => {
     const draft = await newPrivateIdentity("owner"); installPrivateSession("owner", draft.secrets);

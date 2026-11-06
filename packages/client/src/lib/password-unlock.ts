@@ -311,6 +311,8 @@ export async function finishPasswordUnlock(userId: string): Promise<void> {
   if (!held || held.until < Date.now() || held.origin !== getApiOrigin()) { forget(); return; }
   pending = null;
   try {
+    const { privateAccountSignedIn } = await import("./private-session");
+    if (!(await privateAccountSignedIn(userId))) throw new Error("The signed-in account did not resolve");
     const client = await rpc();
     if (held.upgrade) {
       try { await client.accountPassword.upgrade.mutate(held.upgrade); }

@@ -207,6 +207,21 @@ export function privateAccountChanged(userId: string | null): void {
     .catch(() => undefined)
     .finally(() => { if (at === restoring) { restoreInFlight = null; publish(); } });
 }
+/**
+ * A sign-in has just created a session for `userId` (`finishPasswordUnlock`):
+ * resolve the account now, and wait for this device's saved unlock to reopen.
+ * AuthProvider announces the account only after the session atom's own
+ * refetch and React's next commit; until then a page that was signed out
+ * still reads as `null`, and creating keys refused with "Sign in before
+ * setting up private keys". AuthProvider's later call for the same account
+ * changes nothing. False when the account did not resolve to `userId`.
+ */
+export async function privateAccountSignedIn(userId: string): Promise<boolean> {
+  privateAccountChanged(userId);
+  // A second restore for the same account (AuthProvider catching up) supersedes the first.
+  while (resolvedAccount !== userId && restoreInFlight) await whenUnlockRestoreSettled();
+  return resolvedAccount === userId;
+}
 
 /** Private workspace replicas use their own scoped namespace. The legacy
  * multi-account queue must be migrated separately, under its existing lock. */
