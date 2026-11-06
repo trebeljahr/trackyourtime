@@ -1,23 +1,23 @@
 # Track Your Time
 
-Free, open-source time tracking for freelancers and small teams who bill by the hour.
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![build-and-deploy](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
+
+Free, open-source time tracking for freelancers and small teams who bill by the hour. Use the hosted version at <https://trackyourtime.dev>, or run the same app on your own server.
 
 Start a timer in the web app, the desktop app, the Chrome extension, Raycast on your Mac, or the iPhone and Android apps. Each one keeps counting without a connection and sends your changes when the connection comes back. Stop the timer on your phone, and your laptop shows it stopped.
 
 At the end of the month, the hours become a report, a PDF invoice, or a ZUGFeRD or XRechnung e-invoice. Invite colleagues, and each person sees only their own time until you let them see more. Import a CSV from another tracker, take everything out as JSON or CSV, or connect other tools through the REST API.
 
-There's no paid plan, now or later. Use the hosted version at <https://trackyourtime.dev>, or run the same app on your own server from one compose file. The desktop app, the extensions and the phone apps work with either, because each one asks for a server address.
+![The Track Your Time web app: a running timer above today's entries, each with a project, client, task, tags and the amount it earned](docs/marketing/screenshots/web-track-light.jpg)
 
-The Chrome extension is in the Chrome Web Store, and Firefox 0.3.0 is public on Firefox Add-ons. Desktop version 0.2.2 downloads from [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest) for macOS, Windows and Linux. Self-host images are published through v0.3.0. The phone apps are in testing channels. [Release readiness](docs/release-readiness.md) records the remaining distribution checks.
+There's no paid plan, now or later. A self-hosted server starts from one compose file. The desktop app, the extensions and the phone apps work with the hosted server or yours, because each one asks for a server address.
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![build-and-deploy](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml/badge.svg?branch=main)](https://github.com/trebeljahr/trackyourtime/actions/workflows/build-and-deploy.yml?query=branch%3Amain)
+The Chrome extension is in the Chrome Web Store, and Firefox 0.3.0 is public on Firefox Add-ons. Desktop version 0.3.0 downloads from [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest) for macOS, Windows and Linux. Self-host images are published through v0.3.0. The phone apps are in testing channels. [Release readiness](docs/release-readiness.md) records the remaining distribution checks.
 
 The product was called tracktime until September 2026. The repository, images, bundle ids and every other identifier were renamed to `trackyourtime` before the first release.
 
-The hosted web app is at <https://trackyourtime.dev>, with the API on its own host at <https://api.trackyourtime.dev>. The [API reference](https://trackyourtime.dev/docs/api/reference/) and [OpenAPI document](https://api.trackyourtime.dev/api/v1/openapi.json) describe its public routes. [`docs/deploy.md`](docs/deploy.md) explains the topology and why the domain moved.
-
-![The Track Your Time web app tracking time against a project](packages/client/public/marketing/web-track.png)
+The API runs on its own host at <https://api.trackyourtime.dev>. The [API reference](https://trackyourtime.dev/docs/api/reference/) and [OpenAPI document](https://api.trackyourtime.dev/api/v1/openapi.json) describe its public routes. [`docs/deploy.md`](docs/deploy.md) explains the topology and why the domain moved.
 
 ## What it is
 
@@ -272,6 +272,10 @@ The E2E suite starts its own Mongo, Redis and S3 containers on separate ports an
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the pull request process, and [ROADMAP.md](ROADMAP.md) if you are looking for something to pick up.
 
 Commits must be signed off under the [Developer Certificate of Origin](https://developercertificate.org/) 1.1 — `git commit -s` adds the `Signed-off-by` trailer. There is no CLA.
+
+## Support
+
+Track Your Time is free and has no paid plan. If you use it for your work, you can support it at <https://ricos.site/donate/track-your-time>.
 
 ## License
 
