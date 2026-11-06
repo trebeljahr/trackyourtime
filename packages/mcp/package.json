@@ -16,11 +16,22 @@
   },
   "homepage": "https://trackyourtime.dev/docs/mcp/",
   "bugs": "https://github.com/trebeljahr/trackyourtime/issues",
-  "keywords": ["mcp", "time-tracking", "self-hosted", "timesheets"],
+  "keywords": [
+    "mcp",
+    "time-tracking",
+    "self-hosted",
+    "timesheets"
+  ],
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist/index.js", "dist/index.js.map", "dist/server.json", "README.md", "LICENSE"],
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/server.json",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "trackyourtime-mcp": "./dist/index.js"
   },
@@ -33,14 +44,14 @@
     "test:integration": "node --import tsx --test src/tests/integration/*.test.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.31.0",
-    "zod": "^4.6.5"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@starter/shared": "workspace:*",
-    "esbuild": "^0.28.1",
-    "@types/node": "^25.8.0",
-    "tsx": "^4.22.0",
+    "@types/node": "^25.9.9",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3"
   }
 }

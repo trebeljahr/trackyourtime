@@ -6,8 +6,12 @@
   "description": "Start, stop and edit Track Your Time entries, with your running timer in the macOS menu bar.",
   "icon": "icon.png",
   "author": "trebeljahr",
-  "categories": ["Productivity"],
-  "platforms": ["macOS"],
+  "categories": [
+    "Productivity"
+  ],
+  "platforms": [
+    "macOS"
+  ],
   "license": "MIT",
   "type": "module",
   "commands": [
@@ -24,7 +28,16 @@
       "subtitle": "Track Your Time",
       "description": "Stop the running timer, or resume your latest work. Shows the current action and work in search.",
       "mode": "no-view",
-      "keywords": ["toggle", "start", "stop", "track", "resume", "continue", "track your time", "trackyourtime"]
+      "keywords": [
+        "toggle",
+        "start",
+        "stop",
+        "track",
+        "resume",
+        "continue",
+        "track your time",
+        "trackyourtime"
+      ]
     },
     {
       "name": "entries",
@@ -32,7 +45,13 @@
       "subtitle": "Track Your Time",
       "description": "Browse the last 14 days of entries, then continue, edit or delete them.",
       "mode": "view",
-      "keywords": ["entries", "history", "log", "today", "week"]
+      "keywords": [
+        "entries",
+        "history",
+        "log",
+        "today",
+        "week"
+      ]
     },
     {
       "name": "open-dashboard",
@@ -40,7 +59,14 @@
       "subtitle": "Track Your Time",
       "description": "Open the web app for reports, invoices and catalog editing.",
       "mode": "no-view",
-      "keywords": ["web", "reports", "invoices", "projects", "clients", "tags"]
+      "keywords": [
+        "web",
+        "reports",
+        "invoices",
+        "projects",
+        "clients",
+        "tags"
+      ]
     }
   ],
   "preferences": [
@@ -69,16 +95,16 @@
     }
   ],
   "dependencies": {
-    "@raycast/api": "^2.5.3",
-    "@raycast/utils": "^2.3.2",
-    "zod": "^4.6.5"
+    "@raycast/api": "^2.10.1",
+    "@raycast/utils": "^2.3.3",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^2.2.0",
     "@types/node": "22.19.17",
-    "@types/react": "19.0.10",
-    "eslint": "^9.39.4",
-    "prettier": "^3.9.6",
+    "@types/react": "19.2.14",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.10",
     "typescript": "^6.0.3"
   },
   "scripts": {
