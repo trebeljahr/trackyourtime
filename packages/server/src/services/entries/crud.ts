@@ -31,6 +31,7 @@ import {
   INVOICE_RELEVANT_FIELDS,
   invoicedEntryEditRefusal,
 } from "./invoice-guard.js";
+import { assertInvoicedCoverageKept } from "./parallel-guard.js";
 import { resolveRefs, resolveClientId } from "./refs.js";
 import { resolveTagIds } from "./tags.js";
 
@@ -48,6 +49,8 @@ async function createEntryImpl(
   if (end.getTime() <= start.getTime()) {
     throw badRequest("End must be after start");
   }
+
+  await assertInvoicedCoverageKept(workspaceId, scope.userId, null, null, { start, end });
 
   const refs = await resolveRefs(
     workspaceId,
@@ -178,6 +181,13 @@ async function updateEntryImpl(
   if (end && end.getTime() <= start.getTime()) {
     throw badRequest("End must be after start");
   }
+  await assertInvoicedCoverageKept(
+    workspaceId,
+    scope.userId,
+    String(existing._id),
+    { start: existing.start, end: existing.end },
+    { start, end },
+  );
 
   const billable = input.billable ?? existing.billable;
   const durationSec = end ? durationBetween(start, end) : 0;
@@ -270,7 +280,7 @@ async function deleteEntryImpl(
     workspaceId: scope.workspaceId,
     authorId: scope.userId,
   })
-    .select("invoiceId")
+    .select("invoiceId start end")
     .lean();
   if (!existing) throw notFound();
   if (existing.invoiceId) {
@@ -280,6 +290,13 @@ async function deleteEntryImpl(
         "time, then delete the entry.",
     );
   }
+  await assertInvoicedCoverageKept(
+    scope.workspaceId,
+    scope.userId,
+    String(existing._id),
+    { start: existing.start, end: existing.end },
+    null,
+  );
 
   const result = await TimeEntry.deleteOne({
     _id: entryId,

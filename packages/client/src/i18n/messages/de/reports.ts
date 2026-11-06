@@ -170,6 +170,9 @@ export const reports: Translation<typeof source> = {
     noDescription: "Keine Beschreibung",
     editProject: "Projekt „{name}“ bearbeiten",
     running: "läuft",
+    counted: "{duration} gezählt",
+    countedHint:
+      "Zeit, die dieser Bericht für den Eintrag zählt: an den Berichtsdaten abgeschnitten, und Zeit, die er mit deinen überlappenden Einträgen teilt, gleichmäßig auf sie aufgeteilt.",
     loadMore: "Mehr laden",
     emptyTitle: "Keine Einträge passen zu diesen Filtern",
     emptyDescription:

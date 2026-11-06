@@ -21,6 +21,7 @@ export const REQUIRES_API_LEVEL = {
   "privacy.standardContinueTimerInput": 41,
   "auth.passwordUnlock": 42,
   "auth.passwordKeysRepair": 43,
+  "reports.parallelEntries": 44,
   "privacy.timerIntentReceipts": 39,
   "privacy.accountCurrentTimer": 38,
   "privacy.standardTimerHandoff": 37,

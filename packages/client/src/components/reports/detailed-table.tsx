@@ -288,6 +288,17 @@ export function DetailedTable({
                 data-mobile-duration
               >
                 {duration(entry.durationSec)}
+                {!running &&
+                  entry.reportedSec !== undefined &&
+                  entry.reportedSec !== entry.durationSec && (
+                    <span
+                      className="block text-xs font-normal text-muted-foreground"
+                      title={t("detailed.countedHint")}
+                      data-testid="detailed-counted"
+                    >
+                      {t("detailed.counted", { duration: duration(entry.reportedSec) })}
+                    </span>
+                  )}
               </TableCell>
               <TableCell className="text-right tabular-nums" data-billing>
                 <Badge variant="outline" className="whitespace-nowrap">

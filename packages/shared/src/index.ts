@@ -51,3 +51,4 @@ export * from "./private-device-transfer.js";
 
 export * from "./private-timer.js";
 export * from "./two-factor.js";
+export * from "./parallel-time.js";

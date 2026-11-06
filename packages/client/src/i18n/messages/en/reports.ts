@@ -194,6 +194,9 @@ export const reports = {
     noDescription: "No description",
     editProject: "Edit project “{name}”",
     running: "running",
+    counted: "{duration} counted",
+    countedHint:
+      "Time this report counts for the entry: cut at the report's dates, and time shared with your overlapping entries split evenly between them.",
     loadMore: "Load more",
     emptyTitle: "No entries match these filters",
     emptyDescription:

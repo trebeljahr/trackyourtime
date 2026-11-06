@@ -48,6 +48,7 @@ import {
   requireObjectId,
 } from "./errors.js";
 import { resolveRefs, resolveClientId } from "./refs.js";
+import { assertInvoicedCoverageKept } from "./parallel-guard.js";
 import { filterKnownTagIds, resolveTagIds } from "./tags.js";
 
 /**
@@ -292,6 +293,11 @@ const startNewEntryImpl = async (args: StartArgs): Promise<StartedEntry> => {
     return toClientTimeEntry(created);
   };
 
+  // Only a backdated start can reach invoiced time, which has already ended;
+  // a start "now" skips the query every ordinary start would otherwise pay.
+  if (args.start.getTime() < Date.now() - 60_000) {
+    await assertInvoicedCoverageKept(args.workspaceId, args.authorId, null, null, { start: args.start, end: null });
+  }
   const stopped = await stopRunningEntry(
     args.authorId,
     args.start,
@@ -528,6 +534,13 @@ async function stopTimerImpl(
   if (end.getTime() <= running.start.getTime()) {
     throw badRequest("End must be after start");
   }
+  await assertInvoicedCoverageKept(
+    running.workspaceId,
+    authorId,
+    String(running._id),
+    { start: running.start, end: null },
+    { start: running.start, end },
+  );
 
   const stopped = await finalizeStop(running, end);
   if (!stopped) throw badRequest("Entry is not running");
@@ -702,6 +715,7 @@ async function discardTimerImpl(
   if (!running) throw notFound("No running timer");
 
   const id = String(running._id);
+  await assertInvoicedCoverageKept(running.workspaceId, authorId, id, { start: running.start, end: null }, null);
   await TimeEntry.deleteOne({ _id: id, authorId });
   void publishSync(
     running.workspaceId,

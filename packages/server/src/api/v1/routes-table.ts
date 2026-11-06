@@ -148,6 +148,12 @@ export const detailedEntrySchema: z.ZodType<DetailedEntry> = z.object({
   taskName: z.string().nullable(),
   /** `null` whenever `hourlyRate` was withheld — never `0`, which is unbilled time. */
   amount: z.number().nullable(),
+  /**
+   * Report rows only: seconds this row contributes after clipping to the
+   * range and splitting time it shared with the same person's overlapping
+   * entries evenly (parallel entries). Absent on `GET /entries`.
+   */
+  reportedSec: z.number().optional(),
 });
 
 /** What an invoice prints under "Billed to". Blank fields are `null`. */

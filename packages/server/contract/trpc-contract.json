@@ -1,5 +1,5 @@
 {
-  "apiLevel": 43,
+  "apiLevel": 44,
   "minClientApiLevel": 1,
   "procedures": {
     "accountPassword.kdf": {
@@ -1130,6 +1130,10 @@
         ],
         "type": "object"
       },
+      "type": "mutation"
+    },
+    "devices.forgetTrustedBrowsers": {
+      "input": null,
       "type": "mutation"
     },
     "devices.list": {

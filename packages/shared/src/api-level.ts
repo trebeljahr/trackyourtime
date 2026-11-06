@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 43;
+export const API_LEVEL = 44;
 
 export type ApiLevelChange = {
   level: number;
@@ -200,6 +200,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   { level: 41, release: "0.4.0", added: ["Authenticated privacy.standardContinueTimerInput prepares a standard continuation without changing time, with fresh workspace membership and visibility. Private handoff receipts retain the original continuation recipe. Private rollout guards remain closed."] },
   { level: 42, release: "0.4.0", added: ["Password unlock: public accountPassword.kdf answers an email's password KDF parameters (decoys for unknown emails), accountPassword.kdfForReset answers them for a valid reset link; sign-up accepts passwordKdf; authenticated accountPassword.upgrade switches a legacy typed password to the derived login secret."] },
   { level: 43, release: "0.4.0", added: ["Password unlock repair: a password reset flags the account keys' password envelope as stale; authenticated accountPassword.keysStatus reads the flag, accountPassword.verify checks a derived login secret (10 per 15 minutes), accountPassword.keysRewrapped clears the flag."] },
+  { level: 44, release: "0.4.0", added: ["Parallel entries: reports and invoices split time that one person's entries share evenly, so totals equal wall-clock time. Detailed report rows carry `reportedSec`. A write that would change how an entry covers invoiced time answers CONFLICT."] },
 ];
 
 /**

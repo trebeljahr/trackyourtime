@@ -10,6 +10,7 @@ import type { WorkspaceScope } from "../scope.js";
 import { resolveRefs } from "./refs.js";
 import { resolveTagIds, normalizeTagIds } from "./tags.js";
 import { invoicedEntryEditRefusal } from "./invoice-guard.js";
+import { changesInvoicedCoverage, loadInvoicedSpans } from "./parallel-guard.js";
 
 export type BulkEntry = TimeEntryDocLike & { _id: unknown };
 type Operation = BulkEditEntriesInput["operation"];
@@ -26,6 +27,8 @@ export type BulkEntryStore = {
   prepare(scope: WorkspaceScope, entry: BulkEntry, operation: Operation): Promise<Record<string, unknown>>;
   locked(scope: WorkspaceScope, entry: BulkEntry, operation: Operation): Promise<boolean>;
   write(scope: WorkspaceScope, plan: Plan, operation: Operation, originId?: string): Promise<boolean>;
+  /** Whether the operation would change how the entry covers invoiced time (parallel entries). */
+  coversInvoiced?(scope: WorkspaceScope, entry: BulkEntry, operation: Operation): Promise<boolean>;
   effects?(scope: WorkspaceScope, plan: Plan, operation: Operation, originId?: string): void | Promise<void>;
 };
 
@@ -83,7 +86,7 @@ export async function executeBulkEdit(scope: WorkspaceScope, raw: BulkEditEntrie
     }
     const fields = operation.kind === "delete" ? ["start"] :
       ["projectId", "taskId", "billable"].filter((key) => operation[key as "projectId" | "taskId" | "billable"] !== undefined);
-    if (invoicedEntryEditRefusal(entry.invoiceId, fields)) {
+    if (invoicedEntryEditRefusal(entry.invoiceId, fields) || await store.coversInvoiced?.(scope, entry, operation)) {
       invalid.set(target.id, "invoiced");
       continue;
     }
@@ -141,6 +144,16 @@ export const mongoBulkEntryStore: BulkEntryStore = {
     return TimeEntry.find({ _id: { $in: valid }, workspaceId: scope.workspaceId, authorId: scope.userId }).lean();
   },
   locked: async (_scope, entry) => entryIsApprovalLocked(entry),
+  // Only a delete moves time; an update here never touches start or end.
+  coversInvoiced: async (scope, entry, operation) => {
+    if (operation.kind !== "delete") return false;
+    const before = { start: entry.start, end: entry.end };
+    const spans = await loadInvoicedSpans(
+      scope.workspaceId, entry.authorId, entry.start.getTime(),
+      entry.end ? entry.end.getTime() : Infinity, String(entry._id),
+    );
+    return changesInvoicedCoverage(before, null, spans);
+  },
   prepare: async (scope, entry, operation) => {
     if (operation.kind === "delete") return {};
     const set: Record<string, unknown> = {};

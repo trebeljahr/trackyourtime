@@ -25,6 +25,7 @@ import { importBudget } from "../../services/import/budget.js";
 //  - Every import is one batch, and a batch can be undone. A wrong column
 //    mapping is discovered after the import, not before it.
 import { TRPCError } from "@trpc/server";
+import { changesInvoicedCoverage, loadInvoicedSpans, PARALLEL_INVOICED_REFUSAL } from "../../services/entries/parallel-guard.js";
 import {
   IMPORT_PREVIEW_ISSUES,
   IMPORT_PREVIEW_ROWS,
@@ -1355,6 +1356,20 @@ export const dataRouter = router({
         );
       }
 
+      // Parallel entries: an imported row laid over time already on an
+      // invoice would take a share of an hour that invoice billed in full.
+      // Refused before anything is written, like any other overlap edit.
+      const spans = rows.map((row) => ({ start: new Date(row.start), end: new Date(row.end) }));
+      const invoicedSpans = await loadInvoicedSpans(
+        workspaceId,
+        ctx.user.id,
+        Math.min(...spans.map((span) => span.start.getTime())),
+        Math.max(...spans.map((span) => span.end.getTime())),
+      );
+      if (invoicedSpans.length > 0 && spans.some((span) => changesInvoicedCoverage(null, span, invoicedSpans))) {
+        throw new TRPCError({ code: "CONFLICT", message: PARALLEL_INVOICED_REFUSAL });
+      }
+
       const doc = workspaceDoc(parsed, input.text);
       const hints = hintsFromDoc(doc);
 
@@ -1588,6 +1603,23 @@ export const dataRouter = router({
           message:
             "Some of these entries are on an invoice. Delete the invoice first, then undo the import.",
         });
+      }
+
+      // Undoing must not change how the batch's entries covered time
+      // that is on an invoice (parallel entries).
+      const batchSpans = await TimeEntry.find({ workspaceId, importId: input.batchId, authorId: ctx.user.id })
+        .select("start end")
+        .lean();
+      if (batchSpans.length > 0) {
+        const invoicedSpans = await loadInvoicedSpans(
+          workspaceId,
+          ctx.user.id,
+          Math.min(...batchSpans.map((span) => span.start.getTime())),
+          Math.max(...batchSpans.map((span) => (span.end ? span.end.getTime() : Infinity))),
+        );
+        if (invoicedSpans.length > 0 && batchSpans.some((span) => changesInvoicedCoverage(span, null, invoicedSpans))) {
+          throw new TRPCError({ code: "CONFLICT", message: PARALLEL_INVOICED_REFUSAL });
+        }
       }
 
       const removed = await TimeEntry.deleteMany({

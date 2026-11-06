@@ -1,4 +1,4 @@
-import { addDaysToKey, currencyAmountsAccumulator, dayKeyInZone, entryAmount, monthKeyOf, projectDetailedEntry, reportMoneyVisible, singleCurrencyMoney, splitIntervalByZonedDay, weekStartKey, type CurrencyAmountsAccumulator, type DayKey, type DetailedEntry, type DetailedReportResult, type ReportGroupBy, type SummaryGroup, type SummaryReportResult, type Visibility, type WeekStart } from "@starter/shared";
+import { addDaysToKey, currencyAmountsAccumulator, dayKeyInZone, entryAmount, monthKeyOf, projectDetailedEntry, reportMoneyVisible, singleCurrencyMoney, splitIntervalByZonedDay, weekStartKey, type CurrencyAmountsAccumulator, type DayKey, type DetailedEntry, type DetailedReportResult, type ReportGroupBy, type SummaryGroup, type SummaryReportResult, type Visibility, type WeekStart, type ParallelShare } from "@starter/shared";
 /** Pure report arithmetic. It retains no dataset and performs no I/O; every
  * caller must first supply its own authenticated/scoped input rows. */
 export type ReportRange = { fromMs: number; toMs: number };
@@ -88,9 +88,26 @@ export const measureReportEntry = <T extends ReportMeasureSource>(
   range: ReportRange,
   nowMs: number,
   calendar: ReportCalendar,
+  /**
+   * The entry's even share of time it spent overlapping the author's other
+   * entries (`parallelShares` over the same range and zone), when it
+   * overlapped any. It replaces the clipped length, day by day.
+   */
+  share?: ParallelShare,
 ): ReportMeasuredEntry<T> | null => {
   const clipped = clipReportToRange(doc, range, nowMs);
   if (!clipped) return null;
+  if (share) {
+    const slices = share.slices.map((slice) => ({ date: slice.date as DayKey, seconds: slice.seconds }));
+    return {
+      doc,
+      seconds: share.seconds,
+      billableSec: doc.billable ? share.seconds : 0,
+      amount: entryAmount(share.seconds, doc.billable ? doc.hourlyRate : null),
+      slices,
+      dayKey: dayKeyInZone(clipped.clipStart, calendar.timeZone),
+    };
+  }
   const { seconds, clipStart, clipEnd } = clipped;
 
   const slices = splitIntervalByZonedDay(clipStart, clipEnd, calendar.timeZone);

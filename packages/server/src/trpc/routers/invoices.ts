@@ -24,6 +24,7 @@ import { clientEntryFilter } from "../../services/entries/refs.js";
 // functions at the top of this file. They have no database and no tRPC in
 // them so `tests/invoices.test.ts` can pin the rules that matter without
 // standing up Mongo.
+import { clipInterval, overlappingIntervals, parallelShares, type ParallelShare } from "@starter/shared";
 import { TRPCError } from "@trpc/server";
 import {
   INVOICE_UPDATE_REFUSALS,
@@ -640,6 +641,7 @@ const gatherTime = async (
         )
       : new Map<string, string>();
 
+  const shares = await invoiceParallelShares(workspaceId, rows);
   const eligible = await invoiceApprovalEligibility(workspaceId, rows);
   const candidates: BillableCandidate[] = rows.filter((row) => row.invoiceId || eligible.has(String(row._id))).map((row) => ({
     id: String(row._id),
@@ -649,13 +651,60 @@ const gatherTime = async (
       : null,
     taskId: row.taskId ?? null,
     taskName: row.taskId ? (taskNames.get(row.taskId) ?? null) : null,
-    seconds: row.durationSec,
+    seconds: shares.get(String(row._id))?.seconds ?? row.durationSec,
     hourlyRate: row.hourlyRate ?? null,
     currency: row.currency,
     invoiceId: row.invoiceId ?? null,
   }));
 
   return { ...selectBillableEntries(candidates), skippedApproval: rows.filter((row) => !row.invoiceId && !eligible.has(String(row._id))).length };
+};
+
+/**
+ * Each billed entry's even share of the time it shared with its author's
+ * other entries (parallel entries), keyed by id; absent for an entry that
+ * overlapped nothing, which bills its recorded `durationSec` as before.
+ *
+ * An invoice bills whole entries, so the share is of the entry's whole
+ * interval, split against EVERY entry of the same author in the workspace
+ * that overlaps it — any client, billable or not, finished or running (to
+ * now). Hours billed across all invoices for a span therefore equal the
+ * wall-clock time, and the same hour is never billed twice. Once an entry is
+ * on an invoice, `parallel-guard.ts` refuses any write that would change
+ * how another entry covers it, so the share billed here stays the share the
+ * reports show.
+ */
+const invoiceParallelShares = async (
+  workspaceId: string,
+  rows: readonly { _id: unknown; authorId: string; start: Date; end: Date | null }[],
+): Promise<Map<string, ParallelShare>> => {
+  const finished = rows.filter((row): row is typeof row & { end: Date } => row.end !== null);
+  if (finished.length === 0) return new Map();
+  const fromMs = Math.min(...finished.map((row) => row.start.getTime()));
+  const toMs = Math.max(...finished.map((row) => row.end.getTime()));
+  const partners = await TimeEntry.find({
+    workspaceId,
+    authorId: { $in: [...new Set(finished.map((row) => row.authorId))] },
+    start: { $lt: new Date(toMs) },
+    $or: [{ end: null }, { end: { $gt: new Date(fromMs) } }],
+  })
+    .select("_id authorId start end")
+    .lean();
+  const nowMs = Date.now();
+  const window = { fromMs, toMs };
+  const intervals = partners.map((entry) =>
+    clipInterval(
+      {
+        id: String(entry._id),
+        authorId: entry.authorId,
+        startMs: entry.start.getTime(),
+        endMs: entry.end ? entry.end.getTime() : null,
+      },
+      window,
+      nowMs,
+    ),
+  );
+  return parallelShares(overlappingIntervals(intervals));
 };
 
 /**

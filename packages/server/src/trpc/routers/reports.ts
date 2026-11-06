@@ -71,6 +71,7 @@ import {
   type WeeklyReportResult,
   type WeeklyReportRow,
 } from "@starter/shared";
+import { clipInterval, OverlapCollector, overlappingIntervals, parallelShares, zonedDayBuckets, type ParallelShare } from "@starter/shared";
 import { keysetAfter } from "../../db/keyset.js";
 import { Client, type ClientDocLike } from "../../models/Client.js";
 import { Project, type ProjectDocLike } from "../../models/Project.js";
@@ -432,10 +433,127 @@ const buildMatchConditions = async (
 
   // Last, so a filter that matches nothing returns above without the probe.
   // It changes no result: every overlapping entry starts at or after it.
-  const earliest = await earliestOverlappingStart(workspaceId, range.from);
+  const earliest = await earliestFor(workspaceId, range);
   if (earliest) conditions.push({ start: { $gte: earliest } });
 
   return conditions;
+};
+
+/** One probe per range object, shared by the report's match and its overlap pass. */
+const earliestProbes = new WeakMap<Range, Promise<Date | null>>();
+const earliestFor = (workspaceId: string, range: Range): Promise<Date | null> => {
+  let probe = earliestProbes.get(range);
+  if (!probe) {
+    probe = earliestOverlappingStart(workspaceId, range.from);
+    earliestProbes.set(range, probe);
+  }
+  return probe;
+};
+
+/**
+ * {@link loadParallelShares} for one page of rows, without the full-range
+ * pass a rows-only read must not pay. It reads only the page authors' entries
+ * on the local days the page touches (whole days, so each day's split is
+ * rounded over the same entries the full pass rounds it over), in one
+ * bounded query.
+ */
+const loadPageParallelShares = async (
+  scope: ReportScope,
+  range: Range,
+  nowMs: number,
+  timeZone: string,
+  page: readonly { authorId: string; start: Date; end: Date | null }[],
+): Promise<Map<string, ParallelShare>> => {
+  if (page.length === 0) return new Map();
+  const firstStart = Math.max(range.fromMs, Math.min(...page.map((doc) => doc.start.getTime())));
+  const lastEnd = Math.min(range.toMs, Math.max(...page.map((doc) => doc.end?.getTime() ?? nowMs)));
+  const fromMs = Math.max(range.fromMs, zonedDayStartMs(dayKeyInZone(firstStart, timeZone), timeZone));
+  const toMs = Math.min(
+    range.toMs,
+    zonedDayStartMs(addDaysToKey(dayKeyInZone(Math.max(firstStart, lastEnd - 1), timeZone), 1), timeZone),
+  );
+  if (!(toMs > fromMs)) return new Map();
+  const conditions: Record<string, unknown>[] = [
+    { workspaceId: scope.workspaceId },
+    { authorId: { $in: [...new Set(page.map((doc) => doc.authorId))] } },
+    { start: { $lt: new Date(toMs) } },
+    { $or: [{ end: null }, { end: { $gt: new Date(fromMs) } }] },
+  ];
+  pushAuthorConditions(conditions, scope.visibility, undefined);
+  const rows = await TimeEntry.aggregate<{ _id: unknown; authorId: string; start: Date; end: Date | null }>([
+    { $match: { $and: conditions } },
+    { $project: { authorId: 1, start: 1, end: 1 } },
+  ]);
+  const window = { fromMs, toMs };
+  return parallelShares(
+    overlappingIntervals(
+      rows.map((doc) =>
+        clipInterval(
+          { id: String(doc._id), authorId: doc.authorId, startMs: doc.start.getTime(), endMs: doc.end ? doc.end.getTime() : null },
+          window,
+          nowMs,
+        ),
+      ),
+    ),
+    zonedDayBuckets(timeZone),
+  );
+};
+
+/**
+ * Each overlapping entry's even share of the range (parallel entries, see
+ * `@starter/shared/parallel-time`), keyed by entry id. Entries that overlap
+ * nothing are absent and measured as before.
+ *
+ * The pass covers the author scope and the range only — NOT the catalog,
+ * tag, billable or search filters. A report filtered to project X still
+ * gives X's entry its half of the hour it shared with project Y, so filtered
+ * reports add up to the unfiltered one. Partners are always the same author,
+ * whom the scope already lets the caller see.
+ */
+const loadParallelShares = async (
+  scope: ReportScope,
+  filters: Pick<ReportFilters, "memberIds">,
+  range: Range,
+  nowMs: number,
+  timeZone: string,
+): Promise<Map<string, ParallelShare>> => {
+  const conditions: Record<string, unknown>[] = [
+    { workspaceId: scope.workspaceId },
+    { start: { $lt: range.to } },
+    { $or: [{ end: null }, { end: { $gt: range.from } }] },
+  ];
+  pushAuthorConditions(conditions, scope.visibility, filters.memberIds);
+  const earliest = await earliestFor(scope.workspaceId, range);
+  if (earliest) conditions.push({ start: { $gte: earliest } });
+
+  const collector = new OverlapCollector();
+  for await (const docs of keysetPages(
+    conditions,
+    (pageConditions, limit) =>
+      TimeEntry.find({ $and: pageConditions })
+        .sort({ start: -1, _id: -1 })
+        .limit(limit)
+        .select("start end authorId")
+        .lean(),
+    TOTALS_PAGE_SIZE,
+    Infinity,
+  )) {
+    for (const doc of docs) {
+      collector.add(
+        clipInterval(
+          {
+            id: String(doc._id),
+            authorId: doc.authorId,
+            startMs: doc.start.getTime(),
+            endMs: doc.end ? doc.end.getTime() : null,
+          },
+          range,
+          nowMs,
+        ),
+      );
+    }
+  }
+  return parallelShares(collector.overlapping(), zonedDayBuckets(timeZone));
 };
 
 /**
@@ -638,7 +756,7 @@ const totalsPages = (
 
 type MeasuredEntry = ReportMeasuredEntry<JoinedEntry>;
 const clipToRange = clipReportToRange;
-const measureEntry = (doc: JoinedEntry, range: Range, nowMs: number, calendar: Calendar): MeasuredEntry | null => measureReportEntry(doc, range, nowMs, calendar);
+const measureEntry = (doc: JoinedEntry, range: Range, nowMs: number, calendar: Calendar, shares?: Map<string, ParallelShare>): MeasuredEntry | null => measureReportEntry(doc, range, nowMs, calendar, shares?.get(String(doc._id)));
 const groupIdentity = reportGroupIdentity;
 const NO_PROJECT: GroupIdentity = { key: "none", label: "No project", color: null };
 
@@ -773,6 +891,7 @@ export const buildSummary = async (
     sharesByDay.set(date, new Map());
   }
 
+  const shares = await loadParallelShares(scope, filters, range, nowMs, calendar.timeZone);
   const groups = new Map<string, GroupAccumulator>();
   let totalSec = 0;
   let billableSec = 0;
@@ -790,7 +909,7 @@ export const buildSummary = async (
   )) {
     for (const doc of docs) {
       if (groupBy === "member") authorIds.add(doc.authorId);
-      const measured = measureEntry(doc, range, nowMs, calendar);
+      const measured = measureEntry(doc, range, nowMs, calendar, shares);
       if (!measured) continue;
 
       // ONCE per entry, whatever the grouping — these are the true totals and
@@ -900,6 +1019,7 @@ const toDetailedEntry = (
     clientName: client?.name ?? null,
     taskName: task?.name ?? null,
     amount: measured.amount,
+    reportedSec: measured.seconds,
   };
 };
 
@@ -940,6 +1060,10 @@ export const buildDetailed = async (
   // Range totals cover the WHOLE filtered set, not the current page — a
   // paginated total would be a lie on every page but the last. Folded a
   // page at a time, so a long range costs passes, not memory.
+  const timeZone = resolveTimeZone(filters.timeZone);
+  const shares = withTotals
+    ? await loadParallelShares(scope, filters, range, nowMs, timeZone)
+    : null;
   let totalSec = 0;
   const amounts = currencyAmountsAccumulator();
   if (withTotals) {
@@ -947,7 +1071,7 @@ export const buildDetailed = async (
       for (const entry of entries) {
         const clipped = clipToRange(entry, range, nowMs);
         if (!clipped) continue;
-        const { seconds } = clipped;
+        const seconds = shares?.get(String(entry._id))?.seconds ?? clipped.seconds;
 
         totalSec += seconds;
         amounts.add({
@@ -968,12 +1092,14 @@ export const buildDetailed = async (
   const docs = withRows ? await runJoinedQuery(pageConditions, limit + 1) : [];
 
   const window = docs.slice(0, limit);
+  const rowShares =
+    shares ?? (await loadPageParallelShares(scope, range, nowMs, timeZone, window));
   const entries = window
     .map((doc) =>
       measureEntry(doc, range, nowMs, {
-        timeZone: resolveTimeZone(filters.timeZone),
+        timeZone,
         weekStartsOn: settings.weekStartsOn,
-      }),
+      }, rowShares),
     )
     .filter((measured): measured is MeasuredEntry => measured !== null)
     .map((measured) => toDetailedEntry(measured, workspaceId));
@@ -1047,6 +1173,7 @@ export const buildWeekly = async (
     return { days, rows: [], dayTotals, totalSec: 0, moneyVisible };
   }
 
+  const shares = await loadParallelShares(scope, filters, range, nowMs, calendar.timeZone);
   const rows = new Map<string, WeeklyReportRow>();
   let totalSec = 0;
 
@@ -1058,7 +1185,7 @@ export const buildWeekly = async (
     Infinity,
   )) {
     for (const doc of docs) {
-      const measured = measureEntry(doc, range, nowMs, calendar);
+      const measured = measureEntry(doc, range, nowMs, calendar, shares);
       if (!measured) continue;
 
       const project = inWorkspace(doc.project, workspaceId);
@@ -1144,10 +1271,11 @@ async function* detailedExportPages(
     weekStartsOn: settings.weekStartsOn,
   };
 
+  const shares = await loadParallelShares(scope, filters, range, nowMs, calendar.timeZone);
   const pages = joinedPages(conditions, EXPORT_PAGE_SIZE, MAX_EXPORT_ROWS);
   for await (const docs of pages) {
     const entries = docs
-      .map((doc) => measureEntry(doc, range, nowMs, calendar))
+      .map((doc) => measureEntry(doc, range, nowMs, calendar, shares))
       .filter((measured): measured is MeasuredEntry => measured !== null)
       .map((measured) => toDetailedEntry(measured, workspaceId));
     const projected = projectDetailedReport(
@@ -1187,6 +1315,9 @@ const detailedExportTotals = async (
   const moneyVisible = reportMoneyVisible(visibility);
   const conditions = await buildMatchConditions(scope, filters, range);
 
+  const shares = conditions === null
+    ? new Map<string, ParallelShare>()
+    : await loadParallelShares(scope, filters, range, nowMs, resolveTimeZone(filters.timeZone));
   let count = 0;
   let totalSec = 0;
   let moneyWithheld = !moneyVisible;
@@ -1213,7 +1344,7 @@ const detailedExportTotals = async (
       }
       amounts.add({
         currency: doc.currency,
-        amount: entryAmount(clipped.seconds, doc.billable ? doc.hourlyRate : null),
+        amount: entryAmount(shares.get(String(doc._id))?.seconds ?? clipped.seconds, doc.billable ? doc.hourlyRate : null),
       });
     }
   }

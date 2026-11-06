@@ -3,6 +3,7 @@ import {
   addDaysToKey, currencyAmountsAccumulator, dayKeyInZone, dayKeysBetween, entryAmount,
   detailedReportSchema, reportExportSchema, reportFiltersSchema, reportMoneyVisible, resolveTimeZone,
   singleCurrencyMoney, summaryReportSchema, weeklyReportSchema, zonedDayStartMs,
+  clipInterval, overlappingIntervals, parallelShares, zonedDayBuckets,
   type DetailedEntry, type DetailedReportResult,
   type SummaryReportResult, type SummaryTimelinePoint, type WeeklyReportResult,
   type WeeklyReportRow,
@@ -76,6 +77,12 @@ function readPrivateReport(options: Options, allRows = false): DetailedReportRes
     && (args.billable === undefined || doc.billable === args.billable)
     && (!search || doc.description.toLowerCase().includes(search)))
     .sort((a, b) => Date.parse(b.doc.start) - Date.parse(a.doc.start) || (a.doc.id < b.doc.id ? 1 : a.doc.id > b.doc.id ? -1 : 0));
+  // Parallel entries: the same even split as the standard reports, over the
+  // author's entries in the range — not the catalog filters, so filtered
+  // reports still add up to the unfiltered one.
+  const parallel = parallelShares(overlappingIntervals(reader.quick
+    .filter(({ doc }) => !args.memberIds?.length || args.memberIds.includes(doc.authorId))
+    .map(({ doc }) => clipInterval({ id: doc.id, authorId: doc.authorId, startMs: Date.parse(doc.start), endMs: doc.end === null ? null : Date.parse(doc.end) }, range, now))), zonedDayBuckets(timeZone));
   if (allRows && matching.length > 100000) throw new Error("Private report export exceeds 100000 entries; choose a shorter range");
   const snapshot = (row: typeof matching[number]) => {
     const entry = reader.detailed(row, moneyVisible);
@@ -99,7 +106,7 @@ function readPrivateReport(options: Options, allRows = false): DetailedReportRes
     return result;
   };
   const measured = (row: typeof matching[number]) => {
-    const result = measureReportEntry(snapshot(row), range, now, calendar);
+    const result = measureReportEntry(snapshot(row), range, now, calendar, parallel.get(row.doc.id));
     if (result && (!Number.isSafeInteger(result.seconds) || !Number.isFinite(result.amount))) throw new Error("Private report exceeds supported precision");
     return result;
   };
@@ -168,9 +175,10 @@ function readPrivateReport(options: Options, allRows = false): DetailedReportRes
   const amounts = currencyAmountsAccumulator();
   if (withTotals) for (const raw of matching) {
     const entry = reader.detailed(raw, moneyVisible), doc = { ...entry, start: new Date(entry.start), end: entry.end === null ? null : new Date(entry.end) }, clipped = clipReportToRange(doc, range, now); if (!clipped) continue;
-    totalSec += clipped.seconds;
+    const seconds = parallel.get(raw.doc.id)?.seconds ?? clipped.seconds;
+    totalSec += seconds;
     // Measurement shares the standard per-entry cent rounding.
-    amounts.add({ amount: entryAmount(clipped.seconds, doc.billable ? doc.hourlyRate : null), currency: doc.currency });
+    amounts.add({ amount: entryAmount(seconds, doc.billable ? doc.hourlyRate : null), currency: doc.currency });
   }
   const page = args as z.infer<typeof detailedReportSchema>;
   let after = matching;
@@ -183,7 +191,7 @@ function readPrivateReport(options: Options, allRows = false): DetailedReportRes
   for (const raw of window) {
     const entry = measured(raw); if (!entry) continue;
     const { project, client, task, start, end, ...doc } = entry.doc;
-    entries.push({ ...doc, start: start.toISOString(), end: end?.toISOString() ?? null, projectName: project?.name ?? null, projectColor: project?.color ?? null, clientName: client?.name ?? null, taskName: task?.name ?? null, amount: entry.amount });
+    entries.push({ ...doc, start: start.toISOString(), end: end?.toISOString() ?? null, projectName: project?.name ?? null, projectColor: project?.color ?? null, clientName: client?.name ?? null, taskName: task?.name ?? null, amount: entry.amount, reportedSec: entry.seconds });
   }
   const last = window.at(-1)?.doc, totalAmounts = amounts.result(), scalar = singleCurrencyMoney(totalAmounts, settings.currency);
   const result = projectDetailedReport({ entries, ...(withRows && after.length > limit && last ? { nextCursor: `${last.start}|${last.id}` } : {}), totalSec, totalAmount: scalar.amount, totalAmounts, currency: moneyVisible ? scalar.currency : settings.currency, moneyVisible: true }, source.visibility);

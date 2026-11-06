@@ -419,6 +419,9 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "reportedSec": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -10141,6 +10144,9 @@
                               "number",
                               "null"
                             ]
+                          },
+                          "reportedSec": {
+                            "type": "number"
                           }
                         },
                         "required": [

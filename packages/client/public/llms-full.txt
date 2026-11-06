@@ -2504,6 +2504,22 @@ Report routes take an optional `timeZone` (an IANA name such as `Europe/Berlin`)
 because day bucketing depends on it. Without one the server buckets in its own zone —
 UTC on a deployment — and files after-midnight work under the previous day.
 
+## Overlapping entries
+
+Entries may overlap, for example when you run several things at once. Reports
+count each moment once per person. When one person's entries overlap, the time
+they share is split evenly between them, so a report's total equals the
+wall-clock time that person tracked. Colleagues' entries are never split against
+each other.
+
+- `GET /reports/summary`, `GET /reports/detailed` and `GET /reports/weekly`
+  return the split figures. Amounts use the split seconds.
+- Each `GET /reports/detailed` row carries `reportedSec`: the seconds that row
+  counts after it is cut at the report's dates and split. `durationSec` stays
+  the recorded duration. `GET /entries` rows have no `reportedSec`.
+- An invoice bills each entry's split share. After an entry is on an invoice, a
+  write that would change how another entry overlaps it answers `409`.
+
 ## The machine-readable contract
 
 - [`openapi.json`](https://api.trackyourtime.dev/api/v1/openapi.json) — the committed OpenAPI 3.1 document.

@@ -2882,6 +2882,38 @@ reasons above. Four rules that fail quietly if broken:
   Every docs page also has a Markdown copy beside it (`/docs/mcp.md`,
   `/docs/index.md`), which the root `llms.txt` links.
 
+### Parallel entries (overlapping time)
+
+One person's entries may overlap (several agent sessions, a call during a
+build). Every report, export and invoice splits the shared time EVENLY between
+that person's overlapping entries, so totals equal wall-clock time. Always on,
+no setting. The math is `@starter/shared/parallel-time.ts`; design note:
+`ai-work-notes/projects/trackyourtime/trackyourtime-parallel-entries-design-2026-11-07.md`.
+Rules that fail quietly if broken:
+
+- **Same author, same workspace only.** Colleagues working the same hour are
+  summed, never split.
+- **The overlap pass ignores the catalog filters** (`loadParallelShares` in
+  `reports.ts`, the `parallel` map in `core/privacy/report-view.ts`): it reads
+  the author scope and the range only, so a report filtered to project X still
+  gives X's entry half of an hour shared with project Y. Filtered reports then
+  add up to the unfiltered one.
+- **Entries that overlap nothing are measured exactly as before** (stored
+  `durationSec`); only overlapping ones get a `ParallelShare`, integer seconds
+  per local day whose day totals equal that day's wall-clock time.
+- **Recorded time stays recorded.** The entry list, the editor, the timesheet
+  grid (an editing surface) and the detailed CSV's duration column show
+  `durationSec`; report rows add `reportedSec` and their `amount` uses it.
+- **Invoices bill the split share of the whole entry** (`invoiceParallelShares`
+  in `invoices.ts`), against every overlapping entry of that author, any
+  client, billable or not.
+- **The overlap lock** (`services/entries/parallel-guard.ts`): once an entry is
+  on an invoice, any explicit write that changes how another entry covers it
+  — create, update, delete, timer start/stop-with-end/discard, bulk delete,
+  import commit and undo — answers CONFLICT. A new write path that moves an
+  entry's start or end must call `assertInvoicedCoverageKept`. The runaway
+  cap and account deletion are deliberately not guarded.
+
 ### Reports drill-down
 
 Every mark on Reports → Totals is a way down: a donut slice or its legend row

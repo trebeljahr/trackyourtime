@@ -127,6 +127,13 @@ export type DetailedEntry = TimeEntry & {
    * zero is what genuinely unbillable time earns.
    */
   amount: number | null;
+  /**
+   * Seconds this row contributes to the report: clipped to the range and,
+   * when the entry overlapped the author's other entries, its even share of
+   * that time (parallel entries). Report rows only; absent on `entries.list`
+   * and from servers before API level that added it.
+   */
+  reportedSec?: number;
 };
 
 export type DetailedReportResult = {
