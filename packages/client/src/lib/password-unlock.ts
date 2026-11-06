@@ -161,7 +161,16 @@ export async function rewrapKeysForPassword(userId: string, kdf: PasswordKdfPara
   await client.privacy.updateIdentity.mutate({ identity, revision: account.revision, signature });
   const { rememberPrivateIdentity } = await import("./private-identity-cache");
   await rememberPrivateIdentity(userId, identity).catch(() => undefined);
+  await markKeysCurrent();
   return true;
+}
+
+/** The keys open with the current password again: clear a reset's flag. */
+async function markKeysCurrent(): Promise<void> {
+  if (!serverSupportsNow("auth.passwordKeysRepair")) return;
+  try { await (await rpc()).accountPassword.keysRewrapped.mutate(); }
+  catch (error) { console.warn("[auth] could not clear the password-reset flag; the next unlock retries it", error); }
+  if (keysStale) { keysStale = null; notify(); }
 }
 
 /** Sign-up: always the derived login secret, with fresh parameters. */
@@ -175,12 +184,86 @@ export async function signUpWithPasswordUnlock<R extends { ok: boolean }>(email:
   return result;
 }
 
-/** The recovery key of keys created during this sign-in, until it is saved. */
+/**
+ * What the app should tell the person about their keys right now
+ * (components/private-keys-notice.tsx). All of it lives in memory only:
+ * - the recovery key of keys created during this sign-in, until it is saved;
+ * - keys this device could not open with the password (it was reset), with
+ *   the new password's wrapping key held so the keys can be sealed under it
+ *   as soon as the recovery key or another unlock opens them;
+ * - a reset seen from a device that still holds the keys open.
+ */
 let recoveryToSave: { userId: string; recoveryKey: string } | null = null;
-const recoveryListeners = new Set<() => void>();
+let keysNeedRecovery: { userId: string; kdf: PasswordKdfParams; wrappingKey: Uint8Array } | null = null;
+let keysStale: { userId: string } | null = null;
+const noticeListeners = new Set<() => void>();
+function notify(): void { for (const listener of noticeListeners) listener(); }
+export const subscribePasswordUnlockNotices = (listener: () => void) => { noticeListeners.add(listener); return () => { noticeListeners.delete(listener); }; };
 export const recoveryKeyToSave = (userId: string): string | null => (recoveryToSave?.userId === userId ? recoveryToSave.recoveryKey : null);
-export const subscribeRecoveryKeyToSave = (listener: () => void) => { recoveryListeners.add(listener); return () => { recoveryListeners.delete(listener); }; };
-export function recoveryKeySaved(): void { recoveryToSave = null; for (const listener of recoveryListeners) listener(); }
+export function recoveryKeySaved(): void { recoveryToSave = null; notify(); }
+/** A new recovery key from Settings, until the person confirms they saved it. */
+export function offerRecoveryKey(userId: string, recoveryKey: string): void { recoveryToSave = { userId, recoveryKey }; notify(); }
+export const passwordKeysNeedRecovery = (userId: string): boolean => keysNeedRecovery?.userId === userId;
+export const passwordKeysStale = (userId: string): boolean => keysStale?.userId === userId;
+function dropKeysNeedRecovery(): void { keysNeedRecovery?.wrappingKey.fill(0); keysNeedRecovery = null; }
+
+/**
+ * Keys that did not open with the password opened another way (recovery key,
+ * passkey, a trusted device): seal them under the password they missed.
+ */
+let repairing: Promise<void> | null = null;
+export async function repairKeysAfterUnlock(): Promise<void> {
+  const held = keysNeedRecovery;
+  if (!held || repairing) return;
+  const { privateSession } = await import("./private-session");
+  if (!privateSession(held.userId)) return;
+  repairing = (async () => {
+    try {
+      if (await rewrapKeysForPassword(held.userId, held.kdf, held.wrappingKey) && keysNeedRecovery === held) { dropKeysNeedRecovery(); notify(); }
+      await openInventoryAndWorkspace(held.userId);
+    } catch (error) { console.warn("[auth] could not seal the keys under the new password", error); }
+    finally { repairing = null; }
+  })();
+  await repairing;
+}
+if (typeof window !== "undefined") {
+  void import("./private-session").then(({ subscribePrivateSession }) => subscribePrivateSession(() => { void repairKeysAfterUnlock(); }));
+}
+
+/**
+ * A device that holds the keys open learns about a reset made elsewhere.
+ * Asked once per account and page load; the answer only decides a notice.
+ */
+const askedStale = new Set<string>();
+export async function checkPasswordKeysStale(userId: string): Promise<void> {
+  if (askedStale.has(userId) || !serverSupportsNow("auth.passwordKeysRepair")) return;
+  askedStale.add(userId);
+  try {
+    const { stale } = await (await rpc()).accountPassword.keysStatus.query();
+    const { privateSession } = await import("./private-session");
+    if (stale && privateSession(userId) && !passwordKeysNeedRecovery(userId)) { keysStale = { userId }; notify(); }
+  } catch { askedStale.delete(userId); }
+}
+
+export class WrongPasswordError extends Error { constructor() { super("wrong-password"); } }
+
+/**
+ * The stale notice's answer: the new password, typed on a device whose keys
+ * are open. Checked against the server before anything is sealed, so a typo
+ * cannot replace the envelope with one nobody can open.
+ */
+export async function repairKeysWithPassword(userId: string, password: string): Promise<void> {
+  const { authClient } = await import("./auth-client");
+  const email = authClient.$store.atoms.session.get().data?.user.email ?? (await authClient.getSession()).data?.user.email;
+  const kdf = email ? await passwordKdfOf(email) : null;
+  if (!kdf) throw new Error("This account has no password parameters");
+  const keys = await derivePasswordKeys(password, kdf);
+  try {
+    const { ok } = await (await rpc()).accountPassword.verify.mutate({ loginSecret: keys.loginSecret });
+    if (!ok) throw new WrongPasswordError();
+    if (!(await rewrapKeysForPassword(userId, kdf, keys.wrappingKey))) throw new Error("Unlock this account's keys first");
+  } finally { keys.wrappingKey.fill(0); }
+}
 
 /**
  * With keys, every content request must name a workspace from the trusted
@@ -195,6 +278,26 @@ async function resolveActiveWorkspaceNow(userId: string): Promise<void> {
     const { applyWorkspaceList } = await import("./active-workspace");
     await applyWorkspaceList(list as Parameters<typeof applyWorkspaceList>[0], userId);
   } catch { /* The app's own first list will do it. */ }
+}
+
+/**
+ * Keys just opened on this device: rebuild the signed workspace list from the
+ * server when this device has none, then let the app re-read what it may open.
+ */
+async function openInventoryAndWorkspace(userId: string): Promise<void> {
+  const { openPrivateAccountInventorySync, privateAccountInventoryTransport } = await import("./private-inventory-sync");
+  const sync = await openPrivateAccountInventorySync(userId);
+  try {
+    try { await sync.status(); }
+    catch (error) {
+      const { PrivateAccountInventoryMissingError } = await import("@starter/core");
+      if (!(error instanceof PrivateAccountInventoryMissingError)) throw error;
+      await sync.bootstrapFromServer(privateAccountInventoryTransport(userId));
+    }
+  } finally { sync.close(); }
+  const { notifyPrivateDeviceAccessChanged } = await import("./private-device-access");
+  notifyPrivateDeviceAccessChanged();
+  await resolveActiveWorkspaceNow(userId);
 }
 
 /**
@@ -219,13 +322,15 @@ export async function finishPasswordUnlock(userId: string): Promise<void> {
       const setup = await preparePrivateAccountSetup(userId, { password: { kdf: held.kdf, wrappingKey: held.wrappingKey } });
       await finishPrivateAccountSetup(setup);
       recoveryToSave = { userId, recoveryKey: setup.recoveryKey };
+      // Fresh keys are sealed under the password just typed.
+      if (serverSupportsNow("auth.passwordKeysRepair")) await markKeysCurrent();
       // Deliver the first signed inventory now: another device signing in
       // with the password rebuilds its inventory from this server history.
       const { openPrivateAccountInventorySync } = await import("./private-inventory-sync");
       const sync = await openPrivateAccountInventorySync(userId);
       try { for (let i = 0; i < 8 && (await sync.flushOne()).pending > 0; i++) { /* one version per pass */ } }
       finally { sync.close(); }
-      for (const listener of recoveryListeners) listener();
+      notify();
       await resolveActiveWorkspaceNow(userId);
       return;
     }
@@ -234,26 +339,20 @@ export async function finishPasswordUnlock(userId: string): Promise<void> {
       if (!account.identity.password) return false;
       try { await unlockPrivatePassword(userId, account.identity, held.wrappingKey); return true; } catch { return false; }
     };
-    if (!(await opensWithPassword())) {
+    if (await opensWithPassword()) await markKeysCurrent();
+    else {
       // Keys from before password unlock, or an envelope a reset left behind.
-      // A device that stayed unlocked repairs it; elsewhere Settings (recovery
-      // key or a trusted device) opens the keys.
+      // A device that stayed unlocked repairs it now; elsewhere the notice
+      // asks for the recovery key, and the repair runs once the keys open.
       if (privateSession(userId)) await rewrapKeysForPassword(userId, held.kdf, held.wrappingKey);
-      if (!privateSession(userId)) return;
-    }
-    const { openPrivateAccountInventorySync, privateAccountInventoryTransport } = await import("./private-inventory-sync");
-    const sync = await openPrivateAccountInventorySync(userId);
-    try {
-      try { await sync.status(); }
-      catch (error) {
-        const { PrivateAccountInventoryMissingError } = await import("@starter/core");
-        if (!(error instanceof PrivateAccountInventoryMissingError)) throw error;
-        await sync.bootstrapFromServer(privateAccountInventoryTransport(userId));
+      if (!privateSession(userId)) {
+        dropKeysNeedRecovery();
+        keysNeedRecovery = { userId, kdf: structuredClone(held.kdf), wrappingKey: new Uint8Array(held.wrappingKey) };
+        notify();
+        return;
       }
-    } finally { sync.close(); }
-    const { notifyPrivateDeviceAccessChanged } = await import("./private-device-access");
-    notifyPrivateDeviceAccessChanged();
-    await resolveActiveWorkspaceNow(userId);
+    }
+    await openInventoryAndWorkspace(userId);
   } catch (error) {
     console.warn("[auth] could not open this account's keys after sign-in", error);
   } finally {
@@ -274,4 +373,8 @@ export async function finishPasswordUnlockForSession(): Promise<void> {
 export function forgetPasswordUnlock(): void {
   forget();
   recoveryToSave = null;
+  dropKeysNeedRecovery();
+  keysStale = null;
+  askedStale.clear();
+  notify();
 }

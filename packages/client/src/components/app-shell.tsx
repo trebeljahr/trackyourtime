@@ -70,6 +70,7 @@ import { useRunningEntry, useSync } from "@/hooks/use-sync";
 import { OfflineQueueProvider } from "@/providers/offline-queue-provider";
 import { useFormatSettings } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
+import { PrivateKeysNotice } from "@/components/private-keys-notice";
 import { signOut } from "@/lib/auth-client";
 import { isActiveRoute, type NavItem } from "@/lib/nav";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
@@ -569,6 +570,7 @@ function AppShellChrome({ children }: AppShellProps): React.JSX.Element {
             className="min-w-0 flex-1 px-3 py-4 md:px-6 md:py-6"
             data-testid="app-main"
           >
+            <PrivateKeysNotice />
             {children}
           </main>
         </div>

@@ -87,7 +87,7 @@ export const settings = {
     recoveryExplanation: "Password resets restore account access. Unlocking encrypted content also needs an enrolled passkey or your recovery key. Keep a recovery copy outside this app.",
     prepare: "Set up private data keys", saveRecovery: "Save this recovery key in a safe place. Anyone holding it and your encrypted identity can unlock your private data.",
     downloadRecovery: "Save recovery key", confirmRecovery: "Enter its last 8 characters to confirm you saved it", finishSetup: "Save private data keys",
-    unlockPasskey: "Unlock with passkey", recoveryKey: "Recovery key", unlockRecovery: "Unlock with recovery key", unlocked: "Private data keys are unlocked for this session.",
+    unlockPasskey: "Unlock with passkey", recoveryKey: "Recovery key", unlockRecovery: "Unlock with recovery key", newRecovery: "Create a new recovery key", newRecoveryDetail: "The old recovery key stops working.", unlocked: "Private data keys are unlocked for this session.",
     addPasskey: "Use a passkey for encryption", lock: "Lock private data", passkeyName: "Private data", fingerprint: "Encryption key fingerprint: {fingerprint}",
     passkeyNoEncryption: "This passkey is available for sign-in, but this device did not provide encryption support. Keep using your recovery key to unlock private data.",
     failed: "Could not complete this request. Check your recovery key or passkey and try again. Existing encrypted data has not been replaced.",

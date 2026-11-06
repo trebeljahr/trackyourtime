@@ -28,11 +28,16 @@ export type PasswordKdfAnswer = { state: PasswordKdfState; kdf: PasswordKdfParam
 
 export const PASSWORD_KDF_FIELD = "passwordKdf";
 export const PASSWORD_KDF_PENDING_FIELD = "passwordKdfPending";
+/** Set by a password reset: the account keys' password envelope was sealed
+ * under the old password. A device that still holds the keys clears it after
+ * sealing them again under the new one (`passwordKeysStatus` below). */
+export const PASSWORD_KEYS_STALE_FIELD = "passwordKeysStale";
 
 /** better-auth `user.additionalFields`. Settable in the sign-up body only. */
 export const passwordKdfUserFields = {
   [PASSWORD_KDF_FIELD]: { type: "string", required: false, input: true },
   [PASSWORD_KDF_PENDING_FIELD]: { type: "boolean", required: false, input: false },
+  [PASSWORD_KEYS_STALE_FIELD]: { type: "boolean", required: false, input: false },
 } as const;
 
 const base64url = (bytes: Buffer) => bytes.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -86,7 +91,7 @@ export function canonicalPasswordKdfOnCreate<T extends Record<string, unknown>>(
   // better-auth merges hook output over its input, so a dropped value is
   // written as null rather than deleted.
   const kdf = parsePasswordKdf(user[PASSWORD_KDF_FIELD]);
-  return { ...user, [PASSWORD_KDF_FIELD]: kdf ? serializePasswordKdf(kdf) : null, [PASSWORD_KDF_PENDING_FIELD]: null } as T;
+  return { ...user, [PASSWORD_KDF_FIELD]: kdf ? serializePasswordKdf(kdf) : null, [PASSWORD_KDF_PENDING_FIELD]: null, [PASSWORD_KEYS_STALE_FIELD]: null } as T;
 }
 
 /**
@@ -98,7 +103,7 @@ export function canonicalPasswordKdfOnCreate<T extends Record<string, unknown>>(
  * adapter, which runs no hooks.
  */
 export function refusesPasswordKdfUpdate(update: Record<string, unknown>): boolean {
-  return PASSWORD_KDF_FIELD in update || PASSWORD_KDF_PENDING_FIELD in update;
+  return PASSWORD_KDF_FIELD in update || PASSWORD_KDF_PENDING_FIELD in update || PASSWORD_KEYS_STALE_FIELD in update;
 }
 
 /** The slice of better-auth's `AuthContext` the upgrade needs. */
@@ -148,4 +153,33 @@ export async function upgradeToLoginSecret(
   await context.adapter.update({ model: "user", where, update: { [PASSWORD_KDF_FIELD]: serializePasswordKdf(kdf), [PASSWORD_KDF_PENDING_FIELD]: true } });
   await context.adapter.update({ model: "account", where: [{ field: "id", value: credential.id }], update: { password: await context.password.hash(input.loginSecret) } });
   await context.adapter.update({ model: "user", where, update: { [PASSWORD_KDF_PENDING_FIELD]: false } });
+}
+
+/**
+ * `emailAndPassword.onPasswordReset`: the new password was derived under the
+ * same parameters, so the keys' password envelope (sealed under the old one)
+ * no longer opens. Only accounts with parameters can have such an envelope.
+ */
+export async function markPasswordKeysStale(context: Pick<PasswordUpgradeContext, "adapter">, userId: string): Promise<void> {
+  const where = [{ field: "id", value: userId }];
+  const user = await context.adapter.findOne<KdfUserRow>({ model: "user", where });
+  if (!user || !parsePasswordKdf(user[PASSWORD_KDF_FIELD])) return;
+  await context.adapter.update({ model: "user", where, update: { [PASSWORD_KEYS_STALE_FIELD]: true } });
+}
+
+export async function passwordKeysStale(context: Pick<PasswordUpgradeContext, "adapter">, userId: string): Promise<boolean> {
+  const user = await context.adapter.findOne<KdfUserRow & { [PASSWORD_KEYS_STALE_FIELD]?: unknown }>({ model: "user", where: [{ field: "id", value: userId }] });
+  return user?.[PASSWORD_KEYS_STALE_FIELD] === true;
+}
+
+export async function clearPasswordKeysStale(context: Pick<PasswordUpgradeContext, "adapter">, userId: string): Promise<void> {
+  await context.adapter.update({ model: "user", where: [{ field: "id", value: userId }], update: { [PASSWORD_KEYS_STALE_FIELD]: false } });
+}
+
+/** Whether `loginSecret` is the account's current password, as sign-in would decide. */
+export async function verifyLoginSecret(context: PasswordUpgradeContext, userId: string, loginSecret: string): Promise<boolean> {
+  if (!LOGIN_SECRET_PATTERN.test(loginSecret)) return false;
+  const credential = (await context.internalAdapter.findAccounts(userId)).find((account) => account.providerId === "credential" && account.password);
+  if (!credential?.password) return false;
+  return context.password.verify({ hash: credential.password, password: loginSecret });
 }

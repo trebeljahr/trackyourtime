@@ -1,5 +1,5 @@
 {
-  "apiLevel": 42,
+  "apiLevel": 43,
   "minClientApiLevel": 1,
   "procedures": {
     "accountPassword.kdf": {
@@ -36,9 +36,16 @@
       },
       "type": "query"
     },
+    "accountPassword.keysRewrapped": {
+      "input": null,
+      "type": "mutation"
+    },
+    "accountPassword.keysStatus": {
+      "input": null,
+      "type": "query"
+    },
     "accountPassword.upgrade": {
       "input": {
-        "additionalProperties": false,
         "properties": {
           "current": {
             "maxLength": 1024,
@@ -82,6 +89,21 @@
           "current",
           "loginSecret",
           "kdf"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
+    "accountPassword.verify": {
+      "input": {
+        "properties": {
+          "loginSecret": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "loginSecret"
         ],
         "type": "object"
       },

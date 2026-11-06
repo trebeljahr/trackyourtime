@@ -114,6 +114,8 @@ function ResetPasswordForm() {
         />
       </div>
 
+      <p className="text-sm text-muted-foreground">{t("auth.reset.keys")}</p>
+
       <button
         type="submit"
         disabled={loading}

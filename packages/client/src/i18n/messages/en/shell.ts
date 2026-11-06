@@ -250,6 +250,8 @@ export const shell = {
       /** better-auth's INVALID_TOKEN: the link expired or was already used. */
       expired: "This reset link has expired or was already used. Request a new one.",
       requestNew: "Request a new link",
+      /** Password unlock: what a reset means for the encrypted data. */
+      keys: "Your encrypted data opens with your password. After a reset, a device where you are still signed in updates it for the new password. On other devices, keep your recovery key at hand.",
     },
   },
   /** The phone app's server choice on /login and /signup. */
@@ -277,6 +279,28 @@ export const shell = {
    * The persistent banner when this app and its server cannot work together
    * (docs/versioning.md). Shown after mount only.
    */
+  /** components/private-keys-notice.tsx: the account keys after sign-in. */
+  keysNotice: {
+    saveTitle: "Save your recovery key",
+    saveDetail: "Your time data is encrypted with keys that open with your password. If you forget the password, this recovery key is the only other way in, and we cannot recover it for you. Keep a copy outside this app, for example in a password manager.",
+    copy: "Copy",
+    copied: "Copied",
+    download: "Download",
+    saved: "I've saved it",
+    later: "Later",
+    recoverTitle: "Your password was reset",
+    recoverDetail: "Your encrypted data still opens with the old password, so this device cannot open it yet. Enter your recovery key. Or open Track Your Time on a device where you are still signed in, and enter the new password there.",
+    recoverNeither: "Without the recovery key or a signed-in device, nobody can open the encrypted data, including us.",
+    recoveryKey: "Recovery key",
+    unlock: "Open with recovery key",
+    wrongRecovery: "That recovery key does not open this account's keys.",
+    staleTitle: "Your password was reset",
+    staleDetail: "Enter the new password once, so your encrypted data opens with it on your other devices too.",
+    password: "New password",
+    update: "Update keys",
+    wrongPassword: "That is not the account's current password.",
+    failed: "Something went wrong. Try again.",
+  },
   versionBanner: {
     serverTooOld:
       "This server runs v{release} (API level {level}). This app needs level {min} or higher. Ask your server admin to update.",

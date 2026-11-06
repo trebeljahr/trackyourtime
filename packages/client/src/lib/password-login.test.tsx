@@ -162,6 +162,9 @@ afterEach(() => {
 // password goes straight through, so these tests keep pinning session
 // hydration to exactly one auth request.
 vi.mock("@/lib/password-unlock", () => ({
+  // The keys notice in the app shell: nothing to show.
+  recoveryKeyToSave: () => null, passwordKeysNeedRecovery: () => false, passwordKeysStale: () => false,
+  subscribePasswordUnlockNotices: () => () => {}, checkPasswordKeysStale: async () => {},
   signInWithPasswordUnlock: (_email: string, password: string, attempt: (secret: string) => unknown) => attempt(password),
   finishPasswordUnlock: async () => {},
   forgetPasswordUnlock: () => {},
@@ -172,6 +175,7 @@ vi.mock("@/components/app-shell", () => ({ AppShell: ({ children }: { children: 
 // The private-data device gate between the layout and the shell has its own
 // tests (private-workspace-boundary, private-device-connection). Here it
 // stands aside, like AppShell, so what is asserted is the auth path alone.
+vi.mock("@/components/private-keys-notice", () => ({ PrivateKeysNotice: () => null }));
 vi.mock("@/components/private-workspace-boundary", () => ({
   PrivateWorkspaceBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));

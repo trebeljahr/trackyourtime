@@ -1,4 +1,4 @@
-import { canonicalPasswordKdfOnCreate, passwordKdfUserFields, refusesPasswordKdfUpdate } from "./password-kdf.js";
+import { canonicalPasswordKdfOnCreate, markPasswordKeysStale, passwordKdfUserFields, refusesPasswordKdfUpdate } from "./password-kdf.js";
 import { passkeyPlugin } from "./passkeys.js";
 import { loginSessionPlugin } from "./login-session.js";
 import { emailLinkForWeb } from "./email-link.js";
@@ -110,6 +110,18 @@ export async function initAuth(): Promise<void> {
        * once after the deploy that configures mail (docs/deploy.md).
        */
       requireEmailVerification: isEmailDeliveryConfigured(),
+      /**
+       * Password unlock: the account keys' password envelope was sealed under
+       * the old password. Flag it so a device that still holds the keys can
+       * seal them again (auth/password-kdf.ts → markPasswordKeysStale).
+       */
+      async onPasswordReset({ user }: { user: { id: string } }) {
+        try {
+          await markPasswordKeysStale((await getAuth().$context) as unknown as Parameters<typeof markPasswordKeysStale>[0], user.id);
+        } catch (error) {
+          console.warn("[auth] could not flag the account keys after a password reset", error);
+        }
+      },
       async sendResetPassword({
         user,
         url,

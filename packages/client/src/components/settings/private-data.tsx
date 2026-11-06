@@ -11,6 +11,9 @@ import { authClient } from "@/lib/auth-client";
 import { downloadBlob } from "@/lib/download";
 import { evaluatePrivatePasskey, lockAndForgetPrivateData, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
 import { preparePrivateAccountSetup, finishPrivateAccountSetup } from "@/lib/private-account-setup";
+import { recoveryKeyToSave, subscribePasswordUnlockNotices } from "@/lib/password-unlock";
+import { replaceRecoveryKey } from "@/lib/private-recovery-key";
+import { SaveRecoveryKey } from "@/components/private-keys-notice";
 import { useIsTokenShell } from "@/hooks/use-shell";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
@@ -38,6 +41,7 @@ function PrivateDataForUser({ id, unlockOnly, hideDeviceUnlock }: { id: string; 
   const [problem, setProblem] = React.useState<string | null>(null);
   const [, redraw] = React.useReducer((v: number) => v + 1, 0);
   React.useEffect(() => subscribePrivateSession(redraw), []);
+  React.useEffect(() => subscribePasswordUnlockNotices(redraw), []);
   const server = privateDataOrigin();
   const [local, setLocal] = React.useState<{ scope: string; identity: PrivateIdentity | null; failed: boolean } | null>(null);
   const cacheScope = JSON.stringify([server, id]);
@@ -115,7 +119,9 @@ function PrivateDataForUser({ id, unlockOnly, hideDeviceUnlock }: { id: string; 
             assertCurrent(); if (privateSession(id) !== current) throw new Error("Private data is locked");
             await updateIdentity.mutateAsync({ identity: next, revision, signature }); await remember(next); await account.refetch();
           } finally { secret.fill(0); }
-        })}>{t("privateData.addPasskey")}</Button><Button variant="outline" onClick={lockAndForgetPrivateData}>{t("privateData.lock")}</Button></div>
+        })}>{t("privateData.addPasskey")}</Button><Button variant="outline" disabled={pending || !advertised || replaced || account.isError} onClick={() => void run(async () => { await replaceRecoveryKey(id); await account.refetch(); })} data-testid="new-recovery-key">{t("privateData.newRecovery")}</Button><Button variant="outline" onClick={lockAndForgetPrivateData}>{t("privateData.lock")}</Button></div>
+        <p className="text-sm text-muted-foreground">{t("privateData.newRecoveryDetail")}</p>
+        {!unlockOnly && recoveryKeyToSave(id) && <SaveRecoveryKey userId={id} recoveryKey={recoveryKeyToSave(id)!} />}
       </div>}
       {!unlockOnly && <PrivateActivity userId={id} />}
       {!unlockOnly && identity && <PrivateKeyCode userId={id} />}

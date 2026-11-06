@@ -10,6 +10,10 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { derivePasswordKeys, newPasswordKdf } from "@starter/core";
 import {
   canonicalPasswordKdfOnCreate,
+  clearPasswordKeysStale,
+  markPasswordKeysStale,
+  passwordKeysStale,
+  verifyLoginSecret,
   decoyPasswordKdf,
   passwordKdfFor,
   passwordKdfUserFields,
@@ -24,13 +28,19 @@ const db: Record<string, Record<string, unknown>[]> = { user: [], session: [], a
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let auth: any;
 let context: PasswordUpgradeContext;
+let resetToken = "";
 
 before(async () => {
   auth = betterAuth({
     database: memoryAdapter(db as never),
     secret: SECRET,
     baseURL: "http://localhost:3000",
-    emailAndPassword: { enabled: true, requireEmailVerification: false },
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: false,
+      sendResetPassword: async ({ token }: { token: string }) => { resetToken = token; },
+      onPasswordReset: async ({ user }: { user: { id: string } }) => markPasswordKeysStale(context, user.id),
+    },
     user: { additionalFields: passwordKdfUserFields },
     databaseHooks: {
       user: {
@@ -102,5 +112,27 @@ describe("password unlock on the server", () => {
     await upgradeToLoginSecret(context, id, { current: "a cut password", loginSecret, kdf });
     assert.deepEqual(answer("cut@example.test"), { state: "ready", kdf });
     assert.equal(await signIn("cut@example.test", loginSecret), true);
+  });
+
+  it("flags the keys stale on a reset, verifies the new secret and clears the flag", async () => {
+    const kdf = newPasswordKdf(), before = await derivePasswordKeys("before the reset", kdf), after = await derivePasswordKeys("after the reset", kdf);
+    await auth.api.signUpEmail({ body: { email: "reset@example.test", password: before.loginSecret, name: "Reset", passwordKdf: JSON.stringify(kdf) } });
+    const id = String(userRow("reset@example.test").id);
+    assert.equal(await passwordKeysStale(context, id), false);
+    await auth.api.requestPasswordReset({ body: { email: "reset@example.test", redirectTo: "http://localhost:3000/reset-password" } });
+    await auth.api.resetPassword({ body: { newPassword: after.loginSecret, token: resetToken } });
+    assert.equal(await passwordKeysStale(context, id), true);
+    assert.equal(await verifyLoginSecret(context, id, before.loginSecret), false);
+    assert.equal(await verifyLoginSecret(context, id, "not a login secret"), false);
+    assert.equal(await verifyLoginSecret(context, id, after.loginSecret), true);
+    await clearPasswordKeysStale(context, id);
+    assert.equal(await passwordKeysStale(context, id), false);
+  });
+
+  it("does not flag a legacy account, which has no password envelope", async () => {
+    await auth.api.signUpEmail({ body: { email: "legacy-reset@example.test", password: "a legacy password", name: "Legacy" } });
+    await auth.api.requestPasswordReset({ body: { email: "legacy-reset@example.test", redirectTo: "http://localhost:3000/reset-password" } });
+    await auth.api.resetPassword({ body: { newPassword: "a new legacy password", token: resetToken } });
+    assert.equal(await passwordKeysStale(context, String(userRow("legacy-reset@example.test").id)), false);
   });
 });

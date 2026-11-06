@@ -32,6 +32,9 @@ vi.mock("@/components/ui/sonner", () => ({ toast: { success: vi.fn(), error: vi.
 // Password unlock has its own tests; an account without parameters (legacy
 // or an older server) sends both passwords as typed, which these tests pin.
 vi.mock("@/lib/password-unlock", () => ({
+  // The keys notice in the app shell: nothing to show.
+  recoveryKeyToSave: () => null, passwordKeysNeedRecovery: () => false, passwordKeysStale: () => false,
+  subscribePasswordUnlockNotices: () => () => {}, checkPasswordKeysStale: async () => {},
   passwordKdfOf: async () => null,
   passwordSecretFor: async (_email: string, password: string) => password,
   newPasswordSecretFor: async (_kdf: unknown, password: string) => ({ secret: password, wrappingKey: null }),

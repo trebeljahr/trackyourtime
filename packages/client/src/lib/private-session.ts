@@ -109,6 +109,12 @@ export async function unlockPrivateRecovery(userId: string, identity: PrivateIde
   }
   finally { raw.fill(0); }
 }
+/** A new recovery key for unlocked keys: the envelope to store and the key to show once. */
+export async function newRecoveryEnvelope(userId: string, secrets: UnlockedIdentity): Promise<{ recovery: Ciphertext; recoveryKey: string }> {
+  const recovery = randomSecret();
+  try { return { recovery: await seal(recovery, secrets, context(userId)), recoveryKey: encodeSecret(recovery) }; }
+  finally { recovery.fill(0); }
+}
 /** Password unlock: the identity sealed with the device-derived wrapping key. */
 export async function sealIdentityForPassword(userId: string, wrappingKey: Uint8Array, secrets: UnlockedIdentity): Promise<Ciphertext> {
   return seal(wrappingKey, secrets, context(userId));

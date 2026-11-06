@@ -41,6 +41,9 @@ vi.mock("better-auth/client/plugins", () => ({
 const clearNativeToken = vi.fn(async () => undefined);
 // Password unlock has its own tests; here the typed password goes through.
 vi.mock("@/lib/password-unlock", () => ({
+  // The keys notice in the app shell: nothing to show.
+  recoveryKeyToSave: () => null, passwordKeysNeedRecovery: () => false, passwordKeysStale: () => false,
+  subscribePasswordUnlockNotices: () => () => {}, checkPasswordKeysStale: async () => {},
   signInWithPasswordUnlock: (_email: string, password: string, attempt: (secret: string) => unknown) => attempt(password),
   finishPasswordUnlock: async () => {},
   forgetPasswordUnlock: () => {},

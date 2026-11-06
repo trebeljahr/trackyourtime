@@ -244,6 +244,7 @@ export const shell: Translation<typeof source> = {
       failed: "Das Passwort konnte nicht zurückgesetzt werden. Vielleicht ist der Link abgelaufen.",
       expired: "Dieser Link zum Zurücksetzen ist abgelaufen oder wurde schon benutzt. Fordere einen neuen an.",
       requestNew: "Neuen Link anfordern",
+      keys: "Deine verschlüsselten Daten öffnen sich mit deinem Passwort. Nach dem Zurücksetzen passt ein Gerät, auf dem du noch angemeldet bist, sie an das neue Passwort an. Auf anderen Geräten brauchst du deinen Wiederherstellungsschlüssel.",
     },
   },
   serverPicker: {
@@ -264,6 +265,27 @@ export const shell: Translation<typeof source> = {
     serverTooOld:
       "{host} läuft mit einem API-Level ({level}), das diese App nicht nutzen kann. Diese App braucht Level {min} oder höher. Bitte die Administration des Servers, ihn zu aktualisieren.",
     appTooOld: "{host} braucht eine neuere Version dieser App. Aktualisiere die App und versuche es dann erneut.",
+  },
+  keysNotice: {
+    saveTitle: "Speichere deinen Wiederherstellungsschlüssel",
+    saveDetail: "Deine Zeitdaten sind mit Schlüsseln verschlüsselt, die sich mit deinem Passwort öffnen. Wenn du das Passwort vergisst, ist dieser Wiederherstellungsschlüssel der einzige andere Weg hinein, und wir können ihn nicht für dich wiederherstellen. Bewahre eine Kopie außerhalb dieser App auf, zum Beispiel in einem Passwort-Manager.",
+    copy: "Kopieren",
+    copied: "Kopiert",
+    download: "Herunterladen",
+    saved: "Ich habe ihn gespeichert",
+    later: "Später",
+    recoverTitle: "Dein Passwort wurde zurückgesetzt",
+    recoverDetail: "Deine verschlüsselten Daten öffnen sich noch mit dem alten Passwort, deshalb kann dieses Gerät sie noch nicht öffnen. Gib deinen Wiederherstellungsschlüssel ein. Oder öffne Track Your Time auf einem Gerät, auf dem du noch angemeldet bist, und gib dort das neue Passwort ein.",
+    recoverNeither: "Ohne Wiederherstellungsschlüssel und ohne angemeldetes Gerät kann niemand die verschlüsselten Daten öffnen, auch wir nicht.",
+    recoveryKey: "Wiederherstellungsschlüssel",
+    unlock: "Mit Wiederherstellungsschlüssel öffnen",
+    wrongRecovery: "Dieser Wiederherstellungsschlüssel öffnet die Schlüssel dieses Kontos nicht.",
+    staleTitle: "Dein Passwort wurde zurückgesetzt",
+    staleDetail: "Gib das neue Passwort einmal ein, damit sich deine verschlüsselten Daten auch auf deinen anderen Geräten damit öffnen.",
+    password: "Neues Passwort",
+    update: "Schlüssel aktualisieren",
+    wrongPassword: "Das ist nicht das aktuelle Passwort des Kontos.",
+    failed: "Etwas ist schiefgelaufen. Versuche es noch einmal.",
   },
   versionBanner: {
     serverTooOld:

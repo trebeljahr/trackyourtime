@@ -1330,9 +1330,8 @@ on the device before anything is sent:
 - `PrivateIdentity.password = { kdf, envelope }` holds the identity sealed with
   the wrapping key. Optional: identities enrolled earlier have none.
 
-Built so far: steps 1–4 and most of 5 (API 42, capability
-`auth.passwordUnlock`). Still to build: the recovery-key step of a reset and
-the recovery key card.
+Built: steps 1–6 (API 42, capability `auth.passwordUnlock`; API 43,
+capability `auth.passwordKeysRepair`, for the reset repair in step 5).
 
 1. **Pre-sign-in parameters (built).** `accountPassword.kdf({ email })` is
    public and answers `{ state, kdf }`. Parameters live on the better-auth
@@ -1373,15 +1372,36 @@ the recovery key card.
    `signInWithPassword` (extension popup, moving between servers) derives
    too, without zod, because Raycast vendors it; it never upgrades or opens
    keys. An older server without the endpoint gets the typed password.
-5. **Password reset (built, partly).** `accountPassword.kdfForReset` answers
-   the parameters for a valid reset link, so the new password is derived. The
-   old envelope no longer opens: a device that stayed unlocked re-seals it at
-   its next sign-in, otherwise the recovery key opens the keys. A reset page
-   that asks for the recovery key, and a plain explanation when neither is
-   available, are still to build.
-6. **Recovery key card (to build).** Keys created at sign-in keep their
-   recovery key in memory (`recoveryKeyToSave`) for a card: download, copy,
-   "I've saved it"; dismissable; also in Settings.
+5. **Password reset (built).** `accountPassword.kdfForReset` answers the
+   parameters for a valid reset link, so the new password is derived under
+   the same salt. The old envelope no longer opens, so better-auth's
+   `onPasswordReset` sets `passwordKeysStale` on the user (only for accounts
+   with parameters). Three ways back, all in `lib/password-unlock.ts` and
+   shown by `components/private-keys-notice.tsx` above the page:
+   - a device that stayed unlocked and signs in again re-seals the keys at
+     once;
+   - a device that stayed unlocked and is still signed in (resets revoke no
+     sessions) reads `accountPassword.keysStatus` once per load and asks for
+     the new password; `accountPassword.verify` (10 per 15 minutes per user)
+     checks it before anything is sealed, so a typo cannot replace the
+     envelope with one nobody can open;
+   - a device that cannot open the keys holds the new password's wrapping key
+     in memory and asks for the recovery key; once the keys open by any route,
+     `repairKeysAfterUnlock` seals them under the new password and rebuilds
+     the inventory. The notice says plainly that without the recovery key or a
+     signed-in device nobody can open the encrypted data.
+   Every successful re-seal (`rewrapKeysForPassword`, also after a password
+   change) and every password open clears the flag
+   (`accountPassword.keysRewrapped`). The reset page says what a reset means
+   for the encrypted data before it is submitted.
+6. **Recovery key card (built).** Keys created at sign-in keep their recovery
+   key in memory only (`recoveryKeyToSave`); the notice shows it with copy,
+   download, "I've saved it" and "Later" (until the next page load; a reload
+   loses the key). Settings → Account → "Create a new recovery key" replaces
+   the recovery envelope in a signed identity update while the keys are open
+   (`lib/private-recovery-key.ts`), so a lost or unseen key costs nothing but
+   that click; the old key stops working. Neither the server nor the device
+   stores the key, and no email ever contains it.
 
 **Staying unlocked on a device.** Keys opened with the password are sealed
 with a non-extractable AES-GCM key kept as a `CryptoKey` in IndexedDB
