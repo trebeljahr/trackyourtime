@@ -26,7 +26,17 @@ let version = 0;
 export const privateSessionVersion = (): number => version;
 const changed = () => { version++; for (const listener of listeners) listener(); };
 export function lockPrivateData(): void { generation++; session = null; void desktopActivity()?.lock?.().catch(() => undefined); changed(); }
-subscribeApiOrigin(() => { resolvedAccount = undefined; lockPrivateData(); for (const listener of accountListeners) listener(); });
+// api-origin publishes on readiness too (on web, once, with nothing changed).
+// Only a different server invalidates the account: resetting it on a no-op
+// publish after AuthProvider resolved it left every private-scoped request
+// waiting for an account that was never announced again (a stuck tracker
+// after reload).
+let accountOrigin: string | undefined;
+subscribeApiOrigin(() => {
+  if (accountOrigin !== undefined && privateDataOrigin() === accountOrigin) return;
+  accountOrigin = undefined;
+  resolvedAccount = undefined; lockPrivateData(); for (const listener of accountListeners) listener();
+});
 export function privateSession(userId: string): UnlockedIdentity | null {
   return session?.userId === userId && session.origin === getApiOrigin() ? session.secrets : null;
 }
@@ -153,7 +163,7 @@ export async function resumePrivateActivity(userId: string): Promise<void> {
 }
 export function privateAccountChanged(userId: string | null): void {
   if ((resolvedAccount != null && resolvedAccount !== userId) || (session && session.userId !== userId)) lockPrivateData();
-  resolvedAccount = userId;
+  resolvedAccount = userId; accountOrigin = privateDataOrigin();
   for (const listener of accountListeners) listener();
 }
 
