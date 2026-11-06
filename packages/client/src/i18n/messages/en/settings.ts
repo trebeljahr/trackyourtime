@@ -1082,6 +1082,11 @@ export const settings = {
     invalidCodeOrBackup: "That code is not valid. Use the next code from your authenticator app, or a backup code you have not used.",
     tooManyAttempts: "Too many wrong authenticator codes. Wait 15 minutes, or use a backup code.",
     alreadyOn: "Two-factor authentication is already on. Reload the page.",
+    trustedBrowsers: {
+      button: "Forget trusted browsers",
+      forgotten: "{count, plural, =0 {No browser was trusted} one {Forgot # trusted browser} other {Forgot # trusted browsers}}. Each asks for a code at its next sign-in.",
+      failed: "Could not forget the trusted browsers. Try again.",
+    },
     regenerate: {
       button: "New backup codes",
       title: "Make new backup codes?",

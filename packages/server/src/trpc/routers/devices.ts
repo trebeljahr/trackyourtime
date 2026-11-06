@@ -15,6 +15,7 @@ import {
 } from "@starter/shared";
 import { fromNodeHeaders } from "better-auth/node";
 import { getAuth } from "../../auth/auth.js";
+import { forgetTrustedBrowsers, type SecondFactorAdapter } from "../../auth/second-factor.js";
 import { describeClient, normalizeClientKind } from "../../auth/client-label.js";
 import { parseApiLevel, parseClientVersion } from "@starter/shared";
 import { publishToUser } from "../../ws/sync.js";
@@ -111,6 +112,15 @@ export const devicesRouter = router({
       publishToUser(ctx.user.id, { kind: "settings.changed" }, input.originId);
       return { id: input.id };
     }),
+
+  /**
+   * Forget every browser this person ticked "Trust this browser" in, so each
+   * asks for the code again at its next sign-in. Signs nobody out.
+   */
+  forgetTrustedBrowsers: protectedProcedure.mutation(async ({ ctx }): Promise<{ forgotten: number }> => {
+    const adapter = (await getAuth().$context).adapter as SecondFactorAdapter;
+    return { forgotten: await forgetTrustedBrowsers(adapter, ctx.user.id) };
+  }),
 
   /** Sign out everywhere except here — the "I lost my laptop" button. */
   revokeOthers: protectedProcedure

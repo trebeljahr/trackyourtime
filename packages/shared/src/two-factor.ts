@@ -39,6 +39,13 @@ export const TWO_FACTOR_OPTION_NOT_ALLOWED = "TWO_FACTOR_OPTION_NOT_ALLOWED";
  */
 export const TWO_FACTOR_STEP_UP_REQUIRED = "TWO_FACTOR_STEP_UP_REQUIRED";
 
+/**
+ * How long "Trust this browser" skips the code at sign-in. Renewed at every
+ * sign-in from that browser; forgotten on any change to the account's
+ * security (auth/two-factor-guard.ts).
+ */
+export const TWO_FACTOR_TRUST_DAYS = 60;
+
 /** How long a verified code lets a session mint an API token. */
 export const TWO_FACTOR_STEP_UP_SECONDS = 10 * 60;
 /** Wrong authenticator codes from inside a session, per user and window. */

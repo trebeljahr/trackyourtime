@@ -838,7 +838,11 @@ second step. The Raycast client pairs the same way, so it is not affected. A
 passkey sign-in asks for no code, because the passkey already checks the
 device PIN or biometric. Google sign-in asks for a code too: after Google,
 the sign-in page asks for the authenticator code or a backup code. Devices
-that are already signed in stay signed in.
+that are already signed in stay signed in. **Trust this browser** on the code
+step skips the code in that browser for 60 days; the password is still asked
+for. Changing the password, a password reset, turning two-factor
+authentication off, signing out everywhere and **Forget trusted browsers** in
+Settings end that trust for every browser.
 
 Turning two-factor authentication off, making new backup codes and deleting
 the account need the password and a code. Creating an API token needs a code

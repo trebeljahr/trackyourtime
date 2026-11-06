@@ -90,6 +90,23 @@ describe("the two-factor step on /login", () => {
     expect(getSession).toHaveBeenCalled();
   });
 
+  it("trusts the browser only when the box is ticked", async () => {
+    await submitPassword();
+    await screen.findByTestId("login-two-factor");
+    fireEvent.click(screen.getByTestId("two-factor-trust"));
+    enterCode("123456");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/track"));
+    expect(verifyTotp).toHaveBeenCalledWith({ code: "123456", trustDevice: true });
+  });
+
+  it("offers no trust box in the phone and desktop apps, which keep no cookies", async () => {
+    native = true;
+    challengeHeader = true;
+    await submitPassword();
+    await screen.findByTestId("login-two-factor");
+    expect(screen.queryByTestId("two-factor-trust")).toBeNull();
+  });
+
   it("keeps a wrong code on the step with a reason", async () => {
     verifyTotp.mockResolvedValue({ error: { code: "INVALID_CODE" } });
     await submitPassword();

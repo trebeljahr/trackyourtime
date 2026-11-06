@@ -37,6 +37,7 @@ import { DEVICE_FLOW_CLIENT_IDS } from "./client-label.js";
 import { versionFieldsForNewSession } from "./client-version.js";
 import { createPersonalWorkspace } from "./personal-workspace.js";
 import { sessionCreationAllowed, twoFactorGuard, type GuardSession } from "./two-factor-guard.js";
+import { forgetTrustedBrowsers } from "./second-factor.js";
 import {
   clientKindForNewSession,
   expiryForNewSession,
@@ -125,6 +126,12 @@ export async function initAuth(): Promise<void> {
        * seal them again (auth/password-kdf.ts → markPasswordKeysStale).
        */
       async onPasswordReset({ user }: { user: { id: string } }) {
+        // A reset is "I lost control": no browser stays trusted either.
+        try {
+          await forgetTrustedBrowsers((await getAuth().$context).adapter, user.id);
+        } catch (error) {
+          console.warn("[auth] could not forget trusted browsers after a password reset", error);
+        }
         try {
           await markPasswordKeysStale((await getAuth().$context) as unknown as Parameters<typeof markPasswordKeysStale>[0], user.id);
         } catch (error) {

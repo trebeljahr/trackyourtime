@@ -36,7 +36,7 @@
  */
 import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins/two-factor";
-import { DEFAULT_LOCALE, type Locale } from "@starter/shared";
+import { DEFAULT_LOCALE, TWO_FACTOR_TRUST_DAYS, type Locale } from "@starter/shared";
 import { emailLinkForWeb } from "./email-link.js";
 import { verificationEmail } from "../services/transactional-email.js";
 
@@ -72,9 +72,16 @@ export function resolveAuthConfig(source: {
  *   only once a code from the authenticator verifies, so a QR code that was
  *   never scanned cannot lock anyone out.
  * - Backup codes are stored encrypted (the library default) and shown once.
+ * - "Trust this browser" skips the code at sign-in for TWO_FACTOR_TRUST_DAYS.
  */
 export function twoFactorPlugin(): ReturnType<typeof twoFactor> {
-  return twoFactor({ issuer: TWO_FACTOR_ISSUER });
+  return twoFactor({
+    issuer: TWO_FACTOR_ISSUER,
+    // "Trust this browser": the trust cookie and its `trust-device-*` row.
+    // `auth/two-factor-guard.ts` forgets every one of them on any change to
+    // the account's security.
+    trustDeviceMaxAge: TWO_FACTOR_TRUST_DAYS * 24 * 60 * 60,
+  });
 }
 
 export type AuthMail = {

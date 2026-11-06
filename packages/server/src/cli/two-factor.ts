@@ -5,8 +5,9 @@
  * A dry run unless `--commit`: the operator sees the account, whether 2FA is
  * on and how many sessions would end before anything changes. With
  * `--commit` it clears the flag, deletes the enrolment (secret and backup
- * codes) and every `2fa-…` row naming the user (pending challenges, spent
- * codes, step-up markers and attempt counters), and signs the account out
+ * codes), every `2fa-…` row naming the user (pending challenges, spent
+ * codes, step-up markers and attempt counters) and every trusted browser
+ * (`trust-device-…`), and signs the account out
  * everywhere unless `--keep-sessions`: whoever asked for the reset has, by
  * definition, not proved the second factor.
  *
@@ -16,7 +17,7 @@
  *
  *   db.user.updateOne({ email: "x@example.com" }, { $set: { twoFactorEnabled: false } })
  *   db.twoFactor.deleteMany({ userId: ObjectId("<user id>") })
- *   db.verification.deleteMany({ value: "<user id>", identifier: /^2fa-/ })
+ *   db.verification.deleteMany({ value: "<user id>", identifier: /^(2fa-|trust-device-)/ })
  *   db.session.deleteMany({ userId: ObjectId("<user id>") })
  */
 import { CliError } from "./errors.js";
@@ -64,7 +65,7 @@ export async function resetTwoFactor(
       where: [{ field: "value", value: user.id }],
       limit: 1000,
     })
-  ).filter((row) => String(row.identifier).startsWith("2fa-"));
+  ).filter((row) => /^(2fa-|trust-device-)/.test(String(row.identifier)));
   const sessions = input.keepSessions ? 0 : (await context.internalAdapter.listSessions(user.id)).length;
   const result: TwoFactorReset = {
     userId: user.id,

@@ -1049,6 +1049,11 @@ export const settings: Translation<typeof source> = {
     invalidCodeOrBackup: "Dieser Code ist nicht gültig. Nimm den nächsten Code aus deiner Authenticator-App oder einen unbenutzten Backup-Code.",
     tooManyAttempts: "Zu viele falsche Authenticator-Codes. Warte 15 Minuten oder nimm einen Backup-Code.",
     alreadyOn: "Die Zwei-Faktor-Authentifizierung ist schon eingeschaltet. Lade die Seite neu.",
+    trustedBrowsers: {
+      button: "Vertrauten Browsern nicht mehr vertrauen",
+      forgotten: "{count, plural, =0 {Kein Browser war als vertraut gespeichert} one {# vertrauter Browser vergessen} other {# vertraute Browser vergessen}}. Jeder fragt bei der nächsten Anmeldung wieder nach einem Code.",
+      failed: "Die vertrauten Browser konnten nicht vergessen werden. Versuch es noch einmal.",
+    },
     regenerate: {
       button: "Neue Backup-Codes",
       title: "Neue Backup-Codes erstellen?",

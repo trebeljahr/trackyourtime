@@ -171,6 +171,8 @@ export const shell: Translation<typeof source> = {
     twoFactor: {
       title: "Zwei-Faktor-Authentifizierung",
       signingInAs: "Anmeldung als {email}",
+      trust: "Diesem Browser {days, number} Tage lang vertrauen",
+      trustHint: "Dein Passwort wird weiterhin abgefragt. Setze den Haken nicht auf einem fremden oder geteilten Computer.",
       afterGoogle: "Du hast dich mit Google angemeldet. Gib zum Abschluss einen Code aus deiner Authenticator-App ein.",
       nativeUnsupported:
         "Dieses Konto nutzt Zwei-Faktor-Authentifizierung. Wähle unten „Mit deinem Browser anmelden“.",

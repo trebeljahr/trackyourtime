@@ -154,6 +154,43 @@ test.describe("Two-factor authentication", () => {
 
   });
 
+  test("a trusted browser skips the code until it is forgotten", async ({ page }) => {
+    const email = `two-factor-trust-${Date.now()}@example.com`;
+    await signUpViaUI(page, { name: "Trusted", email, password: PASSWORD });
+    await page.goto("/app/settings?tab=account");
+    await page.getByTestId("two-factor-enable").click();
+    await page.getByTestId("two-factor-password").fill(PASSWORD);
+    await page.getByTestId("two-factor-password-submit").click();
+    const secret = (await page.getByTestId("two-factor-secret").textContent())?.trim() ?? "";
+    const used = new Set<number>();
+    await page.getByTestId("two-factor-verify-code").fill(await freshTotp(secret, used));
+    await page.getByTestId("two-factor-verify-submit").click();
+    await page.getByTestId("two-factor-codes-done").click();
+    await signOut(page);
+
+    // Tick "Trust this browser" once.
+    await submitPassword(page, email);
+    await page.getByTestId("two-factor-trust").check();
+    await page.getByTestId("two-factor-code").fill(await freshTotp(secret, used));
+    await page.getByTestId("two-factor-submit").click();
+    await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+    await waitForAppReady(page);
+    await signOut(page);
+
+    // The password alone now signs this browser in.
+    await submitPassword(page, email);
+    await page.waitForURL(TRACK_URL, { timeout: 10_000 });
+    await waitForAppReady(page);
+
+    // Forgotten from Settings: the code is asked for again.
+    await page.goto("/app/settings?tab=account");
+    await page.getByTestId("two-factor-forget-trusted").click();
+    await expect(page.getByText(/Forgot 1 trusted browser/)).toBeVisible();
+    await signOut(page);
+    await submitPassword(page, email);
+    await expect(page.getByTestId("login-two-factor")).toBeVisible();
+  });
+
   test("a client with no cookie jar completes the challenge through the header", async () => {
     // What the phone and desktop apps do: every request is a plain fetch with
     // no cookies, so the header is the only thing carrying the challenge.

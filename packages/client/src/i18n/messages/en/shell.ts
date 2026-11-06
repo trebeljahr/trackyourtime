@@ -177,6 +177,8 @@ export const shell = {
     twoFactor: {
       title: "Two-factor authentication",
       signingInAs: "Signing in as {email}",
+      trust: "Trust this browser for {days, number} days",
+      trustHint: "It still asks for your password. Do not tick this on a shared computer.",
       afterGoogle: "You signed in with Google. Enter a code from your authenticator app to finish.",
       nativeUnsupported:
         "This account uses two-factor authentication. Use Sign in with your browser below.",

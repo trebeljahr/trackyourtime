@@ -1288,10 +1288,23 @@ notices.
   regenerate and delete; 429 `TWO_FACTOR_TOO_MANY_ATTEMPTS`. Backup codes are
   not counted (about 59 bits each), so the owner can still disable with one
   while somebody holding a session keeps the TOTP budget spent.
-- **No trusted devices.** `trustDevice` is forced off and `disableSession:
-  true` is 400 `TWO_FACTOR_OPTION_NOT_ALLOWED`. The trust cookie would let the
-  password alone sign in for thirty days and its rows outlive disabling 2FA;
-  a 7- or 30-day session already means a code only on a new sign-in.
+- **Trusted browsers: sixty days, ended by any security change.** "Trust
+  this browser" on the code step sends `trustDevice: true`; better-auth sets
+  the signed `trust_device` cookie and a `trust-device-<id>` row (value: user
+  id) for `TWO_FACTOR_TRUST_DAYS` (`trustDeviceMaxAge`), and its sign-in hook
+  skips the challenge for that browser, rotating the row (so it slides). The
+  password is still checked. better-auth forgets only the browser whose cookie
+  a request carries, so `forgetTrustedBrowsers` deletes every row for the user
+  after `TRUST_ENDING_PATHS` (enable, disable, change-password,
+  revoke-sessions, revoke-other-sessions — Settings → Devices' "sign out
+  everywhere" goes through it), after a password reset (`onPasswordReset` in
+  `auth.ts`), from Settings → "Forget trusted browsers"
+  (`devices.forgetTrustedBrowsers`) and in `admin reset-two-factor`. Signing
+  out one device in Settings → Devices does not: nothing maps a session to a
+  trust cookie. A trusted browser also skips the code after Google
+  (`fromTrustedBrowser` in the allowlist, same HMAC and row checks as the
+  plugin, no rotation). The box is hidden in token shells, which send no
+  cookies. `disableSession: true` is 400 `TWO_FACTOR_OPTION_NOT_ALLOWED`.
 - **Session creation for a 2FA account is an allowlist**
   (`TWO_FACTOR_SESSION_PATHS`, `sessionCreationAllowed` in
   `session.create.before`): `/sign-in/email` (deleted at once), both verify

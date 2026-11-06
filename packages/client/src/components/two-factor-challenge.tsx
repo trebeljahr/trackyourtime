@@ -5,6 +5,8 @@ import * as React from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { useT } from "@/i18n/use-t";
+import { useIsTokenShell } from "@/hooks/use-shell";
+import { TWO_FACTOR_TRUST_DAYS } from "@starter/shared";
 
 type Method = "totp" | "backup";
 
@@ -40,6 +42,10 @@ export function TwoFactorChallenge({
   const [code, setCode] = React.useState("");
   const [error, setError] = React.useState("");
   const [verifying, setVerifying] = React.useState(false);
+  const [trust, setTrust] = React.useState(false);
+  // The trust cookie lives in the browser's cookie jar; the phone and desktop
+  // apps send no cookies, so the box would promise something they cannot keep.
+  const tokenShell = useIsTokenShell();
   const t = useT("shell");
   const tc = useT("common");
 
@@ -50,10 +56,11 @@ export function TwoFactorChallenge({
     setVerifying(true);
     setError("");
     try {
+      const trustDevice = trust && !tokenShell ? { trustDevice: true } : {};
       const result =
         method === "totp"
-          ? await authClient.twoFactor.verifyTotp({ code: trimmed })
-          : await authClient.twoFactor.verifyBackupCode({ code: trimmed });
+          ? await authClient.twoFactor.verifyTotp({ code: trimmed, ...trustDevice })
+          : await authClient.twoFactor.verifyBackupCode({ code: trimmed, ...trustDevice });
       if (result.error) {
         if (result.error.code === "INVALID_TWO_FACTOR_COOKIE") {
           await onDone("expired");
@@ -118,6 +125,23 @@ export function TwoFactorChallenge({
           data-testid="two-factor-code"
         />
       </div>
+
+      {tokenShell ? null : (
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm" htmlFor="two-factor-trust">
+            <input
+              id="two-factor-trust"
+              type="checkbox"
+              checked={trust}
+              onChange={(event) => setTrust(event.target.checked)}
+              className="size-4"
+              data-testid="two-factor-trust"
+            />
+            {t("auth.twoFactor.trust", { days: TWO_FACTOR_TRUST_DAYS })}
+          </label>
+          <p className="text-xs text-muted-foreground">{t("auth.twoFactor.trustHint")}</p>
+        </div>
+      )}
 
       <button
         type="submit"

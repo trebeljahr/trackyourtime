@@ -46,6 +46,7 @@ import {
 } from "../auth/account-security.js";
 import { loginSessionPlugin } from "../auth/login-session.js";
 import {
+  forgetTrustedBrowsers,
   hasLiveStepUp,
   hotp,
   readAttempts,
@@ -94,6 +95,10 @@ function build(): void {
       enabled: true,
       requireEmailVerification: false,
       revokeSessionsOnPasswordReset: true,
+      // As in auth/auth.ts: a reset forgets every trusted browser.
+      onPasswordReset: async ({ user }: { user: { id: string } }) => {
+        await forgetTrustedBrowsers((await auth.$context).adapter, user.id);
+      },
       sendResetPassword: async ({ token }: { token: string }) => {
         resetTokens.push(token);
       },
@@ -304,6 +309,38 @@ async function browserSignIn(person: Enrolled): Promise<string> {
   return jar(verified.headers, cookies);
 }
 
+/** The real `/callback/google`, end to end, with only Google's token endpoint stubbed. */
+async function googleCallback(email: string, errorCallbackURL?: string, extraCookie = ""): Promise<Reply> {
+  const realFetch = globalThis.fetch;
+  const b64 = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const idToken = [
+    b64({ alg: "RS256", kid: "test" }),
+    b64({ iss: "https://accounts.google.com", aud: GOOGLE_CLIENT_ID, sub: `google-${email}`, email, email_verified: true, name: "G", iat: now, exp: now + 600 }),
+    "signature",
+  ].join(".");
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.startsWith("https://oauth2.googleapis.com/token")) {
+      return Response.json({ access_token: "access", id_token: idToken, token_type: "Bearer", expires_in: 3600 });
+    }
+    return realFetch(input as never, init);
+  }) as typeof fetch;
+  try {
+    const start = await call("/sign-in/social", {
+      body: { provider: "google", callbackURL: "/track", ...(errorCallbackURL ? { errorCallbackURL } : {}) },
+    });
+    assert.equal(start.status, 200, JSON.stringify(start.json));
+    const state = new URL(String(start.json?.url)).searchParams.get("state") ?? "";
+    return await call(`/callback/google?code=google-code&state=${encodeURIComponent(state)}`, {
+      method: "GET",
+      headers: { cookie: [jar(start.headers), extraCookie].filter(Boolean).join("; ") },
+    });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 // --- tests ----------------------------------------------------------------------
 
 describe("auth/auth.ts wiring", () => {
@@ -452,7 +489,7 @@ describe("the sign-in challenge", () => {
     assert.equal(code(second), "INVALID_BACKUP_CODE");
   });
 
-  it("refuses disableSession and never trusts a device", async () => {
+  it("refuses disableSession", async () => {
     const person = await enrol(await signUp());
     const { value } = await challenge(person);
     const refused = await verifyWithHeader(value, person.backupCodes[0]!, {
@@ -461,11 +498,92 @@ describe("the sign-in challenge", () => {
     });
     assert.equal(refused.status, 400);
     assert.equal(code(refused), TWO_FACTOR_OPTION_NOT_ALLOWED);
+  });
+});
 
-    const trusted = await verifyWithHeader(value, await totpFor(person.id), { body: { trustDevice: true } });
-    assert.equal(trusted.status, 200, JSON.stringify(trusted.json));
-    assert.ok(!jar(trusted.headers).includes("trust_device"), "no trust cookie");
-    assert.ok(!db.verification.some((row) => String(row.identifier).startsWith("trust-device-")));
+describe("trusted browsers", () => {
+  /** A web sign-in with "Trust this browser" ticked; returns the browser's jar. */
+  async function trustThisBrowser(person: Enrolled, path = "/two-factor/verify-totp"): Promise<string> {
+    const first = await signIn(person.email);
+    const cookies = jar(first.headers);
+    const verified = await call(path, {
+      body: { code: path.endsWith("totp") ? await totpFor(person.id) : person.backupCodes[0], trustDevice: true },
+      headers: { cookie: cookies },
+    });
+    assert.equal(verified.status, 200, JSON.stringify(verified.json));
+    const after = jar(verified.headers, cookies);
+    assert.ok(after.includes("trust_device="), "a trust cookie");
+    return after;
+  }
+
+  const trustCookie = (cookies: string): string =>
+    cookies.split("; ").find((pair) => pair.startsWith("better-auth.trust_device=")) ?? "";
+
+  const trustedRows = (userId: string): Row[] =>
+    db.verification.filter((row) => row.value === userId && String(row.identifier).startsWith("trust-device-"));
+
+  it("skips the code for sixty days, with the password still required", async () => {
+    const person = await enrol(await signUp());
+    const cookies = await trustThisBrowser(person);
+    const [row] = trustedRows(person.id);
+    assert.ok(row);
+    const days = (new Date(String(row.expiresAt)).getTime() - Date.now()) / 86_400_000;
+    assert.ok(days > 59.9 && days <= 60, `trusted for ${days} days`);
+
+    const again = await signIn(person.email, { cookie: trustCookie(cookies) });
+    assert.equal(again.json?.twoFactorRedirect, undefined, "no code asked");
+    assert.ok(again.headers.get("set-auth-token"), "signed straight in");
+    const wrong = await call("/sign-in/email", { body: { email: person.email, password: "wrong password" }, headers: { cookie: trustCookie(cookies) } });
+    assert.equal(wrong.status, 401, "the password is still checked");
+
+    // Another browser still gets the challenge.
+    assert.equal((await signIn(person.email)).json?.twoFactorRedirect, true);
+  });
+
+  it("works from a backup code too, and not without the tick", async () => {
+    const person = await enrol(await signUp());
+    await trustThisBrowser(person, "/two-factor/verify-backup-code");
+    const plain = await signIn(person.email);
+    const verified = await call("/two-factor/verify-totp", { body: { code: await totpFor(person.id) }, headers: { cookie: jar(plain.headers) } });
+    assert.equal(verified.status, 200);
+    assert.ok(!jar(verified.headers).includes("trust_device="), "no tick, no trust");
+  });
+
+  for (const [what, end] of [
+    ["sign out everywhere", (person: Enrolled) => call("/revoke-other-sessions", { body: {}, headers: bearerHeaders(person.token) })],
+    ["a password change", (person: Enrolled) => call("/change-password", { body: { currentPassword: PASSWORD, newPassword: "another passphrase 9" }, headers: bearerHeaders(person.token) })],
+    ["turning 2FA off", (person: Enrolled) => call("/two-factor/disable", { body: { password: PASSWORD, code: person.backupCodes[5] }, headers: bearerHeaders(person.token) })],
+    ["a password reset", async (person: Enrolled) => {
+      await call("/request-password-reset", { body: { email: person.email, redirectTo: `${BASE}/reset-password` } });
+      return call("/reset-password", { body: { newPassword: "another passphrase 9", token: resetTokens.at(-1) } });
+    }],
+  ] as const) {
+    it(`forgets every trusted browser after ${what}`, async () => {
+      const person = await enrol(await signUp());
+      await trustThisBrowser(person);
+      await trustThisBrowser(person);
+      assert.equal(trustedRows(person.id).length, 2);
+      const reply = await end(person);
+      assert.equal(reply.status, 200, JSON.stringify(reply.json));
+      assert.equal(trustedRows(person.id).length, 0);
+    });
+  }
+
+  it("lets a trusted browser past the code after Google, and only that browser", async () => {
+    const person = await enrol(await signUp());
+    userRow(person.id).emailVerified = true;
+    const cookies = await trustThisBrowser(person);
+
+    const trusted = await googleCallback(person.email, `${BASE}/login`, trustCookie(cookies));
+    assert.equal(trusted.headers.get("location"), "/track");
+    assert.equal((await sessionFor({ cookie: jar(trusted.headers) }))?.user.id, person.id);
+
+    const other = await googleCallback(person.email, `${BASE}/login`);
+    assert.equal(new URL(String(other.headers.get("location"))).searchParams.get("two_factor"), "1");
+    // A trust cookie forged for another account is worth nothing.
+    const forged = trustCookie(cookies).replace(/=([^.]*)/, "=x$1");
+    const refused = await googleCallback(person.email, `${BASE}/login`, forged);
+    assert.equal(new URL(String(refused.headers.get("location"))).searchParams.get("two_factor"), "1");
   });
 });
 
@@ -704,38 +822,6 @@ describe("a dead session out of the cookie cache", () => {
 });
 
 describe("Google sign-in for a 2FA account", () => {
-  /** The real `/callback/google`, end to end, with only Google's token endpoint stubbed. */
-  async function googleCallback(email: string, errorCallbackURL?: string): Promise<Reply> {
-    const realFetch = globalThis.fetch;
-    const b64 = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64url");
-    const now = Math.floor(Date.now() / 1000);
-    const idToken = [
-      b64({ alg: "RS256", kid: "test" }),
-      b64({ iss: "https://accounts.google.com", aud: GOOGLE_CLIENT_ID, sub: `google-${email}`, email, email_verified: true, name: "G", iat: now, exp: now + 600 }),
-      "signature",
-    ].join(".");
-    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      if (url.startsWith("https://oauth2.googleapis.com/token")) {
-        return Response.json({ access_token: "access", id_token: idToken, token_type: "Bearer", expires_in: 3600 });
-      }
-      return realFetch(input as never, init);
-    }) as typeof fetch;
-    try {
-      const start = await call("/sign-in/social", {
-        body: { provider: "google", callbackURL: "/track", ...(errorCallbackURL ? { errorCallbackURL } : {}) },
-      });
-      assert.equal(start.status, 200, JSON.stringify(start.json));
-      const state = new URL(String(start.json?.url)).searchParams.get("state") ?? "";
-      return await call(`/callback/google?code=google-code&state=${encodeURIComponent(state)}`, {
-        method: "GET",
-        headers: { cookie: jar(start.headers) },
-      });
-    } finally {
-      globalThis.fetch = realFetch;
-    }
-  }
-
   it("gives a verified 2FA account no session, and sends it to the code step instead", async () => {
     const person = await enrol(await signUp());
     // A verified address is what lets better-auth link Google to the account.

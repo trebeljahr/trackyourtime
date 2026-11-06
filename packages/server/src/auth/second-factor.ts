@@ -10,7 +10,7 @@
  * `{ value: userId }` and an identifier prefix, on Mongo and in the in-memory
  * test adapter alike. Every row expires within fifteen minutes on its own.
  */
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { DBAdapter } from "better-auth";
 import { symmetricDecrypt } from "better-auth/crypto";
 import {
@@ -274,4 +274,51 @@ export async function hasLiveStepUp(
   now: number = Date.now(),
 ): Promise<boolean> {
   return (await liveRows(adapter, stepUpMarkerIdentifier(sessionId), now)).length > 0;
+}
+
+// --- trusted browsers -------------------------------------------------------
+
+/** better-auth's identifier prefix for a "Trust this browser" row. */
+export const TRUSTED_BROWSER_PREFIX = "trust-device-";
+
+/**
+ * Forget every browser this user trusted. better-auth deletes only the one
+ * whose cookie a request carries; the rest would keep skipping the code for
+ * up to TWO_FACTOR_TRUST_DAYS after a password change, after turning 2FA off
+ * and on again, after "sign out everywhere".
+ */
+export async function forgetTrustedBrowsers(adapter: SecondFactorAdapter, userId: string): Promise<number> {
+  const rows = await adapter.findMany<VerificationRow>({
+    model: "verification",
+    where: [{ field: "value", value: userId }],
+    limit: 1000,
+  });
+  const trusted = rows.filter((row) => row.identifier.startsWith(TRUSTED_BROWSER_PREFIX));
+  for (const row of trusted) {
+    await adapter.delete({ model: "verification", where: [{ field: "id", value: row.id }] });
+  }
+  return trusted.length;
+}
+
+/**
+ * Whether the signed `trust_device` cookie value (`<hmac>!<identifier>`)
+ * trusts this browser for `userId`: the HMAC better-auth writes, over
+ * `<userId>!<identifier>` with the instance secret, and a live row naming the
+ * user — the same checks its own sign-in hook makes.
+ */
+export async function isTrustedBrowser(
+  findVerificationValue: (identifier: string) => Promise<{ value: string; expiresAt: Date | string } | null | undefined>,
+  secret: string,
+  userId: string,
+  cookieValue: string | null | undefined,
+  now: number = Date.now(),
+): Promise<boolean> {
+  if (!cookieValue) return false;
+  const [token, identifier] = cookieValue.split("!");
+  if (!token || !identifier?.startsWith(TRUSTED_BROWSER_PREFIX)) return false;
+  const expected = Buffer.from(createHmac("sha256", secret).update(`${userId}!${identifier}`).digest("base64url"));
+  const given = Buffer.from(token);
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return false;
+  const row = await findVerificationValue(identifier);
+  return !!row && row.value === userId && toTime(row.expiresAt) > now;
 }

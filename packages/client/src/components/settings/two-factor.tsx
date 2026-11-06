@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { SettingRow } from "@/components/settings/setting-row";
 import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/lib/trpc";
 import { useT } from "@/i18n/use-t";
 import type { Translator } from "@/i18n/translator";
 import {
@@ -138,6 +139,10 @@ export function TwoFactorRow({ hasPassword }: { hasPassword: boolean | null }): 
   const [disableOpen, setDisableOpen] = React.useState(false);
   const [regenerateOpen, setRegenerateOpen] = React.useState(false);
   const t = useT("settings");
+  const forgetTrusted = trpc.devices.forgetTrustedBrowsers.useMutation({
+    onSuccess: ({ forgotten }) => toast.success(t("twoFactor.trustedBrowsers.forgotten", { count: forgotten })),
+    onError: () => toast.error(t("twoFactor.trustedBrowsers.failed")),
+  });
 
   return (
     <SettingRow
@@ -161,6 +166,16 @@ export function TwoFactorRow({ hasPassword }: { hasPassword: boolean | null }): 
             data-testid="two-factor-regenerate"
           >
             {t("twoFactor.regenerate.button")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={forgetTrusted.isPending}
+            onClick={() => forgetTrusted.mutate()}
+            data-testid="two-factor-forget-trusted"
+          >
+            {t("twoFactor.trustedBrowsers.button")}
           </Button>
           <Button
             type="button"

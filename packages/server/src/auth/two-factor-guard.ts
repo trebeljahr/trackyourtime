@@ -18,9 +18,15 @@
  *     the secret (`get-totp-uri`), disables, or mints new backup codes.
  *     Re-enabling is refused, `get-totp-uri` is 404, and disable, regenerate
  *     and delete account need a code as well, counted per user.
- *  4. **No trusted devices.** `trustDevice` would let the password alone sign
- *     in from that browser for thirty days, and the trust rows outlive
- *     disabling 2FA. It is forced off; `disableSession` is refused.
+ *  4. **Trusted browsers end with any change to the account's security.**
+ *     "Trust this browser" (`trustDevice`) skips the code at sign-in for
+ *     TWO_FACTOR_TRUST_DAYS. better-auth forgets only the browser whose
+ *     cookie a request carries, so every other one kept skipping the code
+ *     after turning 2FA off and on, a password change or "sign out
+ *     everywhere". The guard forgets all of them on those
+ *     (`TRUST_ENDING_PATHS`; a password reset in `auth.ts`), and lets a
+ *     trusted browser past the code after Google too. `disableSession` is
+ *     refused.
  *  5. **Google sign-in asks for the code too.** The plugin only intercepts
  *     the password sign-in paths, so Google's callback signed a 2FA account
  *     straight in. The session it would create is refused
@@ -61,6 +67,8 @@ import {
   looksLikeTotp,
 } from "@starter/shared";
 import {
+  forgetTrustedBrowsers,
+  isTrustedBrowser,
   claimAttempt,
   resetAttempts,
   spendTotpCode,
@@ -148,16 +156,48 @@ const CHALLENGE_SECONDS = 10 * 60;
  */
 const socialChallenges = new WeakMap<Request, string>();
 
+/**
+ * Endpoints after which no browser stays trusted: each changes what proves
+ * this account, or says "I do not trust my other devices any more".
+ */
+export const TRUST_ENDING_PATHS: ReadonlySet<string> = new Set([
+  "/two-factor/enable",
+  "/two-factor/disable",
+  "/change-password",
+  "/revoke-sessions",
+  "/revoke-other-sessions",
+]);
+
+/** better-auth's cookie name suffix for a trusted browser. */
+export const TRUST_COOKIE = "trust_device";
+
 /** The fields of `session.create.before`'s context the allowlist reads. */
 export type SessionCreateContext = {
   path?: string;
   request?: Request | null;
+  getSignedCookie?: (name: string, secret: string) => Promise<string | null | false | undefined>;
   context?: {
+    secret?: string;
+    createAuthCookie?: (name: string) => { name: string };
     internalAdapter?: {
       findUserById: (id: string) => Promise<{ twoFactorEnabled?: boolean | null } | null>;
+      findVerificationValue?: (identifier: string) => Promise<{ value: string; expiresAt: Date | string } | null>;
     };
   };
 } | null | undefined;
+
+/** Whether the request creating a session comes from a browser this user trusted. */
+async function fromTrustedBrowser(userId: string, context: NonNullable<SessionCreateContext>): Promise<boolean> {
+  const auth = context.context;
+  const find = auth?.internalAdapter?.findVerificationValue;
+  if (!auth?.secret || !auth.createAuthCookie || !find || !context.getSignedCookie) return false;
+  try {
+    const value = await context.getSignedCookie(auth.createAuthCookie(TRUST_COOKIE).name, auth.secret);
+    return await isTrustedBrowser(find, auth.secret, userId, typeof value === "string" ? value : null);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whether better-auth may create a session for `userId` on this request. A
@@ -171,9 +211,13 @@ export async function sessionCreationAllowed(
   if (!path || TWO_FACTOR_SESSION_PATHS.has(path)) return true;
   const user = await context.context?.internalAdapter?.findUserById(userId);
   if (user?.twoFactorEnabled !== true) return true;
-  // Google (or any social provider): no session now. The callback's
-  // after-hook asks for the code instead (`twoFactorGuard`).
-  if (path === SOCIAL_CALLBACK_PATH && context.request) socialChallenges.set(context.request, userId);
+  if (path !== SOCIAL_CALLBACK_PATH) return false;
+  // Google (or any social provider) from a browser the person trusted: the
+  // same pass a password sign-in from it gets.
+  if (await fromTrustedBrowser(userId, context)) return true;
+  // Otherwise no session now; the callback's after-hook asks for the code
+  // instead (`twoFactorGuard`).
+  if (context.request) socialChallenges.set(context.request, userId);
   return false;
 }
 
@@ -286,12 +330,12 @@ export async function unsignChallenge(value: string, secret: string): Promise<st
 
 /**
  * The body a verify call runs with: `disableSession: true` refused, and
- * `trustDevice` forced off.
+ * `trustDevice` only when it is exactly `true`.
  *
  * `disableSession` on a challenge checks and spends a backup code but creates
- * no session; nothing here needs it. Trusted devices are not offered: the
- * phone and desktop apps never send the trust cookie, and its rows outlive
- * disabling 2FA.
+ * no session; nothing here needs it. `trustDevice` matters only on a sign-in
+ * challenge, where better-auth sets the trust cookie; the phone and desktop
+ * apps carry no cookies and never offer it.
  */
 export function sanitizeVerifyBody(body: unknown): Record<string, unknown> {
   const input: Record<string, unknown> =
@@ -302,7 +346,7 @@ export function sanitizeVerifyBody(body: unknown): Record<string, unknown> {
       message: "disableSession is not allowed.",
     });
   }
-  input.trustDevice = false;
+  input.trustDevice = input.trustDevice === true;
   return input;
 }
 
@@ -521,6 +565,16 @@ export function twoFactorGuard(deps: TwoFactorGuardDeps): BetterAuthPlugin {
         },
       ],
       after: [
+        {
+          matcher: (context) => TRUST_ENDING_PATHS.has(context.path ?? ""),
+          handler: createAuthMiddleware(async (ctx) => {
+            const returned = ctx.context.returned;
+            if (!returned || isAPIError(returned)) return;
+            const userId = ctx.context.session?.user.id ?? ctx.context.newSession?.user.id;
+            if (!userId) return;
+            await forgetTrustedBrowsers(ctx.context.adapter as unknown as SecondFactorAdapter, userId);
+          }),
+        },
         {
           matcher: (context) => context.path === SOCIAL_CALLBACK_PATH,
           handler: createAuthMiddleware(async (ctx) => {

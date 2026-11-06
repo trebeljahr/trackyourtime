@@ -29,7 +29,21 @@ const changePassword = vi.fn<(args: unknown) => Promise<Result>>();
 const changeEmail = vi.fn<(args: unknown) => Promise<Result>>();
 const revokeOtherSessions = vi.fn<() => Promise<Result>>();
 
-vi.mock("@/components/ui/sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toastSuccess = vi.fn();
+vi.mock("@/components/ui/sonner", () => ({ toast: { success: (...args: unknown[]) => toastSuccess(...args), error: vi.fn() } }));
+const forgetTrusted = vi.fn(async () => ({ forgotten: 2 }));
+vi.mock("@/lib/trpc", () => ({
+  trpc: {
+    devices: {
+      forgetTrustedBrowsers: {
+        useMutation: (options: { onSuccess?: (data: { forgotten: number }) => void }) => ({
+          isPending: false,
+          mutate: () => void forgetTrusted().then((data) => options.onSuccess?.(data)),
+        }),
+      },
+    },
+  },
+}));
 // Password unlock has its own tests; an account without parameters (legacy
 // or an older server) sends both passwords as typed, which these tests pin.
 vi.mock("@/lib/password-unlock", () => ({
@@ -165,6 +179,16 @@ describe("turning two-factor off", () => {
     fireEvent.click(screen.getByTestId("two-factor-disable-submit"));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/15 minutes/));
     expect(screen.getByTestId("two-factor-disable-dialog")).toBeInTheDocument();
+  });
+});
+
+describe("forgetting trusted browsers", () => {
+  it("forgets them in one click and says how many", async () => {
+    session.data.user.twoFactorEnabled = true;
+    render(<TwoFactorRow hasPassword />);
+    fireEvent.click(screen.getByTestId("two-factor-forget-trusted"));
+    await waitFor(() => expect(forgetTrusted).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/Forgot 2 trusted browsers/)));
   });
 });
 
