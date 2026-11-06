@@ -20,7 +20,7 @@ existing product captures. Rebuild them with
 Twitter metadata reference the matching page and language. The press-kit ZIP
 keeps its nine original product captures and excludes these preview cards.
 
-Last updated 2026-10-22 (social-card build contract).
+Last updated 2026-11-06 (GitHub set: README screenshots and social preview cards).
 
 ## Notify search engines after publication
 
@@ -36,7 +36,7 @@ Protocol: <https://www.indexnow.org/documentation>.
 
 ## Where each asset lives, and why
 
-Only the three folders under `docs/marketing/` can move. They hold what somebody
+Only the store folders under `docs/marketing/` can move. They hold what somebody
 uploads by hand to a console, and nothing reads them at runtime. Everything else
 listed here ships inside a build, at a path that code or a store already names:
 
@@ -45,6 +45,8 @@ listed here ships inside a build, at a path that code or a store already names:
 | `docs/marketing/app-store/` | App Store Connect screenshots | yes — uploaded by hand |
 | `docs/marketing/google-play/` | Play icon, feature graphic, screenshots | yes — uploaded by hand |
 | `docs/marketing/chrome/` | Chrome Web Store tiles, screenshots, German listing | yes — uploaded by hand |
+| `docs/marketing/screenshots/` | the README screenshots | no — `README.md` and the social preview template load them by path |
+| `docs/marketing/social-preview/` | GitHub social preview cards and their template | yes — uploaded by hand in the repository settings |
 | `packages/client/public/marketing/` | product screenshots the live web pages serve | **no** — the pages load them by path |
 | `packages/client/public/brand/` | the brand SVG marks | **no** — `pnpm icons:brand` derives every shipped bitmap from them, and `render-graphics.mjs` reads `mark-tile.svg` |
 | `packages/raycast/metadata/` | Raycast store screenshots | **no** — `ray build` and store review read that exact path |
@@ -94,6 +96,44 @@ All six are in Play app **4975592922038277338**.
 | `promo-small-440x280.png` | 440×280 | Chrome Web Store small tile |
 | `screenshot-{1-timer,2-autocomplete,3-entries,4-web-app}.png` | 1280×800 | Chrome Web Store screenshots |
 | `store-listing.de.md` | — | the German listing text |
+
+### `docs/marketing/screenshots/` and `social-preview/` — the GitHub set
+
+What a visitor to the GitHub repository sees: the README hero and the share
+card. `manifest.json` lists every file below with its size and SHA-256
+(`pnpm marketing:manifest` rewrites it).
+
+| File | Size | Used by |
+| --- | --- | --- |
+| `screenshots/web-track-light.jpg` | 3200×2000 (1600×1000 at 2×) | README hero, social preview A |
+| `screenshots/web-reports-light.jpg` | 3200×2000 | — (reports grouped by task, four weeks) |
+| `screenshots/web-calendar-light.jpg` | 3200×2000 | — (calendar week) |
+| `screenshots/web-track-dark.jpg` | 3200×2000 | — (dark theme) |
+| `screenshots/web-reports-dark.jpg` | 3200×2000 | social preview C |
+| `screenshots/phone-track-light.jpg` | 1170×2532 (390×844 at 3×) | social preview C |
+| `social-preview/social-preview-{a,b,c}.png` | 1280×640, each under 1 MB | the three options for the repository's social preview |
+| `social-preview/template.html` | — | the cards' HTML; `?v=a`, `b` or `c` picks one |
+
+Captured 2026-11-06 from the seeded demo account. To make them again:
+
+```bash
+pnpm install
+cp packages/server/.env.example packages/server/.env.development   # set BETTER_AUTH_SECRET
+# a single-node replica set: workspace writes need transactions
+mongod --dbpath <tmp-dir> --port <mongo-port> --replSet rs0 --fork --logpath <tmp-dir>/mongod.log
+mongosh --port <mongo-port> --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:<mongo-port>"}]})'
+PORT=<web-port> API_PORT=<api-port> MONGODB_URI="mongodb://127.0.0.1:<mongo-port>/tyt-capture?replicaSet=rs0" \
+  HATCHKIT_LOCAL_DEV=0 pnpm run dev
+node scripts/marketing/seed-demo.mjs http://127.0.0.1:<api-port> http://localhost:<web-port>   # prints the demo login
+pnpm marketing:readme-screenshots http://localhost:<web-port> <demo-email> <demo-password>
+pnpm marketing:social-preview
+pnpm marketing:manifest
+```
+
+The seed's month is relative to the moment it runs, so seed right before
+capturing. The capture script answers the one-time recovery-key card with
+"I've saved it", and switches the dark shots through the top bar's theme menu
+because the theme is a synced preference.
 
 ### `packages/client/public/marketing/` — served at runtime, cannot move
 

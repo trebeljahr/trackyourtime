@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  GitHub social preview cards for Track Your Time, 1280×640.
+  Rendered by scripts/marketing/render-social-preview.mjs, one variant per
+  `?v=` value (a, b, c). Screenshots come from docs/marketing/screenshots/,
+  which scripts/marketing/capture-readme.mjs writes from the real app.
+  Brand: packages/client/public/brand/mark-tile.svg, indigo #4F46E5 / #818CF8,
+  the dark gradient and system sans of public/og.png.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Track Your Time social preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: #fff;
+  }
+  .card { position: relative; width: 1280px; height: 640px; overflow: hidden; display: none; }
+  body[data-v="a"] #a, body[data-v="b"] #b, body[data-v="c"] #c { display: block; }
+
+  .dark { background: radial-gradient(120% 120% at 100% 0%, #312e81 0%, #1e1b4b 45%, #0b0b1a 100%); }
+  .brand { display: flex; align-items: center; gap: .4em; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+  .brand svg { width: 1.45em; height: 1.45em; flex: none; }
+  .brand b { font-weight: 600; color: #818cf8; }
+  h2 { font-weight: 700; letter-spacing: -0.03em; line-height: 1.08; }
+  p.sub { color: rgba(255, 255, 255, .72); line-height: 1.38; }
+
+  /* A frame crops the page edges out of a 1600×1000 capture. */
+  .frame { position: absolute; overflow: hidden; border-radius: 16px; background: #fff; box-shadow: 0 30px 80px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .1); }
+  .frame img { position: absolute; display: block; }
+
+  /* A: screenshot-led */
+  #a .brand { position: absolute; left: 64px; top: 64px; font-size: 34px; }
+  #a h2 { position: absolute; left: 64px; top: 150px; width: 460px; font-size: 54px; }
+  #a p.sub { position: absolute; left: 64px; top: 396px; width: 430px; font-size: 26px; }
+  #a .frame { left: 560px; top: 64px; width: 840px; height: 640px; }
+  #a .frame img { width: 1180px; left: -166px; top: -50px; }
+
+  /* B: typographic, brand-led */
+  #b .brand { position: absolute; left: 64px; top: 64px; font-size: 44px; }
+  #b h2 { position: absolute; left: 64px; top: 168px; font-size: 92px; letter-spacing: -0.04em; line-height: 1.02; }
+  #b .surfaces { position: absolute; left: 64px; right: 64px; top: 410px; display: flex; flex-wrap: wrap; gap: 14px; }
+  #b .surfaces span { font-size: 27px; font-weight: 500; padding: 10px 20px; border-radius: 999px; background: rgba(129, 140, 248, .16); color: #e0e7ff; box-shadow: inset 0 0 0 1px rgba(129, 140, 248, .35); }
+  #b .foot { position: absolute; left: 64px; bottom: 96px; font-size: 26px; color: rgba(255, 255, 255, .7); }
+
+  /* C: dark app, laptop and phone */
+  #c .brand { position: absolute; left: 64px; top: 64px; font-size: 32px; }
+  #c h2 { position: absolute; left: 64px; top: 136px; width: 420px; font-size: 56px; }
+  #c p.sub { position: absolute; left: 64px; top: 330px; width: 330px; font-size: 25px; }
+  #c .frame.desk { left: 520px; top: 64px; width: 860px; height: 640px; background: #0a0a0a; }
+  #c .frame.desk img { width: 1150px; left: -168px; top: -48px; }
+  #c .frame.phone { left: 420px; top: 270px; width: 230px; height: 470px; border-radius: 30px; background: #fff; box-shadow: 0 30px 70px rgba(0, 0, 0, .6), 0 0 0 6px #17172a, 0 0 0 7px rgba(255, 255, 255, .18); }
+  #c .frame.phone img { width: 230px; left: 0; top: 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="mark" viewBox="0 0 64 64">
+    <rect width="64" height="64" rx="14" fill="#4F46E5"/>
+    <circle cx="32" cy="32" r="19" fill="none" stroke="#FFFFFF" stroke-opacity="0.32" stroke-width="7"/>
+    <path d="M32 13A19 19 0 1 1 15.55 41.5" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="32" cy="32" r="4.5" fill="#FFFFFF"/>
+  </symbol>
+</svg>
+
+<section class="card dark" id="a">
+  <div class="brand"><svg><use href="#mark"/></svg><span>Track Your <b>Time</b></span></div>
+  <h2>Time tracking for freelancers who bill by the hour.</h2>
+  <p class="sub">Free and open source. Use it hosted, or run it on your own server.</p>
+  <div class="frame"><img src="../screenshots/web-track-light.jpg" alt=""></div>
+</section>
+
+<section class="card dark" id="b">
+  <div class="brand"><svg><use href="#mark"/></svg><span>Track Your <b>Time</b></span></div>
+  <h2>Time tracking on<br>your own server.</h2>
+  <div class="surfaces"><span>Web</span><span>macOS, Windows, Linux</span><span>Chrome</span><span>Firefox</span><span>Raycast</span></div>
+  <div class="foot">One timer on every device · invoices and e-invoices · AGPL-3.0, no paid plan</div>
+</section>
+
+<section class="card dark" id="c">
+  <div class="brand"><svg><use href="#mark"/></svg><span>Track Your <b>Time</b></span></div>
+  <h2>See what your hours earned.</h2>
+  <p class="sub">Reports, PDF invoices and e&#8209;invoices from the same entries.</p>
+  <div class="frame desk"><img src="../screenshots/web-reports-dark.jpg" alt=""></div>
+  <div class="frame phone"><img src="../screenshots/phone-track-light.jpg" alt=""></div>
+</section>
+
+<script>
+  document.body.dataset.v = new URLSearchParams(location.search).get("v") || "a";
+</script>
+</body>
+</html>

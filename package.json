@@ -36,6 +36,9 @@
     "einvoice:validate": "node scripts/einvoice-validate.mjs",
     "icons:brand": "node scripts/icons-brand.mjs",
     "marketing:press-kit-zip": "node scripts/marketing/build-press-kit-zip.mjs",
+    "marketing:readme-screenshots": "node scripts/marketing/capture-readme.mjs",
+    "marketing:social-preview": "node scripts/marketing/render-social-preview.mjs",
+    "marketing:manifest": "node scripts/marketing/write-github-manifest.mjs",
     "test": "pnpm run test:unit && pnpm run test:client && pnpm run test:e2e",
     "test:unit": "pnpm --filter @starter/core run test && pnpm --filter trackyourtime-raycast run test && pnpm --filter @starter/server run test && pnpm --filter trackyourtime-mcp run test && pnpm --filter @starter/extension run test && pnpm run test:electron",
     "test:client": "pnpm --filter @starter/client run test",
@@ -127,5 +130,14 @@
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3"
   },
-  "description": "A simple time tracker application"
+  "description": "Free, open-source time tracker for freelancers that turns billable hours into reports and invoices, hosted or self-hosted.",
+  "homepage": "https://trackyourtime.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trebeljahr/trackyourtime.git"
+  },
+  "bugs": {
+    "url": "https://github.com/trebeljahr/trackyourtime/issues"
+  },
+  "author": "Rico Trebeljahr"
 }

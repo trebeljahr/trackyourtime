@@ -1,0 +1,86 @@
+{
+  "generated": "2026-11-06",
+  "files": [
+    {
+      "path": "screenshots/phone-track-light.jpg",
+      "purpose": "Track screen at phone width (390 px). Used by social preview C.",
+      "width": 1170,
+      "height": 2532,
+      "bytes": 155890,
+      "sha256": "f3e3d22f91ed19d9ae6f14e78ede8ef112333a3074aef0ae1b6e873a92d2046e",
+      "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "screenshots/web-calendar-light.jpg",
+      "purpose": "Calendar week view.",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 451248,
+      "sha256": "8f4de46b29ea21e5a6485706f160db2df6433e2f9537b67f47703725a6bb758d",
+      "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "screenshots/web-reports-dark.jpg",
+      "purpose": "Reports in the dark theme. Used by social preview C.",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 331804,
+      "sha256": "451d5374e043df3c331a7491be386e27f743c6260d8f1cf3f8652db9e994e514",
+      "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "screenshots/web-reports-light.jpg",
+      "purpose": "Reports grouped by task over four weeks.",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 335296,
+      "sha256": "15e5e96e3a9a8af691252ac9e873878a2bd0502749f3f3eb67826556601170f1",
+      "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "screenshots/web-track-dark.jpg",
+      "purpose": "Track screen in the dark theme.",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 389196,
+      "sha256": "23c9a1328b49e2a99993a16246e104130712ed5d7ae4cbf09920ad93b12b7bfc",
+      "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "screenshots/web-track-light.jpg",
+      "purpose": "Track screen: running timer and today's entries. README hero.",
+      "width": 3200,
+      "height": 2000,
+      "bytes": 395970,
+      "sha256": "80be23be4b2d40830b0075356c8fa0553207bf79276a4ea8076932890f8520bd",
+      "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "social-preview/social-preview-a.png",
+      "purpose": "GitHub social preview option A: screenshot-led.",
+      "width": 1280,
+      "height": 640,
+      "bytes": 300396,
+      "sha256": "7c36c09a21056d34722bd22d8f25bb89ff40d2f4883d1b61acee11eb890cf26e",
+      "source": "scripts/marketing/render-social-preview.mjs over social-preview/template.html"
+    },
+    {
+      "path": "social-preview/social-preview-b.png",
+      "purpose": "GitHub social preview option B: typographic, brand-led.",
+      "width": 1280,
+      "height": 640,
+      "bytes": 335309,
+      "sha256": "8956c66557dea2e14f3699e02b1f4da2539b1e6ce2081d465aeb541e31203917",
+      "source": "scripts/marketing/render-social-preview.mjs over social-preview/template.html"
+    },
+    {
+      "path": "social-preview/social-preview-c.png",
+      "purpose": "GitHub social preview option C: dark reports with the phone view.",
+      "width": 1280,
+      "height": 640,
+      "bytes": 277174,
+      "sha256": "be744411202d1ce2d9816c073018055cd45184ddfe32500c0f45ac842c3a52d8",
+      "source": "scripts/marketing/render-social-preview.mjs over social-preview/template.html"
+    }
+  ]
+}

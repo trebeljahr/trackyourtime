@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "description": "MCP server for Track Your Time: timers, entries, catalog and reports over the public REST API.",
   "license": "AGPL-3.0-or-later",
+  "author": "Rico Trebeljahr",
   "type": "module",
   "mcpName": "io.github.trebeljahr/trackyourtime",
   "engines": {
