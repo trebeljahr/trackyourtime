@@ -117,6 +117,11 @@ describe("deleteAccount", () => {
     expect(window.localStorage.getItem(QUERY_SNAPSHOT_KEY)).toBeNull();
   });
 
+  it("sends the two-factor code beside the password when there is one", async () => {
+    await deleteAccount({ userId: "user-a", password: "hunter22", code: "123456" });
+    expect(deleteUser).toHaveBeenCalledWith({ password: "hunter22", code: "123456" });
+  });
+
   it("sends no password field at all for an account without one", async () => {
     await deleteAccount({ userId: "user-a" });
     expect(deleteUser).toHaveBeenCalledWith({});
@@ -126,6 +131,9 @@ describe("deleteAccount", () => {
     ["PASSWORD_REQUIRED", "password-required"],
     ["INVALID_PASSWORD", "invalid-password"],
     ["SESSION_EXPIRED", "session-expired"],
+    ["TWO_FACTOR_CODE_REQUIRED", "code-invalid"],
+    ["TWO_FACTOR_CODE_INVALID", "code-invalid"],
+    ["TWO_FACTOR_TOO_MANY_ATTEMPTS", "too-many-attempts"],
     ["INTERNAL_SERVER_ERROR", "failed"],
   ])("on %s, reports %s and touches nothing on this device", async (code, reason) => {
     deleteResult = { data: null, error: { code } };

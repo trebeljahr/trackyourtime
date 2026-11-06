@@ -23,7 +23,8 @@ globalThis.ResizeObserver ??= class {
 const session = { data: { user: { twoFactorEnabled: false } } };
 const enable = vi.fn<(args: { password: string }) => Promise<Result>>();
 const verifyTotp = vi.fn<(args: { code: string }) => Promise<Result>>();
-const disable = vi.fn<(args: { password: string }) => Promise<Result>>();
+const disable = vi.fn<(args: { password: string; code?: string }) => Promise<Result>>();
+const generateBackupCodes = vi.fn<(args: { password: string; code?: string }) => Promise<Result>>();
 const changePassword = vi.fn<(args: unknown) => Promise<Result>>();
 const changeEmail = vi.fn<(args: unknown) => Promise<Result>>();
 const revokeOtherSessions = vi.fn<() => Promise<Result>>();
@@ -48,6 +49,7 @@ vi.mock("@/lib/auth-client", () => ({
       enable: (args: { password: string }) => enable(args),
       verifyTotp: (args: { code: string }) => verifyTotp(args),
       disable: (args: { password: string }) => disable(args),
+      generateBackupCodes: (args: { password: string }) => generateBackupCodes(args),
     },
     changePassword: (args: unknown) => changePassword(args),
     changeEmail: (args: unknown) => changeEmail(args),
@@ -69,6 +71,7 @@ beforeEach(() => {
   enable.mockReset().mockResolvedValue({ data: { totpURI: URI, backupCodes: CODES }, error: null });
   verifyTotp.mockReset().mockResolvedValue({ data: { token: "t" }, error: null });
   disable.mockReset().mockResolvedValue({ data: { status: true }, error: null });
+  generateBackupCodes.mockReset().mockResolvedValue({ data: { status: true, backupCodes: ["NEW01-CODES"] }, error: null });
   changePassword.mockReset().mockResolvedValue({ data: { token: null }, error: null });
   changeEmail.mockReset().mockResolvedValue({ data: { status: true }, error: null });
   revokeOtherSessions.mockReset().mockResolvedValue({ data: { status: true }, error: null });
@@ -135,14 +138,50 @@ describe("turning two-factor on", () => {
 });
 
 describe("turning two-factor off", () => {
-  it("sends the password", async () => {
+  it("sends the password and the code, without the code's spaces", async () => {
     session.data.user.twoFactorEnabled = true;
     render(<TwoFactorRow hasPassword />);
     fireEvent.click(screen.getByTestId("two-factor-disable"));
     type("two-factor-disable-password", "password1234");
+    expect(screen.getByTestId("two-factor-disable-submit")).toBeDisabled();
+    type("two-factor-disable-code", "123 456");
     fireEvent.click(screen.getByTestId("two-factor-disable-submit"));
-    await waitFor(() => expect(disable).toHaveBeenCalledWith({ password: "password1234" }));
+    await waitFor(() =>
+      expect(disable).toHaveBeenCalledWith({ password: "password1234", code: "123456" }),
+    );
     await waitFor(() => expect(screen.queryByTestId("two-factor-disable-dialog")).toBeNull());
+  });
+
+  it("says when the code was wrong, and when there were too many", async () => {
+    session.data.user.twoFactorEnabled = true;
+    disable.mockResolvedValueOnce({ error: { code: "TWO_FACTOR_CODE_INVALID" } });
+    disable.mockResolvedValueOnce({ error: { code: "TWO_FACTOR_TOO_MANY_ATTEMPTS" } });
+    render(<TwoFactorRow hasPassword />);
+    fireEvent.click(screen.getByTestId("two-factor-disable"));
+    type("two-factor-disable-password", "password1234");
+    type("two-factor-disable-code", "000000");
+    fireEvent.click(screen.getByTestId("two-factor-disable-submit"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not valid/);
+    fireEvent.click(screen.getByTestId("two-factor-disable-submit"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/15 minutes/));
+    expect(screen.getByTestId("two-factor-disable-dialog")).toBeInTheDocument();
+  });
+});
+
+describe("making new backup codes", () => {
+  it("sends the password and a backup code as typed, then shows the new codes once", async () => {
+    session.data.user.twoFactorEnabled = true;
+    render(<TwoFactorRow hasPassword />);
+    fireEvent.click(screen.getByTestId("two-factor-regenerate"));
+    type("two-factor-regenerate-password", "password1234");
+    type("two-factor-regenerate-code", " AbCdE-12345 ");
+    fireEvent.click(screen.getByTestId("two-factor-regenerate-submit"));
+    await waitFor(() =>
+      expect(generateBackupCodes).toHaveBeenCalledWith({ password: "password1234", code: "AbCdE-12345" }),
+    );
+    expect(await screen.findByTestId("two-factor-backup-codes")).toHaveTextContent("NEW01-CODES");
+    fireEvent.click(screen.getByTestId("two-factor-codes-done"));
+    await waitFor(() => expect(screen.queryByTestId("two-factor-regenerate-dialog")).toBeNull());
   });
 });
 

@@ -27,6 +27,7 @@ import {
   type ChallengeOutcome,
 } from "@/components/two-factor-challenge";
 import { isTokenShell } from "@/lib/shell";
+import { hasTwoFactorChallenge } from "@/lib/two-factor-challenge";
 import { useIsTokenShell } from "@/hooks/use-shell";
 import { useT } from "@/i18n/use-t";
 import { translate } from "@/i18n/translate";
@@ -143,11 +144,12 @@ export default function LoginPage() {
         setError(authErrorMessage(result.error, "login"));
       } else if (isTwoFactorChallenge(result.data)) {
         // No session exists yet, and no token was issued.
-        if (isTokenShell()) {
-          // The challenge is a cookie a WKWebView — or the desktop app, which
-          // never sends one — cannot send to the API, so the step could never
-          // succeed there; saying so beats a code field that always answers
-          // "invalid". Both native apps can finish through the browser.
+        if (isTokenShell() && !hasTwoFactorChallenge()) {
+          // A server older than the challenge header: its challenge is only
+          // a cookie, which a WKWebView — or the desktop app, which never
+          // sends one — cannot send back, so the step could never succeed;
+          // saying so beats a code field that always answers "invalid".
+          // Both native apps can finish through the browser.
           setError(
             translate("shell")("auth.twoFactor.desktopUseBrowser"),
           );
@@ -204,10 +206,14 @@ export default function LoginPage() {
   }
 
   async function handleChallenge(outcome: ChallengeOutcome) {
-    if (outcome === "expired") {
+    if (outcome === "expired" || outcome === "too-many-codes") {
       setStep("password");
       setPassword("");
-      setError(translate("shell")("auth.login.challengeExpired"));
+      setError(
+        translate("shell")(
+          outcome === "expired" ? "auth.login.challengeExpired" : "auth.login.tooManyCodes",
+        ),
+      );
       return;
     }
     await getSession();

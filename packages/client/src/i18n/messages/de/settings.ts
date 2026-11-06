@@ -586,6 +586,11 @@ export const settings: Translation<typeof source> = {
       expiryHint: "Leer lassen, dann gilt es, bis du es widerrufst.",
       submit: "Token erstellen",
     },
+    stepUp: {
+      title: "Mit deinem zweiten Faktor bestätigen",
+      description: "Die Zwei-Faktor-Authentifizierung ist eingeschaltet. Für ein neues API-Token brauchst du einen Code aus deiner Authenticator-App oder einen Backup-Code.",
+      submit: "Bestätigen und erstellen",
+    },
     reveal: {
       title: "Token erstellt",
       description: "Sende es bei jeder REST-Anfrage als <code>{header}</code>.",
@@ -1038,6 +1043,18 @@ export const settings: Translation<typeof source> = {
     disable: {
       title: "Zwei-Faktor-Authentifizierung ausschalten?",
       description: "Zum Anmelden brauchst du dann nur noch dein Passwort. Deine Backup-Codes funktionieren nicht mehr.",
+    },
+    confirmCode: "Authenticator-Code oder Backup-Code",
+    confirmCodeHint: "Gib den 6-stelligen Code aus deiner Authenticator-App oder einen deiner Backup-Codes ein.",
+    invalidCodeOrBackup: "Dieser Code ist nicht gültig. Nimm den nächsten Code aus deiner Authenticator-App oder einen unbenutzten Backup-Code.",
+    tooManyAttempts: "Zu viele falsche Authenticator-Codes. Warte 15 Minuten oder nimm einen Backup-Code.",
+    alreadyOn: "Die Zwei-Faktor-Authentifizierung ist schon eingeschaltet. Lade die Seite neu.",
+    regenerate: {
+      button: "Neue Backup-Codes",
+      title: "Neue Backup-Codes erstellen?",
+      description: "Deine bisherigen Backup-Codes funktionieren dann nicht mehr. Speichere die neuen, bevor du dieses Fenster schließt.",
+      submit: "Neue Codes erstellen",
+      doneToast: "Neue Backup-Codes erstellt",
     },
   },
   password: {

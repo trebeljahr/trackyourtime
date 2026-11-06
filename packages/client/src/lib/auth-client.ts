@@ -20,6 +20,9 @@ import {
 } from "@/lib/native-session";
 import {
   ACCOUNT_DELETION_PASSWORD_REQUIRED,
+  TWO_FACTOR_CODE_INVALID,
+  TWO_FACTOR_CODE_REQUIRED,
+  TWO_FACTOR_TOO_MANY_ATTEMPTS,
   versionHeaders,
 } from "@starter/shared";
 import { APP_VERSION } from "@/lib/app-version";
@@ -32,6 +35,12 @@ import { getApiOrigin, rebaseApiUrl, whenApiOriginReady } from "@/lib/api-origin
 import { clearActiveWorkspace } from "@/lib/active-workspace";
 import { clearAppQueryCache } from "@/lib/query-client";
 import { forgetDesktopActivity } from "@/lib/desktop-activity";
+import {
+  forgetTwoFactorChallenge,
+  isTwoFactorTransportPath,
+  rememberTwoFactorChallenge,
+  withTwoFactorChallenge,
+} from "@/lib/two-factor-challenge";
 
 /**
  * better-auth validates its baseURL with `new URL()`, so a relative
@@ -156,7 +165,22 @@ const authFetch: typeof fetch = async (input, init) => {
     await loginPending;
     if (loginSession) return Response.json(loginSession.data);
   }
+  // The two-factor challenge rides in a header (lib/two-factor-challenge.ts).
+  // A token shell sends no cookies on these calls either: better-fetch's
+  // default `credentials: "include"` let WKWebView store the challenge and
+  // session cookies and send them on later calls, so the header would never
+  // be the only credential the server saw.
+  const url = input instanceof Request ? input.url : String(input);
+  const twoFactorCall = isTwoFactorTransportPath(url);
+  if (twoFactorCall) {
+    init = {
+      ...init,
+      headers: withTwoFactorChallenge(url, new Headers(init?.headers)),
+      ...(isTokenShell() ? { credentials: "omit" as const } : {}),
+    };
+  }
   const response = await transportFetch(input, init);
+  if (twoFactorCall) rememberTwoFactorChallenge(url, response);
   if (sessionRead && revision !== authRevision) {
     await loginPending;
     // Discard both stale identity and stale set-auth-token headers.
@@ -179,8 +203,7 @@ export const authClient = createAuthClient({
     /**
      * Adds `authClient.twoFactor.*`. No `onTwoFactorRedirect` and no
      * `twoFactorPage`: /login reads `twoFactorRedirect` off the sign-in
-     * result itself, because on a native shell the right answer is an error,
-     * not a page (see `isTwoFactorChallenge`).
+     * result itself and shows its own code step (see `isTwoFactorChallenge`).
      */
     twoFactorClient(),
   ],
@@ -373,6 +396,7 @@ const forgetAccountOnDevice = async (): Promise<void> => {
 export const signOut: typeof authClient.signOut = async (...args) => {
   lockAndForgetPrivateData();
   forgetPasswordUnlock();
+  forgetTwoFactorChallenge();
   loginSession = null;
   authRevision++;
   await loginPending;
@@ -401,6 +425,10 @@ export type AccountDeletionRefusal =
   | "invalid-password"
   /** An account with no password whose session is over a day old — sign in again. */
   | "session-expired"
+  /** Two-factor is on, and the code was missing or wrong. */
+  | "code-invalid"
+  /** Too many wrong authenticator codes from inside this session. */
+  | "too-many-attempts"
   /** Anything else, the network included. The account still exists. */
   | "failed";
 
@@ -414,6 +442,11 @@ export const accountDeletionRefusal = (
       return "invalid-password";
     case "SESSION_EXPIRED":
       return "session-expired";
+    case TWO_FACTOR_CODE_REQUIRED:
+    case TWO_FACTOR_CODE_INVALID:
+      return "code-invalid";
+    case TWO_FACTOR_TOO_MANY_ATTEMPTS:
+      return "too-many-attempts";
     default:
       return "failed";
   }
@@ -450,13 +483,16 @@ export const accountHasPassword = async (): Promise<boolean> => {
 export const deleteAccount = async (args: {
   userId: string;
   password?: string;
+  /** With two-factor on: an authenticator or backup code (auth/two-factor-guard.ts). */
+  code?: string;
 }): Promise<{ ok: true } | { ok: false; reason: AccountDeletionRefusal }> => {
   const deletedServer = getApiOrigin() || (typeof window !== "undefined" ? window.location.origin : "");
   try {
     const password = args.password ? await passwordSecretForSignedIn(args.password) : undefined;
-    const { error } = await authClient.deleteUser(
-      password ? { password } : {},
-    );
+    const { error } = await authClient.deleteUser({
+      ...(password ? { password } : {}),
+      ...(args.code ? { code: args.code } : {}),
+    } as { password?: string });
     if (error) return { ok: false, reason: accountDeletionRefusal(error.code) };
   } catch {
     return { ok: false, reason: "failed" };

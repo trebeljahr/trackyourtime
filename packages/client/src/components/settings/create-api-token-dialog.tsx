@@ -26,6 +26,13 @@ import { translate } from "@/i18n/translate";
 import { useT } from "@/i18n/use-t";
 import { trpc } from "@/lib/trpc";
 import { userErrorMessage } from "@/lib/error-message";
+import { authClient } from "@/lib/auth-client";
+import { looksLikeTotp, TWO_FACTOR_STEP_UP_REQUIRED, TWO_FACTOR_TOO_MANY_ATTEMPTS } from "@starter/shared";
+import {
+  ConfirmCodeField,
+  ErrorLine,
+  normalizeConfirmCode,
+} from "@/components/settings/two-factor";
 
 /**
  * What each scope actually lets a token do, in the terms of this app.
@@ -342,6 +349,75 @@ export function ApiTokenForm({
   );
 }
 
+// ── step-up ──────────────────────────────────────────────────────────
+
+/** Whether a create was refused for want of a recently verified code. */
+export const needsStepUp = (error: unknown): boolean =>
+  (error as { message?: unknown } | null)?.message === TWO_FACTOR_STEP_UP_REQUIRED;
+
+/**
+ * With two-factor on, minting a token needs a code verified in this session in
+ * the last ten minutes (`apiTokens.create`). Verifying from inside a session
+ * neither signs in again nor rotates the session; it only marks it.
+ */
+function StepUpForm({
+  onVerified,
+  onCancel,
+}: {
+  onVerified: () => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const t = useT("settings");
+  const tc = useT("common");
+  const [code, setCode] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const submit = async (event: React.FormEvent): Promise<void> => {
+    event.preventDefault();
+    const value = normalizeConfirmCode(code);
+    if (!value || busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await (looksLikeTotp(value)
+      ? authClient.twoFactor.verifyTotp({ code: value })
+      : authClient.twoFactor.verifyBackupCode({ code: value })
+    ).catch(() => ({ error: { code: "FAILED" } }));
+    setBusy(false);
+    if (result.error) {
+      const refusal = result.error.code;
+      setError(
+        refusal === TWO_FACTOR_TOO_MANY_ATTEMPTS
+          ? t("twoFactor.tooManyAttempts")
+          : refusal === "INVALID_CODE" || refusal === "INVALID_BACKUP_CODE"
+            ? t("twoFactor.invalidCodeOrBackup")
+            : tc("errors.generic"),
+      );
+      return;
+    }
+    onVerified();
+  };
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-4" data-testid="api-token-step-up">
+      <DialogHeader>
+        <DialogTitle>{t("apiTokens.stepUp.title")}</DialogTitle>
+        <DialogDescription>{t("apiTokens.stepUp.description")}</DialogDescription>
+      </DialogHeader>
+      <ConfirmCodeField id="api-token-step-up-code" value={code} onChange={setCode} testId="api-token-step-up-code" />
+      {error ? <ErrorLine message={error} /> : null}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          {tc("actions.cancel")}
+        </Button>
+        <Button type="submit" disabled={!code.trim() || busy} data-testid="api-token-step-up-submit">
+          {t("apiTokens.stepUp.submit")}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 // ── dialog ───────────────────────────────────────────────────────────
 
 export type CreateApiTokenDialogProps = {
@@ -361,9 +437,12 @@ export function CreateApiTokenDialog({
    * lifetime of the only copy the browser ever had.
    */
   const [minted, setMinted] = React.useState<CreatedApiToken | null>(null);
+  /** The form values waiting for a second factor, retried as they were. */
+  const [awaitingCode, setAwaitingCode] = React.useState<ApiTokenFormValues | null>(null);
 
   const create = trpc.apiTokens.create.useMutation({
     onError: (error) => {
+      if (needsStepUp(error)) return;
       toast.error(
         userErrorMessage(error, translate("settings")("apiTokens.toasts.createFailed")),
       );
@@ -393,14 +472,18 @@ export function CreateApiTokenDialog({
           }),
         );
       })
-      .catch(() => {
-        // onError already reported it; swallowing keeps the dialog open with
-        // the typed values still in place.
+      .catch((error: unknown) => {
+        // onError already reported anything else; swallowing keeps the dialog
+        // open with the typed values still in place.
+        if (needsStepUp(error)) setAwaitingCode(values);
       });
   };
 
   const handleOpenChange = (next: boolean): void => {
-    if (!next) setMinted(null);
+    if (!next) {
+      setMinted(null);
+      setAwaitingCode(null);
+    }
     onOpenChange(next);
   };
 
@@ -436,6 +519,15 @@ export function CreateApiTokenDialog({
               </Button>
             </DialogFooter>
           </div>
+        ) : awaitingCode ? (
+          <StepUpForm
+            onVerified={() => {
+              const values = awaitingCode;
+              setAwaitingCode(null);
+              handleCreate(values);
+            }}
+            onCancel={() => setAwaitingCode(null)}
+          />
         ) : (
           <ApiTokenForm
             onCreate={handleCreate}

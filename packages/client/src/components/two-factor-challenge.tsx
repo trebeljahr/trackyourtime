@@ -9,7 +9,7 @@ import { useT } from "@/i18n/use-t";
 type Method = "totp" | "backup";
 
 /** What the challenge screen tells the page once it is done. */
-export type ChallengeOutcome = "verified" | "expired";
+export type ChallengeOutcome = "verified" | "expired" | "too-many-codes";
 
 const inputClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm";
@@ -18,12 +18,16 @@ const inputClass =
  * The second step of /login for an account with two-factor authentication.
  *
  * The password step already happened: the server answered it with a signed
- * challenge cookie instead of a session, and both verify calls below read
- * that cookie. A backup code works once — the server removes it on use.
+ * challenge instead of a session, which `lib/two-factor-challenge.ts` holds
+ * and the auth client sends back on both verify calls below — as a header, so
+ * the phone and desktop apps, which carry no cookies, take the same path. A
+ * backup code works once — the server removes it on use, and an authenticator
+ * code works once too.
  *
- * A challenge lasts ten minutes. When it has expired the server says
- * INVALID_TWO_FACTOR_COOKIE, and the only way on is the password again, so
- * that answer goes back to the page rather than reading as a wrong code.
+ * A challenge lasts ten minutes and takes five wrong codes. Past either the
+ * server drops it, and the only way on is the password again, so those
+ * answers go back to the page rather than reading as a wrong code. Ten wrong
+ * codes across challenges lock the account's sign-in for fifteen minutes.
  */
 export function TwoFactorChallenge({
   onDone,
@@ -53,6 +57,16 @@ export function TwoFactorChallenge({
       if (result.error) {
         if (result.error.code === "INVALID_TWO_FACTOR_COOKIE") {
           await onDone("expired");
+          return;
+        }
+        // Five wrong codes: the server dropped this challenge.
+        if (result.error.code === "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE") {
+          await onDone("too-many-codes");
+          return;
+        }
+        if (result.error.code === "ACCOUNT_TEMPORARILY_LOCKED") {
+          setError(t("auth.twoFactor.locked"));
+          setVerifying(false);
           return;
         }
         setError(

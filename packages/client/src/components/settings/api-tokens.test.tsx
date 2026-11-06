@@ -10,6 +10,7 @@ import {
   ApiTokenForm,
   OneTimeSecret,
   endOfDayIso,
+  needsStepUp,
   type ApiTokenFormValues,
 } from "./create-api-token-dialog";
 
@@ -61,6 +62,14 @@ const renderForm = () => {
   );
   return { onCreate };
 };
+
+describe("needsStepUp", () => {
+  it("is true only for the server's step-up refusal", () => {
+    expect(needsStepUp({ message: "TWO_FACTOR_STEP_UP_REQUIRED", data: { code: "FORBIDDEN" } })).toBe(true);
+    expect(needsStepUp({ message: "Forbidden" })).toBe(false);
+    expect(needsStepUp(null)).toBe(false);
+  });
+});
 
 describe("apiTokenState", () => {
   const now = Date.parse("2026-06-01T12:00:00.000Z");

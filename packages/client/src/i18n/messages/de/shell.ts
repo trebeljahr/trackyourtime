@@ -163,6 +163,7 @@ export const shell: Translation<typeof source> = {
       forgotPassword: "Passwort vergessen?",
       noAccount: "Noch kein Konto? <link>Registrieren</link>",
       challengeExpired: "Die Anmeldung hat zu lange gedauert. Gib dein Passwort noch einmal ein.",
+      tooManyCodes: "Zu viele falsche Codes. Gib dein Passwort noch einmal ein.",
       verificationFailed: "Deine E-Mail-Adresse muss noch bestätigt werden, aber der Link konnte nicht gesendet werden. Versuche die Anmeldung erneut.",
       emailNotVerified:
         "Bestätige zuerst deine E-Mail-Adresse. Wir haben dir einen neuen Bestätigungslink geschickt.",
@@ -181,6 +182,7 @@ export const shell: Translation<typeof source> = {
         "Gib einen der Backup-Codes ein, die du beim Einschalten der Zwei-Faktor-Authentifizierung gespeichert hast. Jeder Code funktioniert nur einmal.",
       invalidTotp:
         "Dieser Code ist nicht gültig. Prüfe die Uhrzeit auf deinem Gerät und versuch es mit dem nächsten Code.",
+      locked: "Zu viele falsche Codes für dieses Konto. Warte 15 Minuten und versuche es dann noch einmal.",
       invalidBackup: "Dieser Backup-Code ist nicht gültig oder wurde schon verwendet.",
       unexpected: "Ein unerwarteter Fehler ist aufgetreten",
       verify: "Bestätigen",

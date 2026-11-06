@@ -604,6 +604,11 @@ export const settings = {
       expiryHint: "Leave empty and it works until you revoke it.",
       submit: "Create token",
     },
+    stepUp: {
+      title: "Confirm with your second factor",
+      description: "Two-factor authentication is on, so a new API token needs a code from your authenticator app or a backup code.",
+      submit: "Confirm and create",
+    },
     reveal: {
       title: "Token created",
       /** `header` is the literal HTTP header, inserted untranslated. */
@@ -1070,6 +1075,19 @@ export const settings = {
     disable: {
       title: "Turn off two-factor authentication?",
       description: "Signing in will need only your password. Your backup codes stop working.",
+    },
+    /** Disable, new backup codes and delete account ask for one of these. */
+    confirmCode: "Authenticator code or backup code",
+    confirmCodeHint: "Enter the 6-digit code from your authenticator app, or one of your backup codes.",
+    invalidCodeOrBackup: "That code is not valid. Use the next code from your authenticator app, or a backup code you have not used.",
+    tooManyAttempts: "Too many wrong authenticator codes. Wait 15 minutes, or use a backup code.",
+    alreadyOn: "Two-factor authentication is already on. Reload the page.",
+    regenerate: {
+      button: "New backup codes",
+      title: "Make new backup codes?",
+      description: "Your current backup codes stop working. Save the new ones before you close this window.",
+      submit: "Make new codes",
+      doneToast: "New backup codes made",
     },
   },
   /** Settings → Account → Password. */

@@ -170,6 +170,7 @@ export const shell = {
       noAccount: "Don't have an account? <link>Sign up</link>",
       /** The two-factor challenge ran out; the password step starts over. */
       challengeExpired: "The sign-in took too long. Enter your password again.",
+      tooManyCodes: "Too many wrong codes. Enter your password again.",
       verificationFailed: "Your email still needs verification, but we could not send the link. Please try signing in again.",
       emailNotVerified: "Verify your email address first. We sent a new verification link to your inbox.",
     },
@@ -187,6 +188,7 @@ export const shell = {
       backupHint:
         "Enter one of the backup codes you saved when you turned on two-factor authentication. Each code works once.",
       invalidTotp: "That code is not valid. Check the time on your device and try the next code.",
+      locked: "Too many wrong codes for this account. Wait 15 minutes, then try again.",
       invalidBackup: "That backup code is not valid or has already been used.",
       unexpected: "An unexpected error occurred",
       verify: "Verify",

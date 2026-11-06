@@ -34,12 +34,15 @@ import {
 import { trpc } from "@/lib/trpc";
 import { useServerSupports } from "@/lib/server-level";
 import { useOfflineQueueState } from "@/providers/offline-queue-provider";
+import { ConfirmCodeField, normalizeConfirmCode } from "@/components/settings/two-factor";
 
 /** Catalog key per refusal, read when the refusal is shown. */
 const REFUSALS = {
   "password-required": "deleteAccount.refusals.passwordRequired",
   "invalid-password": "deleteAccount.refusals.invalidPassword",
   "session-expired": "deleteAccount.refusals.sessionExpired",
+  "code-invalid": "twoFactor.invalidCodeOrBackup",
+  "too-many-attempts": "twoFactor.tooManyAttempts",
   failed: "deleteAccount.refusals.failed",
 } as const satisfies Record<AccountDeletionRefusal, string>;
 
@@ -54,7 +57,8 @@ const REFUSALS = {
  * An account with a password confirms with it — the server refuses one that
  * does not. An account without one (Google sign-in) has nothing to type, so it
  * types its email address instead, and the server requires its session to be
- * less than a day old.
+ * less than a day old. With two-factor on it also needs an authenticator or
+ * backup code, as turning 2FA off does.
  */
 export function DeleteAccountCard({
   onShowExport,
@@ -70,6 +74,8 @@ export function DeleteAccountCard({
   const [open, setOpen] = React.useState(false);
   const [hasPassword, setHasPassword] = React.useState<boolean | null>(null);
   const [answer, setAnswer] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const twoFactor = (user as { twoFactorEnabled?: boolean | null } | null)?.twoFactorEnabled === true;
   const [error, setError] = React.useState<AccountDeletionRefusal | null>(null);
   const [deleting, setDeleting] = React.useState(false);
   const previewSupported = useServerSupports("privacy.deletionPreview");
@@ -96,6 +102,7 @@ export function DeleteAccountCard({
     setOpen(next);
     if (!next) {
       setAnswer("");
+      setCode("");
       setError(null);
     }
   };
@@ -105,7 +112,7 @@ export function DeleteAccountCard({
     hasPassword === null
       ? false
       : hasPassword
-        ? answer.length > 0
+        ? answer.length > 0 && (!twoFactor || code.trim().length > 0)
         : email.length > 0 && answer.trim().toLowerCase() === email.toLowerCase();
 
   const submit = async (event: React.FormEvent): Promise<void> => {
@@ -116,6 +123,7 @@ export function DeleteAccountCard({
     const result = await deleteAccount({
       userId: user.id,
       password: hasPassword ? answer : undefined,
+      code: twoFactor ? normalizeConfirmCode(code) : undefined,
     });
     if (!result.ok) {
       setDeleting(false);
@@ -227,6 +235,14 @@ export function DeleteAccountCard({
                   disabled={deleting}
                   data-testid="delete-account-password"
                 />
+                {twoFactor ? (
+                  <ConfirmCodeField
+                    id="delete-account-code"
+                    value={code}
+                    onChange={setCode}
+                    testId="delete-account-code"
+                  />
+                ) : null}
               </div>
             ) : (
               <div className="space-y-1.5">

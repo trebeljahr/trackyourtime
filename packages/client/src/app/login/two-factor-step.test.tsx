@@ -4,9 +4,11 @@
  *
  * What these pin: a password answered with a challenge never navigates —
  * only a verified code does; a wrong code stays on the step with a reason; a
- * backup code goes to its own endpoint; an expired challenge goes back to the
- * password; and a native shell gets an error instead of a step it could never
- * complete.
+ * backup code goes to its own endpoint; an expired or exhausted challenge
+ * goes back to the password, a locked account stays on the step with a
+ * reason; and a native shell gets the step when the server handed it the
+ * challenge header, and an error (sign in through the browser) when an older
+ * server did not.
  */
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,12 +23,14 @@ const verifyTotp = vi.fn<(args: { code: string }) => Promise<Result>>();
 const verifyBackupCode = vi.fn<(args: { code: string }) => Promise<Result>>();
 const sendVerificationEmail = vi.fn(async (_args: unknown) => ({ data: { status: true }, error: null }));
 let native = false;
+let challengeHeader = false;
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 vi.mock("@/lib/shell", async () =>
   (await import("@/lib/shell-mock")).mockShellModule(() => (native ? "capacitor" : "web")),
 );
 vi.mock("@/components/google-sign-in-button", () => ({ GoogleSignInButton: () => null }));
+vi.mock("@/lib/two-factor-challenge", () => ({ hasTwoFactorChallenge: () => challengeHeader }));
 vi.mock("@/lib/auth-client", () => ({
   signInWithPassword: (email: string, password: string) => signInEmail({ email, password }),
   getSession: () => getSession(),
@@ -62,6 +66,7 @@ const enterCode = (code: string): void => {
 
 beforeEach(() => {
   native = false;
+  challengeHeader = false;
   replace.mockReset();
   signInEmail.mockReset().mockResolvedValue({
     data: { twoFactorRedirect: true, twoFactorMethods: ["totp"] },
@@ -126,7 +131,32 @@ describe("the two-factor step on /login", () => {
     expect(screen.getByTestId("login-password")).toHaveValue("");
   });
 
-  it("gives a native shell an error, not a step it cannot complete", async () => {
+  it("goes back to the password after too many wrong codes for this challenge", async () => {
+    verifyTotp.mockResolvedValue({ error: { code: "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE" } });
+    await submitPassword();
+    await screen.findByTestId("login-two-factor");
+    enterCode("000000");
+    expect(await screen.findByTestId("login-error")).toHaveTextContent(/Too many wrong codes/);
+  });
+
+  it("stays on the step when the account's sign-in is locked", async () => {
+    verifyTotp.mockResolvedValue({ error: { code: "ACCOUNT_TEMPORARILY_LOCKED" } });
+    await submitPassword();
+    await screen.findByTestId("login-two-factor");
+    enterCode("123456");
+    expect(await screen.findByTestId("two-factor-error")).toHaveTextContent(/15 minutes/);
+  });
+
+  it("gives a native shell the step when the server sent the challenge header", async () => {
+    native = true;
+    challengeHeader = true;
+    await submitPassword();
+    await screen.findByTestId("login-two-factor");
+    enterCode("123456");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/app/track"));
+  });
+
+  it("gives a native shell an error when an older server sent no challenge header", async () => {
     native = true;
     await submitPassword();
     expect(await screen.findByTestId("login-error")).toHaveTextContent(NATIVE_TWO_FACTOR_UNSUPPORTED);
