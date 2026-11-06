@@ -74,12 +74,14 @@ test("an account with two-factor on signs in through the browser", async () => {
   const account = await createAccount();
   const approver = await enableTwoFactor(account, await webSession(account));
 
-  // The password form cannot finish the challenge in the app, and says what can.
+  // The password form now reaches the in-app code step (the challenge travels
+  // as a header), rather than sending the person to the browser.
   const { page } = await atLogin();
   await page.getByTestId("login-email").fill(account.email);
   await page.getByTestId("login-password").fill(account.password);
   await page.getByTestId("login-submit").click();
-  await expect(page.getByTestId("login-error")).toContainText("Sign in with your browser");
+  await expect(page.getByTestId("login-two-factor")).toBeVisible();
+  await expect(page.getByTestId("login-error")).toHaveCount(0);
   await app!.close();
   app = null;
 

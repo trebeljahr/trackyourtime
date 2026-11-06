@@ -139,11 +139,31 @@ export async function webSession(account: Account, origin = API_ORIGIN): Promise
       "x-trackyourtime-client": "web",
       "user-agent": HARNESS_UA,
     },
-    body: JSON.stringify({ email: account.email, password: account.password }),
+    body: JSON.stringify({ email: account.email, password: await passwordForApi(account, origin) }),
   });
   const token = response.headers.get("set-auth-token");
   if (!response.ok || !token) throw new Error(`sign-in failed: ${response.status} ${await response.text()}`);
   return token;
+}
+
+/**
+ * What a raw HTTP call must send as the password. Signing in through the
+ * app's form upgrades the account to password unlock, after which the server
+ * accepts only the derived login secret, never the typed password. Mirrors
+ * core's `signInWithPassword` and `e2e/helpers.ts` `passwordForApi`
+ * (docs/private-workspace-protocol.md → "Password unlock").
+ */
+export async function passwordForApi(account: Account, origin = API_ORIGIN): Promise<string> {
+  const { derivePasswordKeys } = await import("../../packages/core/src/privacy/crypto");
+  const response = await fetch(
+    `${origin}/api/trpc/accountPassword.kdf?input=${encodeURIComponent(JSON.stringify({ email: account.email }))}`,
+    { headers: { "user-agent": HARNESS_UA } },
+  );
+  const answer = (await response.json()).result?.data as
+    | { state: string; kdf: Parameters<typeof derivePasswordKeys>[1] }
+    | undefined;
+  if (!answer || answer.state !== "ready") return account.password;
+  return (await derivePasswordKeys(account.password, answer.kdf)).loginSecret;
 }
 
 /** An auth API call as that web session. */
@@ -277,7 +297,7 @@ export function totpFromUri(uri: string, at = Date.now()): string {
  * replaces the session; the returned token is the one that stays valid.
  */
 export async function enableTwoFactor(account: Account, token: string): Promise<string> {
-  const enabled = await authCall(token, "/two-factor/enable", { body: { password: account.password } });
+  const enabled = await authCall(token, "/two-factor/enable", { body: { password: await passwordForApi(account) } });
   const uri = (enabled.body as { totpURI?: string }).totpURI;
   if (enabled.status !== 200 || !uri) throw new Error(`two-factor enable failed: ${enabled.status}`);
   const confirmed = await authCall(token, "/two-factor/verify-totp", { body: { code: totpFromUri(uri) } });
