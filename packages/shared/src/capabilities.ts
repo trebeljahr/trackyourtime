@@ -19,6 +19,7 @@
 export const REQUIRES_API_LEVEL = {
   "privacy.standardTimerResult": 40,
   "privacy.standardContinueTimerInput": 41,
+  "auth.passwordUnlock": 42,
   "privacy.timerIntentReceipts": 39,
   "privacy.accountCurrentTimer": 38,
   "privacy.standardTimerHandoff": 37,

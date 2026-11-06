@@ -33,6 +33,8 @@ const NOT_WORKSPACE_SCOPED: Record<string, string> = {
   "profile.ts": "a profile belongs to the person, across every workspace",
   "devices.ts": "sessions belong to the person, not to a workspace",
   "billing.ts": "billing is per account, not per workspace",
+  "account-password.ts":
+    "password unlock belongs to the account: the KDF lookup runs before sign-in, the upgrade on the person's own credential",
   "workspaces.ts":
     "lists the person's workspaces and sets the session default — it is the question asked BEFORE a workspace is chosen",
 };

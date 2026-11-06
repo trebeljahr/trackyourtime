@@ -1,3 +1,4 @@
+import { accountPasswordRouter } from "./routers/account-password.js";
 import { privacyRouter } from "./routers/privacy.js";
 import { approvalsRouter } from "./routers/approvals.js";
 import { router } from "./trpc.js";
@@ -24,6 +25,7 @@ import { invitationsRouter } from "./routers/invitations.js";
 export const appRouter = router({
   health: healthRouter,
   privacy: privacyRouter,
+  accountPassword: accountPasswordRouter,
   approvals: approvalsRouter,
   profile: profileRouter,
   billing: billingRouter,

@@ -1,7 +1,75 @@
 {
-  "apiLevel": 41,
+  "apiLevel": 42,
   "minClientApiLevel": 1,
   "procedures": {
+    "accountPassword.kdf": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
+      "type": "query"
+    },
+    "accountPassword.upgrade": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kdf": {
+            "additionalProperties": false,
+            "properties": {
+              "iterations": {
+                "const": 600000,
+                "type": "number"
+              },
+              "kdf": {
+                "const": "PBKDF2-SHA256",
+                "type": "string"
+              },
+              "salt": {
+                "pattern": "^[A-Za-z0-9_-]{22}$",
+                "type": "string"
+              },
+              "v": {
+                "const": 1,
+                "type": "number"
+              }
+            },
+            "required": [
+              "v",
+              "kdf",
+              "iterations",
+              "salt"
+            ],
+            "type": "object"
+          },
+          "loginSecret": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "loginSecret",
+          "kdf"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "apiTokens.create": {
       "input": {
         "properties": {
@@ -5089,6 +5157,69 @@
                 "maxItems": 20,
                 "type": "array"
               },
+              "password": {
+                "additionalProperties": false,
+                "properties": {
+                  "envelope": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "data": {
+                        "maxLength": 16384,
+                        "minLength": 22,
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "type": "string"
+                      },
+                      "nonce": {
+                        "pattern": "^[A-Za-z0-9_-]{16}$",
+                        "type": "string"
+                      },
+                      "v": {
+                        "const": 1,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "nonce",
+                      "data"
+                    ],
+                    "type": "object"
+                  },
+                  "kdf": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "iterations": {
+                        "const": 600000,
+                        "type": "number"
+                      },
+                      "kdf": {
+                        "const": "PBKDF2-SHA256",
+                        "type": "string"
+                      },
+                      "salt": {
+                        "pattern": "^[A-Za-z0-9_-]{22}$",
+                        "type": "string"
+                      },
+                      "v": {
+                        "const": 1,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "kdf",
+                      "iterations",
+                      "salt"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "kdf",
+                  "envelope"
+                ],
+                "type": "object"
+              },
               "publicKey": {
                 "additionalProperties": false,
                 "properties": {
@@ -7160,6 +7291,69 @@
                 },
                 "maxItems": 20,
                 "type": "array"
+              },
+              "password": {
+                "additionalProperties": false,
+                "properties": {
+                  "envelope": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "data": {
+                        "maxLength": 16384,
+                        "minLength": 22,
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "type": "string"
+                      },
+                      "nonce": {
+                        "pattern": "^[A-Za-z0-9_-]{16}$",
+                        "type": "string"
+                      },
+                      "v": {
+                        "const": 1,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "nonce",
+                      "data"
+                    ],
+                    "type": "object"
+                  },
+                  "kdf": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "iterations": {
+                        "const": 600000,
+                        "type": "number"
+                      },
+                      "kdf": {
+                        "const": "PBKDF2-SHA256",
+                        "type": "string"
+                      },
+                      "salt": {
+                        "pattern": "^[A-Za-z0-9_-]{22}$",
+                        "type": "string"
+                      },
+                      "v": {
+                        "const": 1,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "kdf",
+                      "iterations",
+                      "salt"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "kdf",
+                  "envelope"
+                ],
+                "type": "object"
               },
               "publicKey": {
                 "additionalProperties": false,

@@ -1330,14 +1330,23 @@ on the device before anything is sent:
 - `PrivateIdentity.password = { kdf, envelope }` holds the identity sealed with
   the wrapping key. Optional: identities enrolled earlier have none.
 
-Built so far: the core primitive, its tests and the schema field. Still to
-build, in order:
+Built so far: the core primitive, its tests, the schema field, and step 1
+(server, API 42, capability `auth.passwordUnlock`). Still to build: steps 2–6.
 
-1. **Pre-sign-in parameters.** A public endpoint answers the KDF parameters for
-   an email. Unknown emails get parameters derived from a server secret and
-   the email, so the answer does not reveal whether an account exists.
-   Parameters live on the user, not on the identity, because sign-up and
-   sign-in need them before any identity exists.
+1. **Pre-sign-in parameters (built).** `accountPassword.kdf({ email })` is
+   public and answers `{ state, kdf }`. Parameters live on the better-auth
+   user as `passwordKdf` (canonical JSON), written only in the sign-up body;
+   `update-user` refuses any call that carries it, because better-auth merges
+   a hook's data over its input and a stripped field would come back.
+   Unknown emails and accounts without a password get HMAC decoys keyed by
+   `BETTER_AUTH_SECRET`, answered as `ready`, so the answer does not reveal
+   whether an account exists. `legacy` (no parameters yet) and `pending` (an
+   upgrade cut off between writes) do reveal it, only until the few existing
+   accounts have upgraded. `accountPassword.upgrade` verifies the current
+   password (typed or derived), then writes parameters + pending flag, the
+   new hash, and clears the flag; each cut-off answers `pending`, where the
+   client tries the typed password and then the derived one.
+   `auth/password-kdf.ts`, `tests/password-kdf-integration.test.ts`.
 2. **Sign-up.** The client creates the salt, derives both values, signs up with
    the login secret, then creates and enrolls the identity with its password
    envelope and recovery envelope in the same flow. No question is asked.

@@ -1,3 +1,4 @@
+import { canonicalPasswordKdfOnCreate, passwordKdfUserFields, refusesPasswordKdfUpdate } from "./password-kdf.js";
 import { passkeyPlugin } from "./passkeys.js";
 import { loginSessionPlugin } from "./login-session.js";
 import { emailLinkForWeb } from "./email-link.js";
@@ -165,6 +166,11 @@ export async function initAuth(): Promise<void> {
     ),
 
     user: {
+      /**
+       * Password unlock's KDF parameters (`auth/password-kdf.ts`): written in
+       * the sign-up body, never changed through better-auth's endpoints.
+       */
+      additionalFields: passwordKdfUserFields,
       /**
        * Settings → Account → Change email. The new address gets a
        * verification link and the email changes only when it is followed.
@@ -372,7 +378,11 @@ export async function initAuth(): Promise<void> {
 
     databaseHooks: {
       user: {
+        update: {
+          before: async (update: Record<string, unknown>) => (refusesPasswordKdfUpdate(update) ? false : { data: update }),
+        },
         create: {
+          before: async (user: Record<string, unknown>) => ({ data: canonicalPasswordKdfOnCreate(user) }),
           /**
            * Give every new user their personal workspace immediately, so the
            * "user with no workspace" state never exists and no resolver needs
