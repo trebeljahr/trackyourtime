@@ -46,9 +46,16 @@ WORKDIR /app
 # probe can never pass: every deploy would be rolled back and the old
 # container kept. With it, a deploy is a rolling update — the old
 # container serves until this one is healthy.
+#
+# apt-get upgrade picks up Debian security fixes on every rebuild, before the
+# node base image is republished. The runtime never calls npm or npx, and the
+# npm bundled in the base image carries its own vulnerable dependencies, so it
+# is removed.
 RUN apt-get update \
+  && apt-get upgrade -y \
   && apt-get install -y --no-install-recommends curl \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production
 ENV PORT=5159
