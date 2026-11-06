@@ -8,10 +8,21 @@ type State = { session: ClientSession; fenced: Set<string>; effects: (() => void
 const context = new AsyncLocalStorage<State>();
 let topology: { db: object; supported: boolean } | undefined;
 
+/**
+ * Whether the deployment runs multi-document transactions (a replica set or
+ * mongos). A property of the topology, so a known answer is given before
+ * `readyState` is read: mongoose 9 reports a connected client as
+ * "disconnected" whenever its last heartbeat is two intervals behind
+ * `Date.now()`, so an event-loop stall (or a test clock moved forward) made
+ * this answer false, and `withBusinessTransaction` ran its work with no
+ * transaction at all. A connection that is really down fails the transaction
+ * instead.
+ */
 export async function supportsBusinessTransactions(): Promise<boolean> {
   const db = mongoose.connection.db;
-  if (!db || mongoose.connection.readyState !== 1) return false;
+  if (!db) return false;
   if (topology?.db === db) return topology.supported;
+  if (mongoose.connection.readyState !== 1) return false;
   const hello = await db.admin().command({ hello: 1 });
   const supported = !!hello.logicalSessionTimeoutMinutes && (!!hello.setName || hello.msg === "isdbgrid");
   topology = { db, supported };
