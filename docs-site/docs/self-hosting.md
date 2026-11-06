@@ -836,17 +836,24 @@ configured, so registration without a mail provider needs no mail.
 
 **Two-factor authentication** is in the app: **Settings → Account →
 Two-factor authentication**. It uses an authenticator app (TOTP) and ten
-single-use backup codes. After it is on, every web sign-in asks for a code.
-The mobile app cannot sign in to an account with two-factor authentication
-yet. It shows an error instead. The browser extension's password form has the
-same limit. Its **Sign in with the web app** button works, because you approve
-the sign-in in a browser that already passed the second step. Devices that are
-already signed in stay signed in. The Raycast client pairs through a browser
-that is already signed in, so it is not affected. Turning it off needs the
-password. If a person loses both the app and the backup codes, nobody on the
-instance can switch it off for them from the web app; the database record is
-the `twoFactor` document with their `userId`, and `twoFactorEnabled` on their
-`user` document.
+single-use backup codes. After it is on, every password sign-in asks for a
+code: in the web app, the mobile app and the desktop app. Each authenticator
+code works once. A mobile or desktop app older than this server version shows
+a message that points to browser sign-in instead. The browser extension's
+password form cannot ask for a code. Its **Sign in with the web app** button
+works, because you approve the sign-in in a browser that already passed the
+second step. The Raycast client pairs the same way, so it is not affected. A
+passkey sign-in asks for no code, because the passkey already checks the
+device PIN or biometric. Google sign-in does not work for an account with
+two-factor authentication; use the password and a code. Devices that are
+already signed in stay signed in.
+
+Turning two-factor authentication off, making new backup codes and deleting
+the account need the password and a code. Creating an API token needs a code
+when the account last entered one more than ten minutes ago. Ten wrong codes
+lock password sign-in for 15 minutes; a new password stops whoever is
+guessing. If a person loses both the app and the backup codes, run
+[`reset-two-factor`](#reset-two-factor).
 
 **Google sign-in** needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The
 redirect URI to register with Google is
@@ -928,6 +935,7 @@ use it, so protect SSH access to the server.
 |---|---|
 | `create-user --email <address> --name <name>` | Creates an account and its personal workspace. |
 | `reset-password --email <address>` | Sets a new password and signs the account out on every device. |
+| `reset-two-factor --email <address> [--commit]` | Turns two-factor authentication off for an account that lost every code. |
 | `list-workspaces` | Lists every workspace with its id, name, member count and owner email. |
 | `doctor` | Checks the configuration and the services, one `PASS`, `WARN` or `FAIL` line each. |
 | `help` | Shows the commands and their options. |
@@ -991,6 +999,28 @@ extension and the Raycast extension are signed out at the next request, and
 open live-sync connections close within a minute. A browser tab can keep
 working for up to five minutes from its cached session. The command also works
 for an account that signed up with Google and has no password yet: it adds one.
+
+#### `reset-two-factor`
+
+Use this only when a person lost the authenticator app and every backup code,
+and you confirmed who they are in another way. Without `--commit` the command
+changes nothing and says what it would do:
+
+```bash
+docker compose -f docker-compose.selfhost.yml exec server node dist/cli/admin.js reset-two-factor --email ada@example.com
+```
+
+**Expect:**
+
+```text
+Dry run: would turn two-factor authentication off for ada@example.com (user 6650f0c2a1b2c3d4e5f60718), delete its secret and backup codes and 0 pending rows, and sign out 2 sessions.
+Run again with --commit to do it.
+```
+
+Run it again with `--commit`. The command deletes the secret and the backup
+codes and signs the account out on every device. Add `--keep-sessions` to keep
+the sessions. The next sign-in needs only the password, and the person can
+turn two-factor authentication on again in Settings.
 
 #### `list-workspaces`
 

@@ -983,6 +983,11 @@ the very thing being replaced.
 - `lib/trpc.ts` adds `Authorization` and switches to `credentials: "omit"` when
   a token exists. With none — every web request — it is byte-identical to what
   it was, which `lib/trpc.test.ts` asserts rather than assumes.
+- `lib/auth-client.ts` omits credentials on `/sign-in/email` and both
+  `/two-factor/verify-*` calls in a token shell, token or not: better-fetch's
+  default `credentials: "include"` let WKWebView store the challenge and
+  session cookies, so the challenge header would not be the only credential
+  the server saw (`lib/auth-client-two-factor.test.ts`).
 - The socket takes the token as a **getter**, and `useSync`'s effect is keyed on
   it. The Keychain answers after mount, so a snapshot would open one tokenless
   socket, be refused, and retry that refusal forever — taking the offline
@@ -1211,35 +1216,127 @@ identical from the outside.
 
 ### Two-factor authentication and account controls
 
-better-auth's `twoFactor` plugin (TOTP + ten encrypted, single-use backup
-codes), change password, change email and the Google button. The server
-pieces live in `auth/account-security.ts` and are run against the real library
-in `tests/two-factor-integration.test.ts`; the web surfaces are the second step
-in `app/login/page.tsx` (`components/two-factor-challenge.tsx`) and the rows in
+better-auth's stock `twoFactor` plugin (TOTP, ten encrypted single-use backup
+codes) behind trackyourtime's own guard, plus change password, change email
+and the Google button. Pieces: plugin options, email verification and the
+socket sweep in `auth/account-security.ts`; the guard in
+`auth/two-factor-guard.ts`; code checks, counters and the step-up marker in
+`auth/second-factor.ts`; header names, limits and refusal codes in
+`@starter/shared` (`two-factor.ts`) — clients branch on `code`, never
+`message`. All of it runs against the real library in
+`tests/two-factor-integration.test.ts`. Web surfaces: the code step in
+`app/login/page.tsx` (`components/two-factor-challenge.tsx`) and the rows in
 Settings → Account (`settings/two-factor.tsx`, `settings/account-credentials.tsx`).
+Almost everything below still answers 200 when broken; each rule names what
+notices.
 
-Five rules, each of which fails quietly if broken:
-
-- **`twoFactorPlugin()` is registered before `bearer()`.** After-hooks run in
-  registration order. Password sign-in creates a session that the two-factor
-  hook deletes again; with bearer first, `set-auth-token` is emitted for that
-  deleted session and a token client stores a credential that answers 401
-  everywhere. The integration test reads `auth.ts` to pin the order.
-- **The challenge is a signed cookie, and nothing else completes it.** Spike
-  result for the native follow-up: `/two-factor/verify-*` reads only
-  `better-auth.two_factor`; the sign-in body is `{ twoFactorRedirect,
-  twoFactorMethods }` with no challenge in it. A WKWebView or extension `fetch`
-  can neither read `set-cookie` nor send `Cookie`, so bearer-only completion is
-  impossible with this configuration — forwarding the cookie by hand works
-  (the test does), so the follow-up needs a header carrying the challenge (an
-  after-hook copying it out, a before-hook turning it back into the cookie),
-  not a different flow. Until then `/login` on a native shell shows
-  `NATIVE_TWO_FACTOR_UNSUPPORTED` and `signInWithPassword` in core throws
-  `TWO_FACTOR_UNSUPPORTED`. The device flow is unaffected: its approval happens
-  in a browser that already passed the second factor. That is why the
-  extension popup answers `TWO_FACTOR_UNSUPPORTED` by pointing at "Sign in
-  with the web app", and why a 2FA account signed in on the web app links the
-  extension through the bridge without any second step.
+- **Plugin order is `twoFactorPlugin()`, `bearer()`, `twoFactorGuard()`.**
+  After-hooks run in registration order: with bearer first, `set-auth-token`
+  goes out for the password session the two-factor hook deletes, and a token
+  client stores a credential that answers 401 everywhere. The guard's
+  after-hook reads the challenge cookie `twoFactor` set, and its before-hooks
+  replace the request's `cookie` header, which only works after bearer's
+  rewrite (the last hook to set a request header wins). Before-hooks all see
+  the ORIGINAL request; a hook cannot see bearer's session, which is why the
+  guard resolves sessions through `auth.api.getSession` with the cache off.
+  "registers twoFactor, then bearer, then the guard" reads `auth.ts`.
+- **What better-auth now does itself, and is not repeated:** challenge expiry
+  and replay, five wrong codes per challenge, and ten per account across
+  challenges (a 15-minute lock, `ACCOUNT_TEMPORARILY_LOCKED`, which also stops
+  backup codes — someone holding the password can keep the owner locked out;
+  a new password ends it). 1.6.11 had none of this; the "tripwire" suite pins
+  it so the next upgrade notices if it goes. The session cookies a 2FA
+  sign-in used to leak first-in-line (the "ghost session") are gone too, and
+  pinned the same way.
+- **The challenge travels as a header, for every client.** `set-two-factor-token`
+  on the sign-in answer; `x-two-factor-token` on `/two-factor/verify-*`, which
+  the guard turns into the `two_factor` cookie and sends to the endpoint as
+  the ONLY credential (a stale bearer or a dead cached session beside it would
+  send the call down the session path). The web app uses the header too
+  (`lib/two-factor-challenge.ts`, memory only), so Playwright drives the
+  phone's path; the cookie still works. Send it back byte for byte — it holds
+  `+`, `/`, `=`. `cors` `exposedHeaders` lists it and the guard merges it
+  into better-auth's own `Access-Control-Expose-Headers`, which replaces the
+  one `cors` set. A token shell that gets a challenge with no header (an
+  older server) still shows `desktopUseBrowser`.
+- **A TOTP code verifies once.** Otherwise a code is good for its ±1-step
+  window, so one seen over a shoulder or through a phishing proxy signs in a
+  second time. The guard spends the step (`2fa-totp-spent-<userId>-<step>`,
+  claim-before-count, budget one) before `/two-factor/verify-totp` runs, for
+  the challenge, enrolment and step-up, and `verifySecondFactor` does for
+  disable, regenerate and delete. A spent code answers `INVALID_CODE`, exactly
+  like a wrong one. Tests and e2e that verify several codes pick an unspent
+  step (`totpFor`, `freshTotp`).
+- **A session plus the password is not enough to take over 2FA.** That pair
+  is what 2FA assumes an attacker may hold. Re-enabling with 2FA on (the flag
+  or a verified enrolment row) is 400 `TWO_FACTOR_ALREADY_ENABLED` — the stock
+  endpoint would replace the secret, keep it "verified" and hand the new one to
+  the caller. `get-totp-uri` (a clone of the authenticator), `send-otp` and
+  `verify-otp` are 404. Disable, `generate-backup-codes` and `/delete-user`
+  (2FA on) need `{ password, code }`: password first (400 `INVALID_PASSWORD`,
+  no attempt spent), then `TWO_FACTOR_CODE_REQUIRED`, then the in-session
+  counter, then the code (`TWO_FACTOR_CODE_INVALID`). The code is a TOTP or a
+  backup code in one field (`looksLikeTotp`). A flag with no enrolment row (a
+  deletion that failed after the cascade) asks no code. An enable that an
+  enrolment verify overtakes between the guard's read and the endpoint's
+  replace is not caught: it needs the password and the owner's enrolment
+  minute, and recovery is `admin reset-two-factor`.
+- **In-session codes have their own budget.** better-auth counts nothing on
+  the session path. `TWO_FACTOR_MAX_STEP_UP_ATTEMPTS` (10) wrong TOTPs per
+  user in 15 minutes (`2fa-attempts-step-up-<userId>`, claim before check, so
+  a parallel burst cannot all read "0 so far") cover step-up verify, disable,
+  regenerate and delete; 429 `TWO_FACTOR_TOO_MANY_ATTEMPTS`. Backup codes are
+  not counted (about 59 bits each), so the owner can still disable with one
+  while somebody holding a session keeps the TOTP budget spent.
+- **No trusted devices.** `trustDevice` is forced off and `disableSession:
+  true` is 400 `TWO_FACTOR_OPTION_NOT_ALLOWED`. The trust cookie would let the
+  password alone sign in for thirty days and its rows outlive disabling 2FA;
+  a 7- or 30-day session already means a code only on a new sign-in.
+- **Session creation for a 2FA account is an allowlist**
+  (`TWO_FACTOR_SESSION_PATHS`, `sessionCreationAllowed` in
+  `session.create.before`): `/sign-in/email` (deleted at once), both verify
+  paths, `/two-factor/disable`, `/change-password`, `/device/token`,
+  `/passkey/verify-authentication` (a passkey with user verification is two
+  factors). Anything else gets no session — above all Google's
+  `/callback/google`, which the plugin does not intercept and which signed a
+  2FA account with a verified email straight in; it now redirects with
+  `error=unable_to_create_session`. A future session-minting endpoint is
+  refused until someone adds it on purpose. No request context (a script) is
+  allowed. "lists exactly the reviewed session-creating paths" makes a new
+  entry a deliberate edit. The magic-link plugin keeps its own earlier
+  refusal (`magic-link-guard.ts`), which answers first.
+- **The cookie cache never stands in for a session on `/api/auth`.** The
+  stock endpoints read the signed five-minute `session_data` snapshot, so a
+  signed-out or revoked session could enable, regenerate, approve a device
+  code into a fresh thirty-day session, or rename the account. The guard
+  fails closed: 401 on enable, disable and regenerate without a live session;
+  no live session and no challenge on a verify is 401; and on every other
+  path but `/get-session` (`OWN_SESSION_CHECK_PATHS`) a request carrying the
+  cache cookie is looked up with the cache off, and a dead one reaches the
+  endpoint without its session cookies. A denylist on purpose, so a new
+  endpoint is covered. tRPC's context already reads with the cache off.
+- **Minting an API token needs a recent second factor; using one never does.**
+  Every successful verify writes `2fa-fresh-<sessionId>` for
+  `TWO_FACTOR_STEP_UP_SECONDS` (600); `apiTokens.create` calls
+  `assertTwoFactorStepUp`, which for a 2FA account wants a live marker for
+  this session, else FORBIDDEN with the message `TWO_FACTOR_STEP_UP_REQUIRED`.
+  The dialog then asks for a code, verifies it inside the session (no
+  rotation) and retries the same input. A `tt_` token outlives a sign-out, a
+  revocation and a password reset, so a stolen cookie must not mint one.
+- **Every row the guard writes is a `verification` row named `2fa-…` whose
+  `value` is the user id** (spent steps, counters, markers; better-auth's
+  challenge rows too). `admin reset-two-factor` (`cli/two-factor.ts`; dry run
+  without `--commit`, `--keep-sessions`) clears them with the flag, the
+  `twoFactor` row and, by default, every session; its header has the mongosh
+  equivalent. All of them expire within fifteen minutes on their own.
+- **Password reset does not revoke sessions**, deliberately unlike the old
+  2FA branch: password unlock re-seals the private-data keys from a device
+  that is still signed in after a reset (`markPasswordKeysStale`,
+  `components/private-keys-notice.tsx`). The reset proves the inbox, not the
+  second factor, so the next sign-in still asks for a code.
+- **`x-trackyourtime-client` must be on the verify request.** The session that
+  survives a 2FA sign-in is created by verify, and `session-lifetime.ts` stamps
+  the client from that request; the auth client sends it on every call.
 - **Email verification is required only when `isEmailDeliveryConfigured()`.**
   A self-host with no transport would otherwise lock every new account out.
   `sendVerificationEmail` belongs in the `emailVerification` block — under
