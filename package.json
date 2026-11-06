@@ -104,7 +104,7 @@
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.8.0",
     "concurrently": "^9.2.1",
-    "electron": "^42.1.0",
+    "electron": "^42.11.16",
     "electron-builder": "^26.17.0",
     "electron-updater": "6.8.9",
     "esbuild": "^0.28.0",
