@@ -28,29 +28,39 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      statuses: read
     outputs:
       number: ${{ steps.pick.outputs.number }}
       sha: ${{ steps.pick.outputs.sha }}
     steps:
-      - name: Pick the oldest grouped Dependabot PR
+      - name: Pick the oldest grouped Dependabot PR not already tested red
         id: pick
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          pr=$(gh pr list --repo "$REPO" --state open --author app/dependabot --base main \
-                 --json number,headRefName,headRefOid,createdAt \
-                 --jq '[.[] | select(.headRefName | test("^dependabot/npm_and_yarn/(.+/)?npm-(minor-patch|security)-"))] | sort_by(.createdAt) | first // empty')
-          if [ -z "$pr" ]; then echo "no grouped Dependabot PR is open"; exit 0; fi
-          number=$(jq -r .number <<<"$pr"); sha=$(jq -r .headRefOid <<<"$pr")
-          others=$(gh pr view "$number" --repo "$REPO" --json commits \
-                     --jq '[.commits[].authors[].login | select(. != "dependabot[bot]")] | length')
-          if [ "$others" != "0" ]; then
-            echo "::warning::PR #$number has commits that are not Dependabot's: left for a person"; exit 0
-          fi
-          echo "PR #$number at $sha"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # A head commit this workflow already tested red carries a failed
+          # "dependency-updates" status. It is skipped, so one broken PR does not
+          # hold the queue; Dependabot pushing a new head tests it again.
+          prs=$(gh pr list --repo "$REPO" --state open --author app/dependabot --base main \
+                  --json number,headRefName,headRefOid,createdAt \
+                  --jq '[.[] | select(.headRefName | test("^dependabot/npm_and_yarn/(.+/)?npm-(minor-patch|security)-"))] | sort_by(.createdAt) | .[] | "\(.number) \(.headRefOid)"')
+          while read -r number sha; do
+            [ -n "$number" ] || continue
+            state=$(gh api "repos/$REPO/commits/$sha/statuses" \
+                      --jq '[.[] | select(.context == "dependency-updates")][0].state // ""')
+            if [ "$state" = "failure" ]; then echo "PR #$number at $sha failed before: skipped"; continue; fi
+            others=$(gh pr view "$number" --repo "$REPO" --json commits \
+                       --jq '[.commits[].authors[].login | select(. != "dependabot[bot]")] | length')
+            if [ "$others" != "0" ]; then
+              echo "::warning::PR #$number has commits that are not Dependabot's: left for a person"; continue
+            fi
+            echo "PR #$number at $sha"
+            echo "number=$number" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          done <<<"$prs"
+          echo "no grouped Dependabot PR is left to test"
 
   # The same gates as build-and-deploy.yml: verify, e2e and desktop. They run
   # the PR's code with a read-only token and no secrets.
@@ -195,6 +205,27 @@ jobs:
           name: desktop-e2e-results
           path: test-results/
           if-no-files-found: ignore
+
+  record:
+    needs: [pick, verify, e2e, desktop]
+    if: always() && needs.pick.outputs.number != ''
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Record the result on the PR's head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.pick.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PASSED: ${{ needs.verify.result == 'success' && needs.e2e.result == 'success' && needs.desktop.result == 'success' }}
+        run: |
+          if [ "$PASSED" = "true" ]; then state=success; text="push pipeline checks passed"
+          else state=failure; text="push pipeline checks failed: left for a person"; fi
+          gh api -X POST "repos/$REPO/statuses/$SHA" -f state="$state" -f context=dependency-updates \
+            -f description="$text" -f target_url="$RUN_URL" >/dev/null
+          echo "$SHA: $state"
 
   land:
     needs: [pick, verify, e2e, desktop]
