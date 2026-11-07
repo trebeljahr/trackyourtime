@@ -93,7 +93,11 @@ export const settings = {
     failed: "Could not complete this request. Check your recovery key or passkey and try again. Existing encrypted data has not been replaced.",
   },
   passkeys: {
-    title: "Passkeys", description: "Sign in with your fingerprint, face, device PIN, or security key. Password recovery stays available.",
+    opensData: "Signs in and opens your encrypted data.",
+    signInOnly: "Signs in only. It opens your encrypted data after you sign in with it once on a device where your data is open.",
+    addedNoPrf: "Added. This passkey signs you in, but your browser or password manager cannot give it a key for your encrypted data. Keep your password or recovery key for that.",
+    addedLocked: "Added. Your encrypted data is locked on this device, so the passkey will get its key the next time you sign in with it where your data is open.",
+    title: "Passkeys", description: "Sign in, and open your encrypted data, with your fingerprint, face, device PIN or security key. Your password and recovery key keep working.",
     browser: "Manage passkeys in your browser. Use Sign in with your browser when opening the desktop or mobile app.",
     name: "Name this passkey", unnamed: "Passkey", add: "Add a passkey", remove: "Remove", waiting: "Waiting for your device…",
     failed: "Could not complete the passkey request. Try again in a supported browser; you may need to sign in again.",

@@ -2,7 +2,7 @@ import { finishPasswordUnlock, forgetPasswordUnlock, passwordSecretForSignedIn, 
 import { eraseCachedPrivateIdentity } from "./private-identity-cache";
 import { eraseRecoveryBackupFolders } from "./recovery-backup-folder";
 import { erasePrivateIndexedStorage } from "./private-indexed-storage";
-import { lockAndForgetPrivateData, lockPrivateData, PRIVATE_PRF_INPUT, prfBytes, unlockPrivatePrf } from "./private-session";
+import { lockAndForgetPrivateData, lockPrivateData, PRIVATE_PRF_INPUT, prfBytes } from "./private-session";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { fetchAuthWithTimeout } from "./auth-request";
 import { createAuthClient } from "better-auth/react";
@@ -302,13 +302,13 @@ export async function signInWithPasskey() {
   if (!secret) return result;
   try {
     const userId = result.data?.user.id;
-    if (userId) {
-      const { getTRPCClient } = await import("./trpc");
-      const account = await getTRPCClient().privacy.identity.query({ userId });
-      if (revision === authRevision && origin === getApiOrigin() && account?.identity.passkeys.some((p) => p.credentialId === result.webauthn.response.id)) await unlockPrivatePrf(userId, account.identity, result.webauthn.response.id, secret);
+    // Opens the keys with this passkey, or gives it a sealed copy when this
+    // device already holds them open (lib/passkey-keys.ts).
+    if (userId && revision === authRevision && origin === getApiOrigin()) {
+      const { finishPasskeyUnlock } = await import("./passkey-keys");
+      await finishPasskeyUnlock(userId, result.webauthn.response.id, secret);
     }
-  } catch { /* Login still succeeds when this passkey has no encryption grant. */ }
-  finally { secret.fill(0); }
+  } finally { secret.fill(0); }
   return result;
 }
 

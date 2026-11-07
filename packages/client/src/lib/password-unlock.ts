@@ -284,7 +284,7 @@ async function resolveActiveWorkspaceNow(userId: string): Promise<void> {
  * Keys just opened on this device: rebuild the signed workspace list from the
  * server when this device has none, then let the app re-read what it may open.
  */
-async function openInventoryAndWorkspace(userId: string): Promise<void> {
+export async function openInventoryAndWorkspace(userId: string): Promise<void> {
   const { openPrivateAccountInventorySync, privateAccountInventoryTransport } = await import("./private-inventory-sync");
   const sync = await openPrivateAccountInventorySync(userId);
   try {

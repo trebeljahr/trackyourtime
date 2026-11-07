@@ -6,10 +6,8 @@ import { PrivateActivity } from "./private-activity";
 import { PrivateDeviceUnlock } from "./private-device-unlock";
 import { useServerSupports } from "@/lib/server-level";
 import * as React from "react";
-import { signPrivateChange } from "@starter/core";
-import { authClient } from "@/lib/auth-client";
 import { downloadBlob } from "@/lib/download";
-import { evaluatePrivatePasskey, lockAndForgetPrivateData, privateSession, privateOperationScope, privateDataOrigin, prfBytes, PRIVATE_PRF_INPUT, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey, wrapIdentityWithPrf } from "@/lib/private-session";
+import { lockAndForgetPrivateData, privateSession, privateDataOrigin, subscribePrivateSession, unlockPrivateRecovery, unlockWithSavedPasskey } from "@/lib/private-session";
 import { preparePrivateAccountSetup, finishPrivateAccountSetup } from "@/lib/private-account-setup";
 import { recoveryKeyToSave, subscribePasswordUnlockNotices } from "@/lib/password-unlock";
 import { replaceRecoveryKey } from "@/lib/private-recovery-key";
@@ -33,7 +31,6 @@ function PrivateDataForUser({ id, unlockOnly, hideDeviceUnlock }: { id: string; 
   const native = useIsTokenShell();
   const deviceUnlockSupported = useServerSupports("privacy.deviceUnlock");
   const account = trpc.privacy.identity.useQuery({ userId: id }, { retry: false });
-  const updateIdentity = trpc.privacy.updateIdentity.useMutation();
   const [draft, setDraft] = React.useState<Enrollment | null>(null);
   const [confirmation, setConfirmation] = React.useState("");
   const [recovery, setRecovery] = React.useState("");
@@ -93,33 +90,7 @@ function PrivateDataForUser({ id, unlockOnly, hideDeviceUnlock }: { id: string; 
       </div>}
       {identity && current && <div className="space-y-3">
         <p role="status" className="text-sm">{t("privateData.unlocked")}</p>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={native || pending || !advertised || replaced || account.isError} onClick={() => void run(async () => {
-          const assertCurrent = privateOperationScope(id);
-          const listed = await authClient.passkey.listUserPasskeys();
-          if (listed.error) throw new Error("Could not load passkeys");
-          const available = (listed.data ?? []).filter((p) => !advertised!.passkeys.some((saved) => saved.credentialId === p.credentialID));
-          let credentialId: string, secret: Uint8Array<ArrayBuffer> | null;
-          if (available.length) {
-            try { ({ credentialId, secret } = await evaluatePrivatePasskey(available.map((p) => p.credentialID))); }
-            catch { setProblem(t("privateData.passkeyNoEncryption")); return; }
-          } else {
-            const result = await authClient.passkey.addPasskey({ name: t("privateData.passkeyName"), extensions: { prf: { eval: { first: PRIVATE_PRF_INPUT } } }, returnWebAuthnResponse: true } as unknown as Parameters<typeof authClient.passkey.addPasskey>[0]);
-            if (result.error || !("webauthn" in result)) throw new Error("Passkey registration failed");
-            credentialId = result.webauthn.response.id;
-            secret = prfBytes((result.webauthn.clientExtensionResults as { prf?: { results?: { first?: unknown } } }).prf?.results?.first);
-            if (!secret) {
-              try { ({ secret } = await evaluatePrivatePasskey([credentialId])); }
-              catch { setProblem(t("privateData.passkeyNoEncryption")); return; }
-            }
-          }
-          try {
-            const next = { ...advertised!, recovery: identity.recovery, passkeys: [...advertised!.passkeys, { credentialId, envelope: await wrapIdentityWithPrf(id, secret, identity) }] };
-            const revision = account.data!.revision;
-            const signature = await signPrivateChange(current.signingPrivateKey, { userId: id, revision, identity: next });
-            assertCurrent(); if (privateSession(id) !== current) throw new Error("Private data is locked");
-            await updateIdentity.mutateAsync({ identity: next, revision, signature }); await remember(next); await account.refetch();
-          } finally { secret.fill(0); }
-        })}>{t("privateData.addPasskey")}</Button><Button variant="outline" disabled={pending || !advertised || replaced || account.isError} onClick={() => void run(async () => { await replaceRecoveryKey(id); await account.refetch(); })} data-testid="new-recovery-key">{t("privateData.newRecovery")}</Button><Button variant="outline" onClick={lockAndForgetPrivateData}>{t("privateData.lock")}</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || !advertised || replaced || account.isError} onClick={() => void run(async () => { await replaceRecoveryKey(id); await account.refetch(); })} data-testid="new-recovery-key">{t("privateData.newRecovery")}</Button><Button variant="outline" onClick={lockAndForgetPrivateData}>{t("privateData.lock")}</Button></div>
         <p className="text-sm text-muted-foreground">{t("privateData.newRecoveryDetail")}</p>
         {!unlockOnly && recoveryKeyToSave(id) && <SaveRecoveryKey userId={id} recoveryKey={recoveryKeyToSave(id)!} />}
       </div>}

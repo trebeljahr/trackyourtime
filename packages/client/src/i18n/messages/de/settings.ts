@@ -90,7 +90,11 @@ export const settings: Translation<typeof source> = {
     failed: "Die Anfrage konnte nicht abgeschlossen werden. Wiederherstellungsschlüssel oder Passkey prüfen und erneut versuchen. Bestehende verschlüsselte Daten wurden nicht ersetzt.",
   },
   passkeys: {
-    title: "Passkeys", description: "Mit Fingerabdruck, Gesicht, Geräte-PIN oder Sicherheitsschlüssel anmelden. Das Zurücksetzen des Passworts bleibt möglich.",
+    opensData: "Meldet dich an und öffnet deine verschlüsselten Daten.",
+    signInOnly: "Meldet dich nur an. Er öffnet deine verschlüsselten Daten, nachdem du dich einmal damit auf einem Gerät angemeldet hast, auf dem deine Daten offen sind.",
+    addedNoPrf: "Hinzugefügt. Dieser Passkey meldet dich an, aber dein Browser oder Passwort-Manager kann ihm keinen Schlüssel für deine verschlüsselten Daten geben. Behalte dafür dein Passwort oder deinen Wiederherstellungsschlüssel.",
+    addedLocked: "Hinzugefügt. Deine verschlüsselten Daten sind auf diesem Gerät gesperrt, deshalb bekommt der Passkey seinen Schlüssel, wenn du dich das nächste Mal dort damit anmeldest, wo deine Daten offen sind.",
+    title: "Passkeys", description: "Melde dich mit Fingerabdruck, Gesicht, Geräte-PIN oder Sicherheitsschlüssel an und öffne damit deine verschlüsselten Daten. Passwort und Wiederherstellungsschlüssel funktionieren weiter.",
     browser: "Passkeys im Browser verwalten. In der Desktop- oder Mobil-App die Anmeldung über den Browser verwenden.",
     name: "Name dieses Passkeys", unnamed: "Passkey", add: "Passkey hinzufügen", remove: "Entfernen", waiting: "Warte auf dein Gerät…",
     failed: "Die Passkey-Anfrage konnte nicht abgeschlossen werden. Erneut in einem unterstützten Browser versuchen; eventuell ist eine neue Anmeldung nötig.",
