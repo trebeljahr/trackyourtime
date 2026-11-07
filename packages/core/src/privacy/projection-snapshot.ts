@@ -19,6 +19,10 @@ function freeze<T>(value: T): T {
   if (value && typeof value === "object") { for (const child of Object.values(value)) freeze(child); Object.freeze(value); }
   return value;
 }
+/** The order initial projections are signed and stored in: by record address. */
+export function sortInitialProjectionRecords<T extends EncryptedRecord>(records: readonly T[]): T[] {
+  return [...records].sort((a, b) => address(a) < address(b) ? -1 : address(a) > address(b) ? 1 : 0);
+}
 function rows(input: readonly unknown[], privateRows: boolean): EncryptedRecord[] {
   if (new TextEncoder().encode(JSON.stringify(input)).length > PRIVATE_SNAPSHOT_MAX_BYTES) throw new Error("Initial projection exceeds its size bound");
   const output = z.array(encryptedRecordSchema).max(400_000).parse(input);

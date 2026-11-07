@@ -13,7 +13,7 @@
  * Only accounts on ENCRYPTED_WORKSPACE_USERS may create one, or write to one.
  */
 import { TRPCError } from "@trpc/server";
-import { canonicalJson, privateInitialSnapshotProjection, privateRecordDigest } from "@starter/core";
+import { canonicalJson, privateInitialSnapshotProjection, privateRecordDigest, sortInitialProjectionRecords } from "@starter/core";
 import { encryptedRecordSchema, signedPrivateInitialProjectionRootSchema, type EncryptedRecord, type SignedPrivateDirectory, type SignedPrivateInitialProjectionRoot } from "@starter/shared";
 import { env } from "../../config/env.js";
 import { PrivateAccount, PrivateDirectory, PrivateProjectionReader, PrivateProjectionRoot, PrivateSnapshotChunk, PrivateWorkspace } from "../../models/PrivateData.js";
@@ -24,8 +24,9 @@ import { commitPrivateDirectory } from "./directories.js";
 import { isPersonalPrivateKind } from "./projection-proposal.js";
 import { verifyPrivateChange } from "./signatures.js";
 
-/** What a new encrypted workspace may start with: its encrypted name. */
-const INITIAL_KINDS = new Set(["workspaceIdentity"]);
+/** What a new encrypted workspace may start with: its encrypted name, its
+ * settings and the owner's membership (each with its money half). */
+const INITIAL_KINDS = new Set(["workspaceIdentity", "settings", "settingsMoney", "members", "memberMoney"]);
 /** The organization row the server keeps: no name a reader could learn from. */
 export const ENCRYPTED_WORKSPACE_PUBLIC_NAME = "Encrypted workspace";
 
@@ -55,7 +56,7 @@ export async function createEncryptedWorkspace(user: { id: string; name?: string
   requireEncryptedWorkspaceUser(user);
   const records = input.records.map((row) => encryptedRecordSchema.parse(row));
   const signed = signedPrivateInitialProjectionRootSchema.parse(input.root), manifest = signed.manifest;
-  if (records.length > 10 || records.some((row) => !INITIAL_KINDS.has(row.kind))) throw new TRPCError({ code: "BAD_REQUEST", message: "A new encrypted workspace starts with its name only." });
+  if (records.length > 10 || records.some((row) => !INITIAL_KINDS.has(row.kind))) throw new TRPCError({ code: "BAD_REQUEST", message: "A new encrypted workspace starts with its name, settings and owner only." });
   return withBusinessTransaction(async () => {
     const account = await PrivateAccount.findOne({ userId: user.id }).lean();
     if (!account) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Set up private data keys first." });
@@ -70,7 +71,7 @@ export async function createEncryptedWorkspace(user: { id: string; name?: string
     if (manifest.server !== server || manifest.workspaceId !== input.workspaceId || manifest.directoryDigest !== directory.digest || manifest.signerId !== user.id || manifest.revision !== 1
       || manifest.readers.length !== 1 || manifest.readers[0]!.userId !== user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "The initial projection does not match this workspace." });
     await verifyPrivateChange(owner.signingPublicKey, manifest, signed.signature);
-    const readable = records.filter((row) => row.grants.length === 1 && row.grants[0]!.userId === user.id);
+    const readable = sortInitialProjectionRecords(records).filter((row) => row.grants.length === 1 && row.grants[0]!.userId === user.id);
     if (readable.length !== records.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Every initial record must be readable by the owner only." });
     const shared = readable.filter((row) => !isPersonalPrivateKind(row.kind));
     const personal = readable.filter((row) => isPersonalPrivateKind(row.kind) && row.authorId === user.id);
@@ -78,10 +79,10 @@ export async function createEncryptedWorkspace(user: { id: string; name?: string
     if (reader.sharedDigest !== await privateRecordDigest(privateInitialSnapshotProjection(shared, user.id)) || reader.personalDigest !== await privateRecordDigest(personal))
       throw new TRPCError({ code: "BAD_REQUEST", message: "The initial projection does not match its records." });
     const root = await privateRecordDigest(manifest), migrationId = manifest.migrationId;
-    await PrivateSnapshotChunk.create({ workspaceId: input.workspaceId, migrationId, index: 0, records });
+    await PrivateSnapshotChunk.create({ workspaceId: input.workspaceId, migrationId, index: 0, records: readable });
     const location = (rows: readonly EncryptedRecord[]) => (rows.length ? [{ chunk: 0, before: 0, count: rows.length }] : []);
     await PrivateProjectionReader.create({ workspaceId: input.workspaceId, migrationId, userId: user.id, sharedLocations: location(shared), personalLocations: location(personal) });
-    await PrivateProjectionRoot.create({ workspaceId: input.workspaceId, migrationId, root, fullRecordsDigest: (await privateRecordDigest(records)), signed });
+    await PrivateProjectionRoot.create({ workspaceId: input.workspaceId, migrationId, root, fullRecordsDigest: (await privateRecordDigest(readable)), signed });
     await PrivateWorkspace.create({ workspaceId: input.workspaceId, ownerId: user.id, state: "encrypted", revision: 1, head: root, directoryDigest: directory.digest, migrationId, sourceRevision: "new", leaseUntil: new Date(), backupVerified: true });
     if (canonicalJson((await PrivateDirectory.findOne({ workspaceId: input.workspaceId, revision: 1 }).lean())?.digest) !== canonicalJson(directory.digest)) throw new TRPCError({ code: "CONFLICT" });
     return { workspaceId: input.workspaceId, root };

@@ -34,7 +34,10 @@ export function privateEntryQuery(options: PrivateViewOptions & { path: PrivateE
   const { scope, path } = options, source = privateViewSource(options), { check, visibility } = source;
   const rawInput = z.record(z.string(), z.unknown()).parse(options.input ?? {});
   if (rawInput.workspaceId !== undefined && rawInput.workspaceId !== scope.workspaceId) throw new Error("Private entry filter belongs to another workspace");
-  const { workspaceId: _scope, ...input } = rawInput; void _scope;
+  // tRPC's infinite queries add `direction` to every page request; it says
+  // nothing about which entries match, so it is checked and dropped here.
+  if (rawInput.direction !== undefined && rawInput.direction !== "forward" && rawInput.direction !== "backward") throw new Error("Invalid private entry page direction");
+  const { workspaceId: _scope, direction: _direction, ...input } = rawInput; void _scope; void _direction;
   const { quick, detailed } = privateEntryReader(source);
   const quickCatalog = () => privateQuickStartCatalog(source);
   let result;

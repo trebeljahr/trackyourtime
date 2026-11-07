@@ -44,6 +44,10 @@ it("matches overlap boundaries, literal search and combined catalog/tag/billable
  assert.equal(f.list({ from: new Date(now - 1800000).toISOString() }).entries.length, 0); assert.equal(f.list({ to: stamp }).entries.length, 0);
  f.entry("running", "owner", { end: null, start: "2025-01-01T00:00:00.000Z", durationSec: 0 }, null); assert.equal(f.list().entries.at(-1).id, "running");
 });
+it("accepts the page direction tRPC's infinite queries add, and nothing else unknown", async () => {
+ const f = await fixture(); assert.equal(f.list({ direction: "forward" }).entries.length, 3); assert.equal(f.list({ direction: "backward" }).entries.length, 3);
+ assert.throws(() => f.list({ direction: "sideways" })); assert.throws(() => f.list({ sortBy: "start" }));
+});
 it("paginates equal start times and retains old ID-only cursors without dropping or repeating entries", async () => {
  const f = await fixture(), first = f.list({ limit: 1 }); assert.equal(first.entries[0].id, "c"); assert.equal(first.nextCursor, `${stamp}|c`);
  const second = f.list({ limit: 1, cursor: first.nextCursor }); assert.equal(second.entries[0].id, "b"); assert.equal(f.list({ cursor: second.nextCursor }).entries[0].id, "a"); assert.equal(f.list({ cursor: "b" }).entries[0].id, "a"); assert.deepEqual(f.list({ cursor: "invalid" }), { entries: [] });

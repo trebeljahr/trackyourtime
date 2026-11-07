@@ -25,6 +25,10 @@ import { useFormat } from "@/i18n/use-format";
 import { useT } from "@/i18n/use-t";
 import { CURRENCIES, currencyName } from "@/lib/currencies";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/hooks/use-auth";
+import { useServerSupports } from "@/lib/server-level";
+import { privateSession, subscribePrivateSession } from "@/lib/private-session";
+import { createEncryptedWorkspace } from "@/lib/private-encrypted-workspace";
 
 export type NewWorkspaceDialogProps = {
   open: boolean;
@@ -50,6 +54,15 @@ export function NewWorkspaceDialog({
   const f = useFormat();
   const settings = trpc.settings.get.useQuery(undefined, { staleTime: 60_000, enabled: open });
   const create = trpc.workspaces.create.useMutation();
+  // Early access: offered only to accounts on the server's allowlist, on a
+  // device whose keys are open (lib/private-encrypted-workspace.ts).
+  const { user } = useAuth();
+  const encryptedSupported = useServerSupports("privacy.encryptedWorkspaceCreate");
+  const encryptedAllowed = trpc.privacy.encryptedWorkspaces.useQuery(undefined, { enabled: open && encryptedSupported, retry: false });
+  const [, redraw] = React.useReducer((value: number) => value + 1, 0);
+  React.useEffect(() => subscribePrivateSession(redraw), []);
+  const canEncrypt = !!user && encryptedAllowed.data?.allowed === true && !!privateSession(user.id);
+  const [encrypted, setEncrypted] = React.useState(false);
 
   const [name, setName] = React.useState("");
   const [currency, setCurrency] = React.useState<string | null>(null);
@@ -67,6 +80,7 @@ export function NewWorkspaceDialog({
     setName("");
     setCurrency(null);
     setWeekStart(null);
+    setEncrypted(false);
     setError(null);
   };
 
@@ -76,11 +90,10 @@ export function NewWorkspaceDialog({
     setPending(true);
     setError(null);
     try {
-      const { workspaceId } = await create.mutateAsync({
-        name: name.trim(),
-        currency: chosenCurrency,
-        weekStartsOn: chosenWeekStart,
-      });
+      const input = { name: name.trim(), currency: chosenCurrency, weekStartsOn: chosenWeekStart };
+      const { workspaceId } = encrypted && canEncrypt && user
+        ? await createEncryptedWorkspace(user.id, input)
+        : await create.mutateAsync(input);
       await enterWorkspace(workspaceId, navigate);
     } catch (failure) {
       setError(membershipErrorMessage(failure));
@@ -148,6 +161,16 @@ export function NewWorkspaceDialog({
               </select>
             </div>
           </div>
+
+          {canEncrypt ? (
+            <label className="flex items-start gap-2 text-sm" data-testid="new-workspace-encrypted">
+              <input type="checkbox" className="mt-1" checked={encrypted} onChange={(event) => setEncrypted(event.target.checked)} />
+              <span>
+                <span className="font-medium">{t("newWorkspace.encrypted")}</span>
+                <span className="block text-xs text-muted-foreground">{t("newWorkspace.encryptedHint")}</span>
+              </span>
+            </label>
+          ) : null}
 
           <p className="text-xs text-muted-foreground">{t("newWorkspace.hint")}</p>
 

@@ -124,6 +124,8 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     throw new PrivateContentUnavailableError();
   } catch (error) {
     if (error instanceof PrivateContentUnavailableError) throw error;
+    // The page shows a fixed sentence; the cause (no record values) goes to the console.
+    console.warn("[private] workspace read failed", path, error instanceof Error ? error.message : error);
     throw new PrivateContentUnavailableError("Private workspace data could not be verified. Existing data was kept.");
   } finally { session?.close(); }
 }

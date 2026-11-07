@@ -32,7 +32,7 @@ describe("creating an encrypted workspace", { skip: skipWithoutDatabase }, () =>
     const pair = await createKeyPair(), signing = await createSigningPair();
     return { publicKey: pair.publicKey, signingPublicKey: signing.publicKey, secrets: { v: 1 as const, master: encodeSecret(randomSecret()), privateKey: pair.privateKey, signingPrivateKey: signing.privateKey } };
   }
-  const prepared = (workspaceId: string, override: Partial<typeof keys> = {}) => prepareEncryptedWorkspace({ server, workspaceId, userId: owner.id, name: "Client work", createdAt: new Date().toISOString(), reportRangeTimeZone: "UTC", current: () => true, ...keys, ...override });
+  const prepared = (workspaceId: string, override: Partial<typeof keys> = {}) => prepareEncryptedWorkspace({ server, workspaceId, userId: owner.id, name: "Client work", createdAt: new Date().toISOString(), reportRangeTimeZone: "UTC", currency: "EUR", weekStartsOn: 1, current: () => true, ...keys, ...override });
   const input = (workspaceId: string, p: Awaited<ReturnType<typeof prepared>>) => ({ workspaceId, currency: "EUR", weekStartsOn: 1 as const, directory: p.signedDirectory, root: p.root, records: p.records });
 
   before(() => connectTestDatabase("private-encrypted-creation", [PrivateAccount, PrivateDirectory, PrivateWorkspace, PrivateProjectionRoot, PrivateProjectionReader, PrivateSnapshotChunk, WorkspaceMember, WorkspaceWriteFence] as never));
@@ -50,7 +50,7 @@ describe("creating an encrypted workspace", { skip: skipWithoutDatabase }, () =>
     assert.equal(p.snapshot.root, root);
     assert.deepEqual(await privateProjectionSnapshotRoot({ server, workspaceId, userId: owner.id }), p.root);
     const page = await privateProjectionSnapshotPage({ server, workspaceId, userId: owner.id, migrationId: p.root.manifest.migrationId }, "shared", 0);
-    assert.equal(page.records.length, 1);
+    assert.equal(page.records.length, 5);
     // The name is ciphertext on the server.
     assert.doesNotMatch(JSON.stringify(await PrivateSnapshotChunk.find().lean()), /Client work/);
   });

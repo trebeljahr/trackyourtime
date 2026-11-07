@@ -1555,3 +1555,49 @@ Not testable there: another device, because an exported virtual credential
 carries no PRF secret. Synced passkeys (iCloud Keychain, Google Password
 Manager) carry it. The e2e suite cannot cover passkeys at all while it runs
 on `127.0.0.1`: WebAuthn refuses an IP address as the relying party.
+
+## Creating an encrypted workspace (early access, API 45)
+
+A workspace can be encrypted from its first record, for accounts on the
+server's allowlist only: `ENCRYPTED_WORKSPACE_USERS`, comma-separated emails,
+`@domain` entries or `id:<userId>`, empty by default. The same allowlist opens
+the runtime paths an encrypted workspace needs (`chainedWrite`,
+`chainedChanges`, private `timerWrite`); conversion of existing workspaces and
+the legacy `write`/`signedWrite`/`changes` stay closed for everyone.
+
+1. The owner's device signs everything a finished conversion would leave,
+   for an empty history (`prepareEncryptedWorkspace` in core): the owner-only
+   key directory (revision 1), and an initial projection holding one shared
+   record, the encrypted `workspaceIdentity` with the real name. It also
+   verifies that projection and signs the workspace policy.
+2. `privacy.createEncryptedWorkspace` creates the team workspace under the
+   placeholder name "Encrypted workspace" (the server never sees the real
+   one), stores the directory through the ordinary directory checks, checks
+   the projection's signature and reader digests against the records, stores
+   them, and marks the workspace `encrypted` at revision 1 with `head` = the
+   projection root. All in one transaction.
+3. The device adds the workspace to the signed account inventory as
+   `encrypted` with its policy and delivers that version. Opening it goes
+   through `openPrivateWorkspaceSession`, which fetches and verifies the
+   directory and projection from the server like any encrypted workspace.
+
+The New workspace dialog offers "Encrypt this workspace (early access)" only
+when the server allows the account (`privacy.encryptedWorkspaces`) and this
+device's keys are open. Verified end to end (`e2e/encrypted-workspace.spec.ts`):
+creation, the decrypted name in the workspace list across a reload, the
+tracker and its entry list opening from the encrypted copy, and no trace of
+the name anywhere in the database. Not working yet: **tracking time in it**.
+A start or stop there stays on the device and is lost on reload: no
+`timerWrite` packet is produced for the account-timer sync to send, so the
+encrypted timer engine is not yet driven by the tracker. Also not yet:
+invoices, imports, server exports, tags, bulk edits, approvals, budgets,
+REST/MCP/webhooks, Raycast, the extension and the phone's offline queue.
+
+The entry view also had to accept the `direction` key tRPC's infinite queries
+add to every page request (`privateEntryQuery`); its strict filter refused
+it, so the tracker list failed in every encrypted workspace.
+
+Known gap: if the inventory update fails after the server created the
+workspace, the next workspace list reconciles it into the inventory as
+standard (`reconcileJoinedWorkspaces`); its content requests are then refused
+by the server's legacy write barrier rather than leaking plaintext.
