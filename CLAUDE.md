@@ -632,6 +632,14 @@ exist. Run `pnpm build:mobile ios` after any `pnpm install` and before opening
 `ios/App` in Xcode directly, or SPM resolution fails on a checkout that has
 never built.
 
+So when the lockfile moves a Capacitor package, commit three regenerated
+files: `Package.swift` and `android/capacitor.settings.gradle` from
+`pnpm build:mobile`, and `ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`,
+which `cap sync` never writes and an `xcodebuild` of `ios/App` re-pins.
+`scripts/lib/native-generated-files.test.mjs` (in `test:unit`) fails until
+they match `node_modules`. For that reason Dependabot gives Capacitor its own
+groups, which `dependency-updates.yml` never auto-lands.
+
 **`NEXT_PUBLIC_API_URL` is required and baked in at build time — as the
 DEFAULT server.** A person can point the store app at any other Track Your
 Time server from the login screen (see "Choosing a server on the phone"

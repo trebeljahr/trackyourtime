@@ -47,7 +47,21 @@ updates:
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
       - dependency-name: "@better-auth/*"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+    # A dependency joins the first group it matches, so Capacitor comes first.
+    # Its bumps rename the pnpm store paths in the committed native files, and
+    # only a Mac can rewrite them all (Package.resolved needs xcodebuild).
+    # scripts/lib/native-generated-files.test.mjs fails until they are
+    # committed, so these PRs are left for a person:
+    # dependency-updates.yml picks only npm-minor-patch and npm-security.
     groups:
+      npm-capacitor:
+        applies-to: version-updates
+        patterns: ["@capacitor/*", "@aparajita/capacitor-*"]
+        update-types: [minor, patch]
+      npm-capacitor-security:
+        applies-to: security-updates
+        patterns: ["@capacitor/*", "@aparajita/capacitor-*"]
+        update-types: [minor, patch]
       npm-minor-patch:
         applies-to: version-updates
         update-types: [minor, patch]

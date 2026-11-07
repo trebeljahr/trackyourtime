@@ -7,8 +7,9 @@ name: dependency-updates
 # explicitly. One PR per run; the next run takes the next one after Dependabot
 # rebases it.
 #
-# Never lands: a major update, an ungrouped PR, a PR with a commit that is not
-# Dependabot's, or a PR whose checks fail. Those stay open for a person.
+# Never lands: a major update, an ungrouped PR, a Capacitor group PR (its
+# native files need a Mac; see .github/dependabot.yml), a PR with a commit that
+# is not Dependabot's, or a PR whose checks fail. Those stay open for a person.
 
 on:
   schedule:
