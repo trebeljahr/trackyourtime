@@ -11,7 +11,7 @@ import {
   magicLinkClient,
   twoFactorClient,
 } from "better-auth/client/plugins";
-import { clientId, isElectron, isTokenShell } from "@/lib/shell";
+import { clientId, isTokenShell } from "@/lib/shell";
 import {
   clearNativeToken,
   getNativeToken,
@@ -98,13 +98,14 @@ const clientHeader = (): string => clientId();
  * module scope, long before the choice is read, and cannot be rebuilt per
  * server.
  *
- * The desktop app also never sends or accepts a cookie here. Its identity is
- * the bearer token; better-fetch's default `credentials: "include"` would let
- * a sign-in response drop the API's session cookie into Electron's cookie jar,
- * which — unlike WKWebView's — allows third-party cookies, and from then on
- * the WebSocket upgrade and any credentialed request would carry it beside
- * the token. A second, silent credential is exactly what makes a broken
- * bearer path look like it works.
+ * The phone and desktop apps never send or accept a cookie here. Their
+ * identity is the bearer token; better-fetch's default `credentials:
+ * "include"` lets an auth response drop the API's session cookies into the
+ * WebView's cookie jar — Electron's allows third-party cookies, and the iOS
+ * Simulator's WKWebView stored one from `/get-session` and sent it back on
+ * the next session check and the WebSocket upgrade (measured 2026-11-08) — and
+ * from then on those requests carry it beside the token. A second, silent
+ * credential is exactly what makes a broken bearer path look like it works.
  */
 // Track the credential from the last completed validation attempt. A late
 // storage read can publish a different token after the hydration deadline.
@@ -135,7 +136,7 @@ const transportFetch: typeof fetch = async (input, init) => {
     response = await fetchAuthWithTimeout(url.toString(), {
       ...init,
       headers,
-      ...(isElectron() ? { credentials: "omit" } : {}),
+      credentials: "omit",
     });
   } finally {
     if (sessionRead) nativeSessionRequestToken = token;
@@ -165,19 +166,13 @@ const authFetch: typeof fetch = async (input, init) => {
     await loginPending;
     if (loginSession) return Response.json(loginSession.data);
   }
-  // The two-factor challenge rides in a header (lib/two-factor-challenge.ts).
-  // A token shell sends no cookies on these calls either: better-fetch's
-  // default `credentials: "include"` let WKWebView store the challenge and
-  // session cookies and send them on later calls, so the header would never
-  // be the only credential the server saw.
+  // The two-factor challenge rides in a header (lib/two-factor-challenge.ts);
+  // in a token shell it is the only credential on these calls, because
+  // `transportFetch` sends no cookies there.
   const url = input instanceof Request ? input.url : String(input);
   const twoFactorCall = isTwoFactorTransportPath(url);
   if (twoFactorCall) {
-    init = {
-      ...init,
-      headers: withTwoFactorChallenge(url, new Headers(init?.headers)),
-      ...(isTokenShell() ? { credentials: "omit" as const } : {}),
-    };
+    init = { ...init, headers: withTwoFactorChallenge(url, new Headers(init?.headers)) };
   }
   const response = await transportFetch(input, init);
   if (twoFactorCall) rememberTwoFactorChallenge(url, response);

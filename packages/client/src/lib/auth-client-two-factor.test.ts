@@ -102,6 +102,12 @@ describe("the two-factor challenge transport", () => {
     expect(sent[0]?.init.credentials).toBe("include");
   });
 
+  it("sends every auth call from a token shell with no cookies, the session check included", async () => {
+    shell = "capacitor";
+    await authFetch()(`${API}/list-sessions`, { method: "GET", credentials: "include" });
+    expect(sent[0]?.init.credentials).toBe("omit");
+  });
+
   it("sends a token shell's sign-in and verify with no cookies", async () => {
     shell = "capacitor";
     nextHeaders = { "set-two-factor-token": "2fa-phone.sig" };

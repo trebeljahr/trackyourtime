@@ -295,8 +295,9 @@ built, and the rules that fail quietly if broken:
   process (`electron/src/secure-store.ts`) and reached through
   `electronAPI.secureStore`; on Linux's `basic_text` backend it is refused and
   kept in memory, and Settings → Devices says so. The auth client sends
-  `credentials: "omit"` in Electron so the API's cookie never lands in
-  Chromium's jar — a second, silent credential would mask a broken bearer path.
+  `credentials: "omit"` in Electron (and on the phone) so the API's cookie
+  never lands in the WebView's jar — a second, silent credential would mask a
+  broken bearer path.
 - **"Sign in with your browser"** (`components/browser-sign-in.tsx`) is the
   device flow with client id `trackyourtime-desktop`: the way in for two-factor
   and Google accounts, which the password form cannot finish in a shell.
@@ -983,11 +984,13 @@ the very thing being replaced.
 - `lib/trpc.ts` adds `Authorization` and switches to `credentials: "omit"` when
   a token exists. With none — every web request — it is byte-identical to what
   it was, which `lib/trpc.test.ts` asserts rather than assumes.
-- `lib/auth-client.ts` omits credentials on `/sign-in/email` and both
-  `/two-factor/verify-*` calls in a token shell, token or not: better-fetch's
-  default `credentials: "include"` let WKWebView store the challenge and
-  session cookies, so the challenge header would not be the only credential
-  the server saw (`lib/auth-client-two-factor.test.ts`).
+- `lib/auth-client.ts` omits credentials on **every** auth call in a token
+  shell, token or not (`transportFetch`). better-fetch's default
+  `credentials: "include"` let the Simulator's WKWebView store the API's
+  session cookie from `/get-session` and send it on the next session check
+  and the WebSocket upgrade (measured 2026-11-08); only the desktop app
+  omitted them before. With it, the two-factor challenge header is the only
+  credential sign-in and verify carry (`lib/auth-client-two-factor.test.ts`).
 - The socket takes the token as a **getter**, and `useSync`'s effect is keyed on
   it. The Keychain answers after mount, so a snapshot would open one tokenless
   socket, be refused, and retry that refusal forever — taking the offline
