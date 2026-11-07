@@ -106,7 +106,7 @@ export const members: Translation<typeof source> = {
     weekStart: "Woche beginnt am",
     hint: "Dein persönlicher Arbeitsbereich bleibt, wie er ist. Du kannst jederzeit zwischen Arbeitsbereichen wechseln.",
     encrypted: "Diesen Workspace verschlüsseln (früher Zugang)",
-    encryptedHint: "Sein Name und alles, was hinzukommt, werden auf diesem Gerät verschlüsselt; der Server speichert nur Chiffretext. Früher Zugang: Zeiterfassung darin, Rechnungen, Importe, Raycast und die Browser-Erweiterung funktionieren noch nicht.",
+    encryptedHint: "Sein Name und alles, was hinzukommt, werden auf diesem Gerät verschlüsselt; der Server speichert nur Chiffretext. Früher Zugang: Rechnungen, Importe, Raycast und die Browser-Erweiterung funktionieren noch nicht.",
     create: "Arbeitsbereich erstellen",
     creating: "Wird erstellt …",
   },

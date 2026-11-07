@@ -1586,11 +1586,11 @@ when the server allows the account (`privacy.encryptedWorkspaces`) and this
 device's keys are open. Verified end to end (`e2e/encrypted-workspace.spec.ts`):
 creation, the decrypted name in the workspace list across a reload, the
 tracker and its entry list opening from the encrypted copy, and no trace of
-the name anywhere in the database. Not working yet: **tracking time in it**.
-A start or stop there stays on the device and is lost on reload: no
-`timerWrite` packet is produced for the account-timer sync to send, so the
-encrypted timer engine is not yet driven by the tracker. Also not yet:
-invoices, imports, server exports, tags, bulk edits, approvals, budgets,
+the name anywhere in the database. Tracking time works: a start and a stop go
+through the account timer (`timerWrite`), and a second browser that signs in
+sees the entry, decrypted, while the database holds no description in
+plaintext (`e2e/encrypted-workspace.spec.ts`). Not working yet: invoices,
+imports, server exports, tags, bulk edits, approvals, budgets,
 REST/MCP/webhooks, Raycast, the extension and the phone's offline queue.
 
 The entry view also had to accept the `direction` key tRPC's infinite queries
