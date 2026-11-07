@@ -69,6 +69,8 @@ const mutation = (fn: (input: unknown) => Promise<unknown>) => ({
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => utils,
+    // Encrypted workspaces are early access; this account is not allowed.
+    privacy: { encryptedWorkspaces: { useQuery: () => ({ data: { allowed: false } }) } },
     workspaces: {
       list: {
         useQuery: () => ({
