@@ -84,13 +84,43 @@ export async function signOutViaUI(page: Page) {
  *
  * Returns the settled row, so a caller can go on asserting against it.
  */
+/** How many manual entries each page has logged, for `logManualEntry`'s slots. */
+const manualSlots = new WeakMap<Page, number>();
+
+/** Local "YYYY-MM-DD" of yesterday, the day every manual entry is placed on. */
+function yesterdayKey(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * Log a manual entry of `duration` (at most four hours).
+ *
+ * Each call on a page gets its own four-hour slot yesterday (00:00, 04:00, …,
+ * 20:00).
+ * The dialog's default block is "the last hour", so entries logged one after
+ * another would otherwise all start at the same minute, and one person's
+ * overlapping entries split their shared time in reports and invoices: two
+ * entries of 1:00 and 0:30 would report 1:00, not 1:30. And a write that
+ * overlaps an invoiced entry is refused, so it would never settle.
+ */
 export async function logManualEntry(
   page: Page,
   description: string,
   duration: string,
 ): Promise<Locator> {
+  const slot = manualSlots.get(page) ?? 0;
+  manualSlots.set(page, slot + 1);
+  if (slot > 5) throw new Error("logManualEntry has six four-hour slots per page");
+  const startTime = `${String(4 * slot).padStart(2, "0")}:00`;
+
   await page.getByTestId("tracker-manual-open").click();
   await page.getByTestId("manual-entry-description").fill(description);
+  await page.getByTestId("manual-entry-date").fill(yesterdayKey());
+  await page.getByTestId("manual-entry-start").fill(startTime);
+  await page.getByTestId("manual-entry-start").press("Enter");
   await page.getByTestId("manual-entry-duration").fill(duration);
   await page.getByTestId("manual-entry-duration").press("Enter");
   await expect(page.getByTestId("manual-entry-duration")).toHaveValue(duration);
