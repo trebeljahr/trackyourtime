@@ -29,6 +29,11 @@ vi.mock("@/lib/auth-client", () => ({
 vi.mock("@/lib/device-approve", () => ({
   approveDeviceCode: vi.fn(async () => ({ ok: true })),
 }));
+const keySteps = vi.hoisted(() => ({ order: [] as string[] }));
+vi.mock("@/lib/browser-key-request", () => ({
+  prepareBrowserKeysFor: vi.fn(async (userId: string, keys: string) => { keySteps.order.push(`prepare:${userId}:${keys}`); return { userId, request: keys }; }),
+  deliverBrowserKeys: vi.fn(async () => { keySteps.order.push("deliver"); }),
+}));
 
 const { ExtensionBridge, bridgeSessionState, isTopLevelDocument } = await import("./extension-bridge");
 
@@ -89,6 +94,23 @@ describe("ExtensionBridge", () => {
       apiOrigin: "https://api.trackyourtime.dev",
       web: { userId: "user-u", sessionCreatedAt: Date.parse("2026-09-17T10:00:00.000Z") },
     });
+  });
+
+  it("opens the key slot, approves, then seals the keys the extension asked for", async () => {
+    session = signedIn();
+    const { approveDeviceCode } = await import("@/lib/device-approve");
+    vi.mocked(approveDeviceCode).mockImplementation(async () => { keySteps.order.push("approve"); return { ok: true }; });
+    keySteps.order = [];
+    sendMessage.mockImplementation((_id, message, callback) => {
+      const kind = (message as { kind: string }).kind;
+      callback(kind === "sync"
+        ? { channel: EXTENSION_BRIDGE_CHANNEL, v: 2, kind: "sync-result", action: { type: "approve-device", requestId: "11111111-2222-4333-8444-555555555555", userCode: "ABCD2345", expiresAt: Date.now() + 60_000, keys: "a-key-request" } }
+        : { channel: EXTENSION_BRIDGE_CHANNEL, v: 2, kind: "device-result", status: "signed-in" });
+    });
+    render(<ExtensionBridge />);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(keySteps.order).toEqual(["prepare:user-u:a-key-request", "approve", "deliver"]);
+    sendMessage.mockImplementation((_id, _message, callback) => callback(undefined));
   });
 
   it("sends a sign-out at once", async () => {

@@ -1515,6 +1515,11 @@ phone apps in the same device key store as a password unlock. Each forgets
 them with the session. Nothing in Raycast or the extension reads them yet;
 encrypted workspaces reach those clients in phase 5.
 
-Not yet: the extension's bridge path (the web app approving a code it was
-handed, `web-confirmed`) carries no key request, so that sign-in gives the
-extension no keys.
+The extension's other way in, a web account confirmed in its popup
+(`web-confirmed`), uses the same request without a URL: the extension's
+`approve-device` bridge reply carries it as `keys` (`encodeBrowserKeyRequest`,
+the fragment value), and the page that approves the code opens the slot,
+approves and seals in the same order (`components/extension-bridge.tsx`). The
+bridge message stays inside the browser, like the fragment. A confirmation the
+extension approves directly with the browser's own web token sends no request:
+no page is there to seal anything.
