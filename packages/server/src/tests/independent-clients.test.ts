@@ -64,14 +64,24 @@ describe("independent timer clients", { skip: skipWithoutDatabase }, () => {
       color: "#112233",
     });
     const clientId = String(second._id);
+    // One hour each, back to back: overlapping entries share their time in
+    // reports and invoices, and this test is about filing, not splitting.
     const shared = await createEntry(scope, {
       ...past,
       projectId: seeded.projectId,
       clientId,
     });
-    await createEntry(scope, { ...past, projectId: null, clientId });
     await createEntry(scope, {
       ...past,
+      start: "2026-09-10T10:00:00.000Z",
+      end: "2026-09-10T11:00:00.000Z",
+      projectId: null,
+      clientId,
+    });
+    await createEntry(scope, {
+      ...past,
+      start: "2026-09-10T11:00:00.000Z",
+      end: "2026-09-10T12:00:00.000Z",
       projectId: seeded.projectId,
       clientId: null,
     });
