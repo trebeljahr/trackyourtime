@@ -1523,3 +1523,35 @@ approves and seals in the same order (`components/extension-bridge.tsx`). The
 bridge message stays inside the browser, like the fragment. A confirmation the
 extension approves directly with the browser's own web token sends no request:
 no page is there to seal anything.
+
+## Passkeys open the keys (2026-11-08)
+
+A passkey opens the account keys like the password does, so a forgotten
+password does not lock anyone out of their data while they hold a passkey.
+`lib/passkey-keys.ts`:
+
+- **One way to add a passkey**: Settings → Account → Passkeys
+  (`addPasskeyWithKeys`). It registers the passkey with the PRF extension and,
+  when this device's keys are open, seals them under the passkey's PRF secret
+  in a signed identity update (`identity.passkeys`, one envelope per
+  credential). Some authenticators report PRF only on use, so a missing
+  result at creation is asked for once more with the new credential. The row
+  says per passkey whether it opens the data.
+- **Signing in with a passkey** (`signInWithPasskey` → `finishPasskeyUnlock`)
+  tells the private layer the new account first (`privateAccountSignedIn`),
+  then opens the keys with that passkey's envelope, or, on a device where the
+  keys are already open and the passkey has no envelope yet (added before
+  this, or on a locked device), gives it one. Then the workspace list is
+  rebuilt as after a password sign-in (`openInventoryAndWorkspace`).
+- **Removing a passkey** also removes its envelope (`revokePasskey`) while the
+  keys are open, so a deleted credential opens nothing.
+- **Without PRF** (some hardware keys and older password managers) a passkey
+  only signs in; it holds no secret the keys could be sealed under. The row
+  says so; the password, recovery key or another device opens the data.
+
+Verified with Chrome's virtual authenticator (PRF on): a passkey added in
+Settings opened the keys again after a full sign-out (saved unlock erased).
+Not testable there: another device, because an exported virtual credential
+carries no PRF secret. Synced passkeys (iCloud Keychain, Google Password
+Manager) carry it. The e2e suite cannot cover passkeys at all while it runs
+on `127.0.0.1`: WebAuthn refuses an IP address as the relying party.
