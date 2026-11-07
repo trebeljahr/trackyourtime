@@ -1,5 +1,5 @@
 {
-  "apiLevel": 44,
+  "apiLevel": 45,
   "minClientApiLevel": 1,
   "procedures": {
     "accountPassword.kdf": {
@@ -5094,6 +5094,514 @@
       },
       "type": "mutation"
     },
+    "privacy.createEncryptedWorkspace": {
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "maxLength": 3,
+            "minLength": 3,
+            "type": "string"
+          },
+          "directory": {
+            "additionalProperties": false,
+            "properties": {
+              "directory": {
+                "additionalProperties": false,
+                "properties": {
+                  "members": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canViewOthersMoney": {
+                          "type": "boolean"
+                        },
+                        "canViewOthersTime": {
+                          "type": "boolean"
+                        },
+                        "publicKey": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "crv": {
+                              "const": "P-256",
+                              "type": "string"
+                            },
+                            "ext": {
+                              "type": "boolean"
+                            },
+                            "key_ops": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kty": {
+                              "const": "EC",
+                              "type": "string"
+                            },
+                            "x": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            },
+                            "y": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kty",
+                            "crv",
+                            "x",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "role": {
+                          "enum": [
+                            "owner",
+                            "admin",
+                            "member"
+                          ],
+                          "type": "string"
+                        },
+                        "signingPublicKey": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "crv": {
+                              "const": "P-256",
+                              "type": "string"
+                            },
+                            "ext": {
+                              "type": "boolean"
+                            },
+                            "key_ops": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "kty": {
+                              "const": "EC",
+                              "type": "string"
+                            },
+                            "x": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            },
+                            "y": {
+                              "pattern": "^[A-Za-z0-9_-]{43}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kty",
+                            "crv",
+                            "x",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "userId": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "role",
+                        "canViewOthersTime",
+                        "canViewOthersMoney",
+                        "publicKey",
+                        "signingPublicKey"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "ownerId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "previousDigest": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[A-Za-z0-9_-]{43}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "revision": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "server": {
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  },
+                  "workspaceId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "v",
+                  "server",
+                  "workspaceId",
+                  "revision",
+                  "previousDigest",
+                  "ownerId",
+                  "members"
+                ],
+                "type": "object"
+              },
+              "signature": {
+                "pattern": "^[A-Za-z0-9_-]{86}$",
+                "type": "string"
+              },
+              "signerId": {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "directory",
+              "signerId",
+              "signature"
+            ],
+            "type": "object"
+          },
+          "records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "authorId": {
+                  "anyOf": [
+                    {
+                      "maxLength": 100,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "box": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "maxLength": 2000000,
+                      "minLength": 22,
+                      "pattern": "^[A-Za-z0-9_-]+$",
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "pattern": "^[A-Za-z0-9_-]{16}$",
+                      "type": "string"
+                    },
+                    "v": {
+                      "const": 1,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "v",
+                    "nonce",
+                    "data"
+                  ],
+                  "type": "object"
+                },
+                "grants": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "envelope": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "box": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "maxLength": 2000000,
+                                "minLength": 22,
+                                "pattern": "^[A-Za-z0-9_-]+$",
+                                "type": "string"
+                              },
+                              "nonce": {
+                                "pattern": "^[A-Za-z0-9_-]{16}$",
+                                "type": "string"
+                              },
+                              "v": {
+                                "const": 1,
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "v",
+                              "nonce",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          "ephemeral": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "crv": {
+                                "const": "P-256",
+                                "type": "string"
+                              },
+                              "ext": {
+                                "type": "boolean"
+                              },
+                              "key_ops": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "kty": {
+                                "const": "EC",
+                                "type": "string"
+                              },
+                              "x": {
+                                "pattern": "^[A-Za-z0-9_-]{43}$",
+                                "type": "string"
+                              },
+                              "y": {
+                                "pattern": "^[A-Za-z0-9_-]{43}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kty",
+                              "crv",
+                              "x",
+                              "y"
+                            ],
+                            "type": "object"
+                          },
+                          "v": {
+                            "const": 1,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "v",
+                          "ephemeral",
+                          "box"
+                        ],
+                        "type": "object"
+                      },
+                      "userId": {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "userId",
+                      "envelope"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 200,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "id": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "keyCommitment": {
+                  "pattern": "^[A-Za-z0-9_-]{43}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "entries",
+                    "entryMoney",
+                    "clients",
+                    "clientMoney",
+                    "projects",
+                    "projectMoney",
+                    "tasks",
+                    "tags",
+                    "favorites",
+                    "invoices",
+                    "settings",
+                    "businessProfile",
+                    "approvals",
+                    "approvalPolicy",
+                    "imports",
+                    "workspaceIdentity",
+                    "integrations",
+                    "members",
+                    "memberMoney",
+                    "settingsMoney"
+                  ],
+                  "type": "string"
+                },
+                "revision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "authorId",
+                "revision",
+                "box",
+                "grants"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "root": {
+            "additionalProperties": false,
+            "properties": {
+              "manifest": {
+                "additionalProperties": false,
+                "properties": {
+                  "directoryDigest": {
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "type": "string"
+                  },
+                  "migrationId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "protocol": {
+                    "const": "trackyourtime-private-initial-projections-v3",
+                    "type": "string"
+                  },
+                  "readers": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "personalDigest": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "type": "string"
+                        },
+                        "sharedDigest": {
+                          "pattern": "^[A-Za-z0-9_-]{43}$",
+                          "type": "string"
+                        },
+                        "userId": {
+                          "maxLength": 100,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "sharedDigest",
+                        "personalDigest"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 200,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "revision": {
+                    "const": 1,
+                    "type": "number"
+                  },
+                  "server": {
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  "signerId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "v": {
+                    "const": 1,
+                    "type": "number"
+                  },
+                  "workspaceId": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "v",
+                  "protocol",
+                  "server",
+                  "workspaceId",
+                  "migrationId",
+                  "revision",
+                  "directoryDigest",
+                  "signerId",
+                  "readers"
+                ],
+                "type": "object"
+              },
+              "signature": {
+                "pattern": "^[A-Za-z0-9_-]{86}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "manifest",
+              "signature"
+            ],
+            "type": "object"
+          },
+          "weekStartsOn": {
+            "anyOf": [
+              {
+                "const": 0,
+                "type": "number"
+              },
+              {
+                "const": 1,
+                "type": "number"
+              }
+            ]
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "currency",
+          "weekStartsOn",
+          "directory",
+          "root",
+          "records"
+        ],
+        "type": "object"
+      },
+      "type": "mutation"
+    },
     "privacy.deletionPreview": {
       "input": {
         "properties": {
@@ -5148,6 +5656,10 @@
         },
         "type": "object"
       },
+      "type": "query"
+    },
+    "privacy.encryptedWorkspaces": {
+      "input": null,
       "type": "query"
     },
     "privacy.enroll": {

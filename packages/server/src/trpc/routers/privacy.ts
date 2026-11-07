@@ -1,3 +1,4 @@
+import { createEncryptedWorkspace, encryptedWorkspacesAllowed, requireEncryptedWorkspaceUser } from "../../services/privacy/encrypted-creation.js";
 import { standardContinueTimerInput } from "../../services/privacy/standard-timer-continue.js";
 import { privateStandardTimerResult } from "../../services/privacy/standard-timer-result.js";
 import { createStandardBackupChallenge, readStandardBackupOriginals } from "../../services/privacy/standard-backup.js";
@@ -19,7 +20,7 @@ import { getAuth } from "../../auth/auth.js";
 import { previewAccountDeletion } from "../../services/account-deletion/delete-account.js";
 import { authRowStore, mongooseRowStore, routedRowStore } from "../../services/account-deletion/stores.js";
 import { commitPrivateChainedWorkspaceEdit, commitPrivateWorkspaceEdit, privateChainedWorkspaceChanges, privateWorkspaceChanges } from "../../services/privacy/workspace-edits.js";
-import { signedPrivateChainedEditSchema, signedPrivateWorkspaceEditSchema } from "@starter/shared";
+import { signedPrivateChainedEditSchema, signedPrivateInitialProjectionRootSchema, signedPrivateWorkspaceEditSchema } from "@starter/shared";
 import { requirePrivateClientProtocol, requirePrivateWorkspaceRollout, beginPrivateMigration, stagePrivateMigration, privateMigrationArchive, commitPrivateMigration, cancelPrivateMigration } from "../../services/privacy/migration.js";
 import { canonicalJson } from "@starter/core";
 import { z } from "zod";
@@ -78,7 +79,7 @@ export const privacyRouter = router({
   standardCurrentTimer: privateAccountProcedure.input(z.object({}).strict().optional()).output(standardCurrentTimerSchema.nullable()).mutation(({ ctx }) => standardAccountCurrentTimer(ctx.user.id)),
   timerVersions: privateAccountProcedure.input(privateTimerVersionsInputSchema).mutation(({ ctx, input }) => privateTimerVersions({ server: privateServerOrigin(), userId: ctx.user.id }, input.after, input.through)),
   timerWrite: privateAccountProcedure.input(privateTimerTransitionSchema).mutation(({ ctx, input }) => {
-    requirePrivateWorkspaceRollout();
+    requireEncryptedWorkspaceUser(ctx.user);
     return commitPrivateTimerTransition({ server: privateServerOrigin(), userId: ctx.user.id }, input);
   }),
   inventoryWrite: privateAccountProcedure.input(z.object({ signed: signedPrivateInventoryVersionSchema })).mutation(({ ctx, input }) =>
@@ -192,18 +193,24 @@ export const privacyRouter = router({
     return commitPrivateWorkspaceEdit(ctx.user.id, { edit: input.edit, signature: input.signature, readerSignatures: input.readerSignatures });
   }),
   chainedWrite: privateWorkspaceProcedure.input(scopeSchema.extend(signedPrivateChainedEditSchema.shape)).mutation(({ ctx, input }) => {
-    requirePrivateWorkspaceRollout();
+    requireEncryptedWorkspaceUser(ctx.user);
     if (input.edit.workspaceId !== ctx.workspaceId) throw new TRPCError({ code: "FORBIDDEN" });
     return commitPrivateChainedWorkspaceEdit(ctx.user.id, { edit: input.edit, signature: input.signature, readerSignatures: input.readerSignatures, chain: input.chain }, privateServerOrigin());
   }),
   chainedChanges: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative(), through: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).default(20) })).query(({ ctx, input }) => {
-    requirePrivateWorkspaceRollout();
+    requireEncryptedWorkspaceUser(ctx.user);
     return privateChainedWorkspaceChanges(ctx.workspaceId, ctx.user.id, input.after, input.through, input.limit);
   }),
   changes: privateWorkspaceProcedure.input(scopeSchema.extend({ after: z.number().int().nonnegative(), through: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).default(20) })).query(({ ctx, input }) => {
     requirePrivateWorkspaceRollout();
     return privateWorkspaceChanges(ctx.workspaceId, ctx.user.id, input.after, input.through, input.limit);
   }),
+  /** Early access (services/privacy/encrypted-creation.ts): may this account create encrypted workspaces? */
+  encryptedWorkspaces: privateAccountProcedure.query(({ ctx }) => ({ allowed: encryptedWorkspacesAllowed(ctx.user) })),
+  createEncryptedWorkspace: privateAccountProcedure.input(z.object({
+    workspaceId: z.uuid(), currency: z.string().trim().length(3), weekStartsOn: z.union([z.literal(0), z.literal(1)]),
+    directory: signedPrivateDirectorySchema, root: signedPrivateInitialProjectionRootSchema, records: z.array(encryptedRecordSchema).max(10),
+  }).strict()).mutation(({ ctx, input }) => createEncryptedWorkspace(ctx.user, input, privateServerOrigin())),
   projectionDirectory: privateWorkspaceProcedure.input(z.object({ workspaceId: z.string().min(1).max(100), after: z.number().int().nonnegative().max(4096), through: z.number().int().positive().max(4096) }).strict()).mutation(async ({ ctx, input }) => {
     await fenceWorkspace(ctx.workspaceId);
     return privateDirectoryPage(ctx.workspaceId, ctx.user.id, input.after, input.through);

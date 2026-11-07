@@ -334,6 +334,13 @@ export const env = {
   WEBHOOK_ALLOW_PRIVATE_TARGETS:
     getOptional("WEBHOOK_ALLOW_PRIVATE_TARGETS") === "true",
 
+  // Encrypted workspaces, early access (docs/private-workspace-protocol.md →
+  // "Creating an encrypted workspace"). Comma-separated: an email, "@domain"
+  // for a whole domain, or "id:<userId>". Empty, the default, lets nobody
+  // create one or write to one.
+  ENCRYPTED_WORKSPACE_USERS: getOptional("ENCRYPTED_WORKSPACE_USERS")
+    .split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean),
+
   // Background jobs
   // The in-process scheduler (services/scheduler/). On unless set to
   // false/0/no/off. Safe with several server processes on one database: a job

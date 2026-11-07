@@ -62,6 +62,7 @@ export * from "./privacy/combined-migration-proof.js";
 export * from "./privacy/personal-migration-proof.js";
 export * from "./privacy/source-challenge.js";
 export * from "./privacy/projection-snapshot.js";
+export * from "./privacy/encrypted-workspace.js";
 export * from "./privacy/projection-migration-proof.js";
 
 export * from "./privacy/projection-delivery.js";

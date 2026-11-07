@@ -75,6 +75,8 @@ const OWN_WORKSPACE_GATE: Record<
         "standardCurrentTimer",
         "timerVersions",
         "timerWrite",
+        "encryptedWorkspaces",
+        "createEncryptedWorkspace",
         "inventoryWrite",
         "inventoryVersions",
         "deletionPreview",

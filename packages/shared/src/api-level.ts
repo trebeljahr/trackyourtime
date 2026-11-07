@@ -22,7 +22,7 @@
  * Never lower it. A server reports it on `/api/health` and `health.check`; a
  * client sends it on every request as {@link API_LEVEL_HEADER}.
  */
-export const API_LEVEL = 44;
+export const API_LEVEL = 45;
 
 export type ApiLevelChange = {
   level: number;
@@ -201,6 +201,7 @@ export const API_LEVEL_CHANGES: readonly ApiLevelChange[] = [
   { level: 42, release: "0.4.0", added: ["Password unlock: public accountPassword.kdf answers an email's password KDF parameters (decoys for unknown emails), accountPassword.kdfForReset answers them for a valid reset link; sign-up accepts passwordKdf; authenticated accountPassword.upgrade switches a legacy typed password to the derived login secret."] },
   { level: 43, release: "0.4.0", added: ["Password unlock repair: a password reset flags the account keys' password envelope as stale; authenticated accountPassword.keysStatus reads the flag, accountPassword.verify checks a derived login secret (10 per 15 minutes), accountPassword.keysRewrapped clears the flag."] },
   { level: 44, release: "0.4.0", added: ["Parallel entries: reports and invoices split time that one person's entries share evenly, so totals equal wall-clock time. Detailed report rows carry `reportedSec`. A write that would change how an entry covers invoiced time answers CONFLICT."] },
+  { level: 45, release: "0.4.0", added: ["Encrypted workspaces, early access: privacy.encryptedWorkspaces says whether this account may create one (ENCRYPTED_WORKSPACE_USERS), privacy.createEncryptedWorkspace stores a new workspace from its owner-signed directory and empty initial projection. Chained edits, their history and private timer writes now open to those accounts instead of to nobody."] },
 ];
 
 /**
