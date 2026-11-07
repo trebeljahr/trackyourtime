@@ -69,11 +69,20 @@ async function pairingTag(request: BrowserKeyRequest, userId: string): Promise<s
   finally { secret.fill(0); }
 }
 
+/** The request as one URL-safe string: the fragment value, or the extension bridge's `keys`. */
+export function encodeBrowserKeyRequest(request: BrowserKeyRequest): string {
+  return encodeSecret(encoder.encode(JSON.stringify(request)));
+}
+
+export function decodeBrowserKeyRequest(encoded: string, now = Date.now): BrowserKeyRequest {
+  return checkRequest(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(decodeSecret(encoded, 4096))), now);
+}
+
 /** The approval URL with the request in its fragment. */
 export function browserKeysUrl(approvalUrl: string, request: BrowserKeyRequest): string {
   const url = new URL(approvalUrl);
   if (!["http:", "https:"].includes(url.protocol)) throw new BrowserKeysError("Invalid approval address");
-  url.hash = `${FRAGMENT_KEY}=${encodeSecret(encoder.encode(JSON.stringify(request)))}`;
+  url.hash = `${FRAGMENT_KEY}=${encodeBrowserKeyRequest(request)}`;
   return url.href;
 }
 
@@ -81,7 +90,7 @@ export function browserKeysUrl(approvalUrl: string, request: BrowserKeyRequest):
 export function browserKeyRequestFromHash(hash: string, now = Date.now): BrowserKeyRequest | null {
   const encoded = new URLSearchParams(hash.replace(/^#/, "")).get(FRAGMENT_KEY);
   if (!encoded) return null;
-  return checkRequest(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(decodeSecret(encoded, 4096))), now);
+  return decodeBrowserKeyRequest(encoded, now);
 }
 
 /** The browser's side: seal `value` (the account keys) for the requesting client. */

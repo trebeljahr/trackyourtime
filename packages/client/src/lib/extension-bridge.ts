@@ -78,8 +78,9 @@ export type ExtensionSyncDeps = {
   currentSession: () => BridgeWebSession;
   /** `sendToExtension`: resolves the raw reply, `undefined` for none. Never rejects. */
   send: (id: string, message: unknown) => Promise<unknown>;
-  /** Approve a normalised user code with this page's session. */
-  approve: (userCode: string) => Promise<boolean>;
+  /** Approve a normalised user code with this page's session, sealing the
+   * account keys for `keys` (the extension's key request) when it is given. */
+  approve: (userCode: string, keys?: string, userId?: string) => Promise<boolean>;
   now: () => number;
 };
 
@@ -106,7 +107,7 @@ const handleAction = async (
   const current = deps.currentSession();
   const stillSame =
     deps.session !== null && current !== null && current.userId === deps.session.userId;
-  const approved = stillSame ? await deps.approve(userCode).catch(() => false) : false;
+  const approved = stillSame ? await deps.approve(userCode, action.keys, current!.userId).catch(() => false) : false;
 
   // The reply is read for nothing but well-formedness: the extension finishes
   // (or retries) on its own, and the page shows nothing either way.
@@ -174,7 +175,7 @@ export type ExtensionBridgeHost = {
   ids: () => readonly string[];
   apiOrigin: () => string;
   send: (id: string, message: unknown) => Promise<unknown>;
-  approve: (userCode: string) => Promise<boolean>;
+  approve: (userCode: string, keys?: string, userId?: string) => Promise<boolean>;
   now: () => number;
   /** Called with each finished exchange's outcomes. */
   onOutcomes?: (outcomes: ExtensionSyncOutcome[]) => void;

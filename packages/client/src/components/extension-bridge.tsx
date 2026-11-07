@@ -1,5 +1,6 @@
 "use client";
 
+import { deliverBrowserKeys, prepareBrowserKeysFor } from "@/lib/browser-key-request";
 import { FIREFOX_EXTENSION_ID } from "@starter/shared/extension-relay";
 import * as React from "react";
 import { EXTENSION_BRIDGE_SYNC_MIN_INTERVAL_MS } from "@starter/shared";
@@ -95,8 +96,13 @@ export function ExtensionBridge(): null {
       ids: () => ids,
       apiOrigin: getAbsoluteApiOrigin,
       send: (id, message) => sendToExtension(id, message),
-      approve: async (userCode) =>
-        (await approveDeviceCode(userCode, { alreadyApprovedIsOk: true })).ok,
+      approve: async (userCode, keys, userId) => {
+        // Same order as /app/device: open the key relay slot, approve, seal.
+        const prepared = keys && userId ? await prepareBrowserKeysFor(userId, keys).catch(() => null) : null;
+        const approved = (await approveDeviceCode(userCode, { alreadyApprovedIsOk: true })).ok;
+        if (approved && prepared) await deliverBrowserKeys(prepared).catch(() => undefined);
+        return approved;
+      },
       now: () => Date.now(),
       onOutcomes:
         process.env.NODE_ENV === "development"

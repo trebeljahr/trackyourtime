@@ -1,3 +1,4 @@
+import { encodeBrowserKeyRequest, newBrowserKeyRequest } from "@starter/core";
 import { readBrowserAccount, approveBrowserDevice, clearBrowserAccountOfferCache } from "./browser-account";
 /**
  * Trusted web pages offer an account; only a popup confirmation starts a
@@ -151,6 +152,8 @@ const approve = (record: PendingDeviceAuth): ExtensionBridgeReply =>
     requestId: record.requestId,
     userCode: record.userCode,
     expiresAt: record.expiresAt,
+    // The page seals the account keys for this request after approving.
+    ...(record.keyRequest ? { keys: encodeBrowserKeyRequest(record.keyRequest.request) } : {}),
   });
 
 /** The only entry point that can start a web-account sign-in: an internal popup action. */
@@ -166,6 +169,9 @@ export const confirmWebAccount = (userId: string, sessionCreatedAt: number): Pro
     const pending = await loadPendingDeviceAuth();
     if (pending !== null && isLivePendingDeviceAuth(pending, current.apiUrl, Date.now())) return;
     const { record } = await beginDeviceAuthorization(current.apiUrl, "web-confirmed", userId);
+    // A page approval can deliver the keys too; a direct browser-token
+    // approval below cannot, so it carries no request.
+    if (!browser) record.keyRequest = await newBrowserKeyRequest(current.apiUrl);
     await savePendingDeviceAuth(record);
     await clearDeviceSignInError();
     await chrome.alarms.create(DEVICE_AUTH_ALARM, { periodInMinutes: 0.5 });

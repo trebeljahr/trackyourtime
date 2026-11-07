@@ -106,12 +106,20 @@ describe("syncWithExtensions", () => {
   });
 
   describe("approve-device", () => {
+    it("hands the extension's key request to the approval", async () => {
+      const { deps, approve } = harness((_id, message) =>
+        message.kind === "sync" ? syncReply(approveAction({ keys: "a-key-request" })) : extensionBridgeDeviceReply("signed-in"),
+      );
+      await expect(syncWithExtensions(deps)).resolves.toEqual(["approved"]);
+      expect(approve).toHaveBeenCalledWith("ABCD1234", "a-key-request", "user-u");
+    });
+
     it("approves the normalised code and reports it", async () => {
       const { deps, sent, approve } = harness((_id, message) =>
         message.kind === "sync" ? syncReply(approveAction()) : extensionBridgeDeviceReply("signed-in"),
       );
       await expect(syncWithExtensions(deps)).resolves.toEqual(["approved"]);
-      expect(approve).toHaveBeenCalledWith("ABCD1234");
+      expect(approve).toHaveBeenCalledWith("ABCD1234", undefined, "user-u");
       expect(sent[1]).toEqual({
         id: EXT_A,
         message: {

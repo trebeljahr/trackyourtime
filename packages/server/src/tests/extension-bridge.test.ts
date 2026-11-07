@@ -165,6 +165,14 @@ describe("extension bridge: replies", () => {
     }
   });
 
+  it("carries the extension's key request, and drops one that is not URL-safe", () => {
+    const action = { type: "approve-device", requestId: REQUEST_ID, userCode: "ABCD2345", expiresAt: 1_700_000_600_000 } as const;
+    const withKeys = extensionBridgeSyncReply({ ...action, keys: "eyJ2IjoxfQ" });
+    assert.deepEqual(decodeExtensionBridgeReply(withKeys), { ok: true, message: withKeys });
+    const odd = { ...withKeys, action: { ...action, keys: "<script>" } };
+    assert.deepEqual(decodeExtensionBridgeReply(odd), { ok: true, message: extensionBridgeSyncReply(action) });
+  });
+
   it("reads an unsupported reply at any version", () => {
     const decoded = decodeExtensionBridgeReply({
       ...extensionBridgeUnsupportedReply(),

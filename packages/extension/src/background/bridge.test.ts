@@ -3,6 +3,8 @@
  * and every row of the decision tables for a web sign-in, a web sign-out and
  * a web account switch.
  */
+import { decodeBrowserKeyRequest, sealBrowserKeys } from "@starter/core";
+import { hasAccountKeys } from "../lib/session";
 import { EXTENSION_RELAY_CHANNEL } from "@starter/shared/extension-relay";
 import {
   EXTENSION_BRIDGE_CHANNEL,
@@ -119,6 +121,28 @@ beforeEach(async () => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+describe("account keys through a confirmed web account", () => {
+  test("the page gets a key request, and keys it seals for this account are kept", async () => {
+    server.approvedUser = { id: "user-k", email: "k@example.com" };
+    const web = signedIn("user-k");
+    await sync(web);
+    await confirmWebAccount("user-k", web.sessionCreatedAt!);
+    const action = actionOf(await sync(web));
+    if (action.type !== "approve-device") throw new Error(`expected approve-device, got ${action.type}`);
+    expect(action.keys).toMatch(/^[A-Za-z0-9_-]+$/);
+    // The page seals the keys for that request (lib/browser-key-request.ts there).
+    server.deviceUnlockBox = await sealBrowserKeys(decodeBrowserKeyRequest(action.keys!), "user-k", { secrets: "the account keys" });
+    server.token = "approved";
+    expect(statusOf(await approved(action.requestId))).toBe("signed-in");
+    expect(await hasAccountKeys()).toBe(true);
+  });
+
+  test("a page that sends no keys still links the extension, without keys", async () => {
+    await link("user-n");
+    expect(await hasAccountKeys()).toBe(false);
+  });
 });
 
 // ── who may talk to the extension ────────────────────────────────────

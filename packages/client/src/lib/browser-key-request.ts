@@ -11,7 +11,7 @@
  * sealed for that request and relayed through the server, which cannot read
  * them or make a box the client would accept.
  */
-import { browserKeyRequestFromHash, sealBrowserKeys, type BrowserKeyRequest } from "@starter/core";
+import { browserKeyRequestFromHash, decodeBrowserKeyRequest, sealBrowserKeys, type BrowserKeyRequest } from "@starter/core";
 
 const STORAGE_KEY = "trackyourtime:browser-key-request";
 
@@ -50,7 +50,15 @@ export type PreparedBrowserKeys = { userId: string; request: BrowserKeyRequest }
  */
 export async function prepareBrowserKeys(userId: string): Promise<PreparedBrowserKeys | null> {
   const request = pendingBrowserKeyRequest();
-  if (!request) return null;
+  return request ? prepareRequest(userId, request) : null;
+}
+
+/** The extension bridge's variant: the request came in the `approve-device` reply. */
+export async function prepareBrowserKeysFor(userId: string, encoded: string): Promise<PreparedBrowserKeys | null> {
+  return prepareRequest(userId, decodeBrowserKeyRequest(encoded));
+}
+
+async function prepareRequest(userId: string, request: BrowserKeyRequest): Promise<PreparedBrowserKeys | null> {
   const { privateDataOrigin, privateSession } = await import("./private-session");
   if (request.server !== privateDataOrigin() || !privateSession(userId)) return null;
   const { getTRPCClient } = await import("./trpc");

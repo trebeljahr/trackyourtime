@@ -178,6 +178,12 @@ export type ExtensionBridgeSyncAction =
       userCode: string;
       /** Epoch ms after which the code is dead. */
       expiresAt: number;
+      /**
+       * The extension's one-time key request (`encodeBrowserKeyRequest` in
+       * core): the page seals the account keys for it after approving, as
+       * `/app/device` does for a `#keys=` fragment. Absent from older builds.
+       */
+      keys?: string;
     }
   | {
       /** Legacy action, decoded only so the web app can explicitly refuse it. */
@@ -403,11 +409,13 @@ const readSyncAction = (value: unknown): ExtensionBridgeSyncAction | null => {
     if (userCode === null || !isRequestId(value.requestId) || !isEpochMs(value.expiresAt)) {
       return null;
     }
+    const keys = typeof value.keys === "string" && value.keys.length <= 4096 && /^[A-Za-z0-9_-]+$/.test(value.keys) ? value.keys : null;
     return {
       type: "approve-device",
       requestId: value.requestId,
       userCode,
       expiresAt: value.expiresAt,
+      ...(keys ? { keys } : {}),
     };
   }
   if (value.type === "sign-out-web") {
