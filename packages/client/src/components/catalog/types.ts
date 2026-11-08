@@ -108,9 +108,13 @@ export function sortByName<T extends { name: string }>(rows: T[]): T[] {
 export function errorCode(error: unknown): string | null {
   if (typeof error !== "object" || error === null) return null;
   const data = (error as { data?: unknown }).data;
-  if (typeof data !== "object" || data === null) return null;
-  const code = (data as { code?: unknown }).code;
-  return typeof code === "string" ? code : null;
+  const code = typeof data === "object" && data !== null ? (data as { code?: unknown }).code : undefined;
+  if (typeof code === "string") return code;
+  // An encrypted workspace answers on the device; its refusal names the same
+  // code on the cause the tRPC client wraps (PrivateContentUnavailableError).
+  const cause = (error as { cause?: unknown }).cause;
+  const local = typeof cause === "object" && cause !== null && (cause as { privateContentRefusal?: unknown }).privateContentRefusal === true ? (cause as { code?: unknown }).code : undefined;
+  return typeof local === "string" ? local : null;
 }
 
 /** The server's message, or `fallback` — see `userErrorMessage`. */

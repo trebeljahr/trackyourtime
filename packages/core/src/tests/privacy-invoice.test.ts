@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
+import { z } from "zod";
 import type { WorkspaceRole } from "@starter/shared";
 import { createKeyPair, createSigningPair } from "../privacy/crypto.js";
 import { privateMemberKeyFingerprint, signPrivateWorkspaceDirectory, verifyPrivateWorkspaceDirectory } from "../privacy/directory.js";
@@ -32,13 +33,15 @@ async function fixture(role: WorkspaceRole = "owner", money = true) {
   const as = (userId: string) => ({ scope: { ...scope, userId }, directory, current: () => true, now: NOW });
   const user = role === "owner" ? "owner" : "reader";
   const apply = (plan: { records: PlainPrivateRecord[]; remove: { kind: string; id: string }[] }) => {
+    // What the replica will accept and encrypt: JSON values only.
+    for (const row of plan.records) z.record(z.string(), z.json()).parse(row.value);
     const gone = new Set([...plan.records, ...plan.remove].map((row) => JSON.stringify([row.kind, row.id])));
     records = [...records.filter((row) => !gone.has(JSON.stringify([row.kind, row.id]))), ...plan.records];
   };
   return {
     get records() { return records; }, apply,
     query: (path: "invoices.list" | "invoices.get" | "invoices.preview", input: unknown) => privateInvoiceQuery({ ...as(user), records, path, input }),
-    edit: (path: "invoices.create" | "invoices.updateStatus" | "invoices.remove", input: unknown) => privateInvoiceEdit({ ...as(user), records, path, input, newId: () => "11111111-1111-4111-8111-111111111111" }),
+    edit: (path: "invoices.create" | "invoices.update" | "invoices.updateStatus" | "invoices.remove" | "invoices.recordPayment" | "invoices.credit", input: unknown) => privateInvoiceEdit({ ...as(user), records, path, input, newId: () => "11111111-1111-4111-8111-111111111111" }),
   };
 }
 
@@ -92,4 +95,36 @@ it("keeps logo bytes off the wire and round-trips the stored record", () => {
   const wire = privateInvoiceFromRecord(value);
   assert.equal(wire.id, "inv"); assert.equal((wire.issuer as { hasLogo?: boolean }).hasLogo, true); assert.equal("logo" in (wire.issuer as object), false);
   assert.deepEqual(privateInvoiceRecordValue(wire, { mime: "image/png" }).issuer, { legalName: "Studio", logo: { mime: "image/png" } });
+});
+
+it("edits a draft against the version it was read at, and refuses a sent one", async () => {
+  const f = await fixture();
+  const created = await f.edit("invoices.create", { ...range, issueDate: "2026-11-08", dueDate: "2026-11-22" }); f.apply(created);
+  const invoice = created.result as { id: string; updatedAt: string };
+  await assert.rejects(f.edit("invoices.update", { id: invoice.id, updatedAt: "2026-01-01T00:00:00.000Z", notes: "x" }), (error: Error & { code?: string }) => error.code === "CONFLICT");
+  const edited = await f.edit("invoices.update", { id: invoice.id, updatedAt: invoice.updatedAt, notes: "Edited on the device", number: "2026-042" });
+  assert.equal((edited.result as { notes: string }).notes, "Edited on the device"); assert.equal((edited.result as { number: string }).number, "2026-042");
+  assert.equal((edited.result as { total: number }).total, 300);
+  f.apply(edited);
+  const sent = await f.edit("invoices.updateStatus", { id: invoice.id, status: "sent" }); f.apply(sent);
+  await assert.rejects(f.edit("invoices.update", { id: invoice.id, updatedAt: (sent.result as { updatedAt: string }).updatedAt, notes: "y" }), (error: Error & { code?: string }) => error.code === "PRECONDITION_FAILED" && error.message === "invoice-not-draft");
+});
+
+it("records a payment that settles the invoice, and credits it with a replacement draft", async () => {
+  const f = await fixture();
+  const created = await f.edit("invoices.create", { ...range, issueDate: "2026-11-08", dueDate: "2026-11-22" }); f.apply(created);
+  const id = (created.result as { id: string }).id;
+  await assert.rejects(f.edit("invoices.recordPayment", { id, requestId: "22222222-2222-4222-8222-222222222222", kind: "payment", amount: "300", at: "2026-11-08T10:00:00.000Z" }), /invoice-payment-invalid/);
+  f.apply(await f.edit("invoices.updateStatus", { id, status: "sent" }));
+  const paid = await f.edit("invoices.recordPayment", { id, requestId: "22222222-2222-4222-8222-222222222222", kind: "payment", amount: "300", at: "2026-11-08T10:00:00.000Z" });
+  assert.equal((paid.result as { status: string }).status, "paid"); f.apply(paid);
+  await assert.rejects(f.edit("invoices.updateStatus", { id, status: "sent" }), /invoice-use-payment-ledger/);
+  const credited = await f.edit("invoices.credit", { id, requestId: "33333333-3333-4333-8333-333333333333", reason: "Wrong rate", replacement: true });
+  const credit = (credited.result as { followThrough?: { credit?: { number: string; replacementId?: string } } }).followThrough?.credit;
+  assert.equal(credit?.number, "CN-2026-001");
+  const replacement = credited.records.find((row) => row.id === credit?.replacementId)!;
+  assert.equal((replacement.value as { status: string }).status, "draft"); assert.equal((replacement.value as { replacementFor: string }).replacementFor, id);
+  assert.equal((replacement.value as { number: string }).number, "2026-002");
+  f.apply(credited);
+  await assert.rejects(f.edit("invoices.remove", { id: credit!.replacementId! }), /invoice-replacement-edit-or-issue/);
 });

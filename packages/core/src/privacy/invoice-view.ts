@@ -36,7 +36,8 @@ export const PRIVATE_INVOICE_UNSUPPORTED = "This invoice action is not available
 
 /** A refusal the person can act on (bad range, nothing to bill): BAD_REQUEST on the server. */
 export class PrivateInvoiceRefusal extends Error {
-  constructor(message: string) { super(message); this.name = "PrivateInvoiceRefusal"; }
+  /** The tRPC code the server would answer with, where a screen branches on it. */
+  constructor(message: string, readonly code?: "CONFLICT" | "PRECONDITION_FAILED") { super(message); this.name = "PrivateInvoiceRefusal"; }
 }
 
 const MAX_INVOICE_ENTRIES = 20_000;
@@ -239,4 +240,20 @@ export async function privateRenderableInvoice(options: PrivateViewOptions & { i
   }
   source.check();
   return { ...found.invoice, ...(found.invoice.issuer ? { issuer: { ...issuer, logo } } : {}) } as Omit<Invoice, "issuer"> & { issuer?: (Omit<NonNullable<Invoice["issuer"]>, "hasLogo"> & { logo: { data: Uint8Array } | null }) | null };
+}
+
+/**
+ * The credit note of an invoice as `renderInvoicePdf` draws it — the server's
+ * `exportCreditPdf`: the original's issuer (logo bytes checked), the credited
+ * snapshot, numbered `CN-…`, dated the credit's own day, with no payment terms.
+ */
+export async function privateRenderableCredit(options: PrivateViewOptions & { input: unknown }) {
+  const original = await privateRenderableInvoice(options);
+  const credit = original.followThrough?.credit;
+  if (!credit) throw new PrivateInvoiceRefusal("invoice-no-credit");
+  return {
+    ...original, ...credit.snapshot, issuer: original.issuer, number: credit.number, documentKind: "credit" as const,
+    creditReference: { number: credit.originalNumber, reason: credit.reason },
+    issueDate: credit.issueDate ?? credit.at.slice(0, 10), notes: credit.reason, paymentTerms: null, generatedAt: credit.at,
+  };
 }

@@ -1,5 +1,5 @@
 import { workspaceSelectionInput } from "./private-navigation";
-import { assertEntryClientSupported, accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery, isPrivateInvoiceQuery, privateInvoiceQuery, privateRenderableInvoice, PrivateInvoiceRefusal, PRIVATE_INVOICE_PERMISSION_REQUIRED } from "@starter/core";
+import { assertEntryClientSupported, accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery, isPrivateInvoiceQuery, privateInvoiceQuery, privateRenderableInvoice, privateRenderableCredit, PrivateInvoiceRefusal, PRIVATE_INVOICE_PERMISSION_REQUIRED } from "@starter/core";
 import { currentServerApiLevel } from "./server-level";
 import { PrivateWorkspaceCreationError } from "./private-workspace-creation-error";
 import { checkPrivateRequestScope, consumePrivateRequestScopes } from "./private-request-scope";
@@ -101,7 +101,7 @@ export async function assertStandardWorkspaceContent(userId: string, workspaceId
 export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, path: string, input: unknown, type: string) {
   route.check();
   if (route.mode !== "encrypted" || !route.scope.workspaceId) throw new PrivateContentUnavailableError();
-  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list" && path !== "settings.get" && path !== "settings.businessProfile" && path !== "reports.trackedSpan" && !isPrivateReportQuery(path) && path !== "members.list" && !isPrivateInvoiceQuery(path) && path !== "invoices.exportPdf")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
+  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list" && path !== "settings.get" && path !== "settings.businessProfile" && path !== "reports.trackedSpan" && !isPrivateReportQuery(path) && path !== "members.list" && !isPrivateInvoiceQuery(path) && path !== "invoices.exportPdf" && path !== "invoices.exportCreditPdf" && path !== "invoices.exportCreditXml")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
   let session: Awaited<ReturnType<typeof openPrivateWorkspaceSession>> | null = null;
   try {
     session = await openPrivateWorkspaceSession(route.scope.userId, route.scope.workspaceId);
@@ -123,10 +123,18 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     if (isPrivateCatalogQuery(path)) return privateCatalogQuery({ ...options, path });
     if (isPrivateInvoiceQuery(path)) { const preferences = path === "invoices.preview" ? await privateDisplayPreferences(route.scope.userId) : undefined; route.check(); return await privateInvoiceQuery({ ...options, path, preferences }); }
     if (path === "invoices.exportPdf") return await renderPrivateInvoicePdf(await privateRenderableInvoice(options), route.check);
+    if (path === "invoices.exportCreditPdf") {
+      const { generatedAt, ...credit } = await privateRenderableCredit(options);
+      const file = await renderPrivateInvoicePdf(credit, route.check, generatedAt);
+      return { ...file, filename: file.filename.replace(/^invoice-/, "credit-") };
+    }
+    // As on the server: a credit note has no XML of its own yet.
+    if (path === "invoices.exportCreditXml") throw new PrivateContentUnavailableError("invoice-credit-xml-unsupported", "PRECONDITION_FAILED");
     throw new PrivateContentUnavailableError();
   } catch (error) {
     if (error instanceof PrivateContentUnavailableError) throw error;
-    if (error instanceof PrivateInvoiceRefusal || (error instanceof Error && error.message === PRIVATE_INVOICE_PERMISSION_REQUIRED)) throw new PrivateContentUnavailableError(error.message);
+    if (error instanceof PrivateInvoiceRefusal) throw new PrivateContentUnavailableError(error.message, error.code);
+    if (error instanceof Error && error.message === PRIVATE_INVOICE_PERMISSION_REQUIRED) throw new PrivateContentUnavailableError(error.message);
     // The page shows a fixed sentence; the cause (no record values) goes to the console.
     console.warn("[private] workspace read failed", path, error instanceof Error ? error.message : error);
     throw new PrivateContentUnavailableError("Private workspace data could not be verified. Existing data was kept.");
@@ -175,11 +183,11 @@ export async function assertStandardContentRequest(url: string, init?: RequestIn
 
 /** The invoice PDF drawn on this device, from the decrypted record alone:
  * the same renderer and fonts the server uses, through pdfkit's browser build. */
-async function renderPrivateInvoicePdf(invoice: Awaited<ReturnType<typeof privateRenderableInvoice>>, check: () => void) {
+async function renderPrivateInvoicePdf(invoice: Parameters<typeof import("@starter/invoice-pdf").renderInvoicePdf>[0], check: () => void, generatedAt = new Date().toISOString()) {
   const [{ renderInvoicePdf, invoicePdfFilename }, standalone] = await Promise.all([import("@starter/invoice-pdf"), import("pdfkit-standalone")]);
   check();
   const PDFDocument = ((standalone as { default?: unknown }).default ?? standalone) as NonNullable<Parameters<typeof renderInvoicePdf>[3]>["PDFDocument"];
-  const bytes = await renderInvoicePdf(invoice, { generatedAt: new Date().toISOString() }, undefined, { PDFDocument }); check();
+  const bytes = await renderInvoicePdf(invoice, { generatedAt }, undefined, { PDFDocument }); check();
   let binary = ""; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return { filename: invoicePdfFilename(invoice.number), base64: btoa(binary), mimeType: "application/pdf" as const };
 }

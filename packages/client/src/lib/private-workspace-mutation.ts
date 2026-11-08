@@ -44,8 +44,10 @@ export async function mutatePrivateWorkspace(route: WorkspaceContentRoute, path:
     if (error instanceof PrivateContentUnavailableError) throw error;
     if (error instanceof PrivateBusinessLogoError) throw new PrivateContentUnavailableError(error.refusal);
     // An invoice refusal names what to change (range, number, nothing to bill).
-    if (error instanceof PrivateInvoiceRefusal) throw new PrivateContentUnavailableError(error.message);
+    if (error instanceof PrivateInvoiceRefusal) throw new PrivateContentUnavailableError(error.message, error.code);
     if (error instanceof Error && error.message === PRIVATE_INVOICE_PERMISSION_REQUIRED) throw new PrivateContentUnavailableError(error.message);
+    // The page shows a fixed sentence; the cause (no record values) goes to the console.
+    console.warn("[private] workspace edit failed", path, error instanceof Error ? error.message : error);
     throw new PrivateContentUnavailableError("The private edit could not be confirmed on this device. Existing saved work was kept.");
   } finally { copy?.close(); }
 }

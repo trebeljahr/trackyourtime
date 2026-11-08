@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { test, expect, type Page } from "@playwright/test";
 import { signUpViaUI, TRACK_URL } from "./helpers";
 import { closeDbConnection, getDb } from "./db-utils";
@@ -79,11 +80,43 @@ test("invoices tracked time on the device, bills it once, draws the PDF and stor
   await confirmCreate(page);
   await expect(page.getByTestId("invoice-detail-status")).toHaveText("draft", { timeout: 20_000 });
 
+  // A draft can be edited, on the device.
+  const NOTE = `Edited on the device ${STAMP}`;
+  await page.getByTestId("invoice-edit").click();
+  await page.getByTestId("invoice-edit-notes").fill(NOTE);
+  await page.getByTestId("invoice-edit-save").click();
+  await expect(page.getByTestId("invoice-edit-form")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByTestId("invoice-detail")).toContainText(NOTE);
+
   // A status change is a signed edit too, and survives a reload.
   await page.getByTestId("invoice-status-set-sent").click();
   await expect(page.getByTestId("invoice-detail-status")).toHaveText("sent", { timeout: 20_000 });
   await page.reload();
   await expect(page.locator('[data-testid^="invoice-total-"]')).toHaveCount(1, { timeout: 20_000 });
+
+  // A payment settles it; a credit with a replacement draft corrects it.
+  await page.locator('[data-testid^="invoice-row-"]').first().click();
+  await expect(page.getByTestId("invoice-detail-status")).toHaveText("sent", { timeout: 20_000 });
+  await page.getByTestId("invoice-payment-amount").fill("300");
+  await page.getByTestId("invoice-record-payment").click();
+  await expect(page.getByTestId("invoice-detail-status")).toHaveText("paid", { timeout: 20_000 });
+  const followThrough = page.getByTestId("invoice-follow-through");
+  await page.getByTestId("invoice-credit-reason").fill("Wrong rate");
+  await followThrough.getByRole("checkbox", { name: /This issues a full credit/ }).check();
+  await followThrough.getByRole("button", { name: "Credit and create replacement" }).click();
+  // The correction opens its replacement draft; the original keeps the credit note.
+  await expect(page.getByTestId("invoice-detail-status")).toHaveText("draft", { timeout: 20_000 });
+  await expect(page.getByTestId("invoice-follow-through")).toContainText("Replacement for an earlier invoice");
+  // Newest first: the replacement is on top, the credited original last.
+  await expect(page.locator('[data-testid^="invoice-row-"]')).toHaveCount(2, { timeout: 20_000 });
+  await page.locator('[data-testid^="invoice-row-"]').last().click();
+  await expect(followThrough).toContainText(/Credited with CN-/, { timeout: 20_000 });
+  const [creditDownload] = await Promise.all([
+    page.waitForEvent("download", { timeout: 30_000 }),
+    followThrough.getByRole("button", { name: "Download credit PDF" }).click(),
+  ]);
+  expect(creditDownload.suggestedFilename()).toMatch(/^credit-.+\.pdf$/);
+  expect((await readFile((await creditDownload.path())!)).subarray(0, 5).toString("latin1")).toBe("%PDF-");
 
   // Neither the client, the work nor the invoice reached the database in plaintext.
   const db = await getDb();
@@ -92,5 +125,6 @@ test("invoices tracked time on the device, bills it once, draws the PDF and stor
     expect(rows.includes(CLIENT), `client name in ${name}`).toBe(false);
     expect(rows.includes(WORK), `entry description in ${name}`).toBe(false);
     expect(rows.includes(PROJECT), `project name in ${name}`).toBe(false);
+    expect(rows.includes(NOTE), `invoice notes in ${name}`).toBe(false);
   }
 });

@@ -1620,13 +1620,24 @@ in `lib/private-content-route.ts` and `lib/private-workspace-mutation.ts`).
   with pdfkit's browser build.
 - **Numbers** come from the invoice records in the copy (`nextInvoiceNumber`),
   and a supplied number already in use is refused.
-- **Refused for now, with a message:** editing a draft, payments, reminders,
-  credit notes, e-invoices (ZUGFeRD, XRechnung), billing a colleague's entry,
-  and invoicing while timesheet approvals exist. Reminder emails need a
-  decision first: the server cannot read an encrypted invoice's due date.
+- **Drafts, payments and credit notes** work too: `update` (draft only,
+  against the `updatedAt` it was read at, `CONFLICT` otherwise),
+  `recordPayment`, `credit` (with or without a replacement draft, written in
+  the same change as the credit) and the credit PDF. The ledger and credit
+  rules moved into `@starter/invoice-pdf/follow-through.ts`; the server wraps
+  them so a refusal stays PRECONDITION_FAILED with the same code. A device
+  refusal carries that code too (`PrivateContentUnavailableError.code`, read
+  by `errorCode`), so the edit form tells a conflict from a taken number.
+  Records hold JSON only: the credit snapshot is written through
+  `JSON.stringify` because it copies absent invoice fields as `undefined`.
+- **Refused for now, with a message:** payment reminders (the server cannot
+  read an encrypted invoice's due date; a decision is open), e-invoices
+  (ZUGFeRD, XRechnung), billing a colleague's entry, and invoicing while
+  timesheet approvals exist.
 - e2e: `e2e/encrypted-invoices.spec.ts` (preview, create, PDF, billed once,
-  delete gives the time back, status change survives a reload, no plaintext
-  client, project or work in the database).
+  delete gives the time back, edit a draft, mark sent, record a payment,
+  credit with a replacement draft, credit PDF, no plaintext client, project,
+  work or notes in the database).
 - **A page's first private read re-reads in place** (`private-view-lifecycle.ts`).
   The view epoch moves from `"0"` when a page load first shows private
   content, and every epoch change used to clear the query cache and remount
