@@ -63,3 +63,15 @@ describe("vendored PDF fonts", () => {
     assert.equal(typeof font.hasGlyphForCodePoint, "function");
   });
 });
+
+// An encrypted workspace draws the ZUGFeRD PDF in the browser
+// (lib/private-content-route.ts → exportPrivateEinvoice), from copies of the
+// same faces the web app serves. They must be the same bytes, or the two PDFs
+// of one invoice would embed different fonts.
+it("the web app serves byte-identical copies of the e-invoice fonts", () => {
+  for (const file of [...Object.values(PDF_FONT_FILES), "OFL.txt"]) {
+    const server = readFileSync(join(pdfFontsDirectory(), file));
+    const client = readFileSync(join(pdfFontsDirectory(), "../../../client/public/fonts/einvoice", file));
+    assert.ok(server.equals(client), `${file} differs between packages/server/assets/fonts and packages/client/public/fonts/einvoice`);
+  }
+});

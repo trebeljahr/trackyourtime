@@ -1,5 +1,6 @@
-import { isPrivateFavoriteEdit, isPrivateCatalogEdit, isPrivateEntryEdit, isPrivateBusinessProfileEdit, isPrivateInvoiceEdit, PrivateBusinessLogoError, PrivateInvoiceRefusal, PRIVATE_INVOICE_PERMISSION_REQUIRED } from "@starter/core";
+import { isPrivateFavoriteEdit, isPrivateCatalogEdit, isPrivateEntryEdit, isPrivateBusinessProfileEdit, isPrivateInvoiceEdit, PrivateBusinessLogoError } from "@starter/core";
 import { PrivateContentUnavailableError } from "./private-content-error";
+import { privateInvoiceRefusal } from "./private-invoice-refusal";
 import type { WorkspaceContentRoute } from "./private-content-route";
 import { openPrivateWorkspaceSyncSession } from "./private-workspace-session";
 import { notifyPrivateWorkspaceEdit } from "./private-workspace-sync";
@@ -44,8 +45,7 @@ export async function mutatePrivateWorkspace(route: WorkspaceContentRoute, path:
     if (error instanceof PrivateContentUnavailableError) throw error;
     if (error instanceof PrivateBusinessLogoError) throw new PrivateContentUnavailableError(error.refusal);
     // An invoice refusal names what to change (range, number, nothing to bill).
-    if (error instanceof PrivateInvoiceRefusal) throw new PrivateContentUnavailableError(error.message, error.code);
-    if (error instanceof Error && error.message === PRIVATE_INVOICE_PERMISSION_REQUIRED) throw new PrivateContentUnavailableError(error.message);
+    const refusal = privateInvoiceRefusal(error); if (refusal) throw refusal;
     // The page shows a fixed sentence; the cause (no record values) goes to the console.
     console.warn("[private] workspace edit failed", path, error instanceof Error ? error.message : error);
     throw new PrivateContentUnavailableError("The private edit could not be confirmed on this device. Existing saved work was kept.");

@@ -201,6 +201,12 @@ export const DEFAULT_PROFILE: Record<ProfileField, string> = {
 export async function fillBusinessProfile(
   page: Page,
   overrides: Partial<Record<ProfileField, string>> = {},
+  /**
+   * The request that confirms the save, or null in an encrypted workspace:
+   * the device saves there, its sync carries other changes too, and the
+   * "saved" toast is what says this save is done.
+   */
+  savedBy: string | null = "settings.updateBusinessProfile",
 ): Promise<void> {
   await page.goto("/app/settings?tab=billing");
   await expect(page.getByTestId("business-profile-form")).toBeVisible();
@@ -211,11 +217,12 @@ export async function fillBusinessProfile(
   }
   await page.getByTestId("business-profile-defaultTaxCategory").selectOption("S19");
 
-  const saved = page.waitForResponse(
-    (response) => response.url().includes("settings.updateBusinessProfile") && response.ok(),
+  const saved = savedBy === null ? null : page.waitForResponse(
+    (response) => response.url().includes(savedBy) && response.ok(),
   );
   await page.getByTestId("business-profile-save").click();
-  await saved;
+  if (saved) await saved;
+  else await expect(page.locator("[data-sonner-toast]").filter({ hasText: "Business profile saved" })).toBeVisible({ timeout: 20_000 });
 
   await page.reload();
   await expect(page.getByTestId("business-profile-legalName")).toHaveValue(values.legalName);
@@ -260,6 +267,8 @@ export async function fillClientBilling(
   page: Page,
   clientName: string = CLIENT_NAME,
   overrides: Partial<Record<ClientBillingField, string>> = {},
+  /** As for fillBusinessProfile; null waits for the dialog to close, which it does only on success. */
+  savedBy: string | null = "clients.update",
 ): Promise<string> {
   const clientId = await clientIdByName(page, clientName);
   await page.getByTestId(`client-menu-${clientId}`).click();
@@ -276,12 +285,12 @@ export async function fillClientBilling(
   }
   await page.getByTestId("client-billing-preferredFormat").selectOption("xrechnung");
 
-  const saved = page.waitForResponse(
-    (response) => response.url().includes("clients.update") && response.ok(),
+  const saved = savedBy === null ? null : page.waitForResponse(
+    (response) => response.url().includes(savedBy) && response.ok(),
   );
   await page.getByTestId("client-submit").click();
-  await saved;
-  await expect(dialog).toBeHidden();
+  if (saved) await saved;
+  await expect(dialog).toBeHidden({ timeout: 20_000 });
   return clientId;
 }
 

@@ -128,3 +128,12 @@ it("records a payment that settles the invoice, and credits it with a replacemen
   f.apply(credited);
   await assert.rejects(f.edit("invoices.remove", { id: credit!.replacementId! }), /invoice-replacement-edit-or-issue/);
 });
+
+it("never puts an issued e-invoice XML on the wire, only that one exists, and maps the fill log", () => {
+  const value = { _id: "inv", workspaceId: "w", createdBy: "owner", number: "2026-001", clientId: "c", clientName: "N", status: "sent", issueDate: at("2026-11-08T00:00:00Z"), dueDate: at("2026-11-22T00:00:00Z"), from: null, to: null, groupBy: "project", lineItems: [], subtotal: 0, taxRate: null, taxAmount: 0, total: 0, currency: "EUR", entryIds: [], notes: null, createdAt: at("2026-11-08T00:00:00Z"), updatedAt: at("2026-11-08T00:00:00Z"),
+    einvoice: { issuedXml: { xrechnung: { xml: "<rsm:CrossIndustryInvoice/>", generatedAt: at("2026-11-08T00:00:00Z"), generator: "track-your-time-cii/1" } }, fills: [{ at: at("2026-11-08T00:00:00Z"), by: "owner", fields: ["issuer.vatId"] }] } };
+  const wire = privateInvoiceFromRecord(value) as unknown as Record<string, unknown>;
+  assert.equal(wire.issued, true); assert.equal("einvoice" in wire, false);
+  assert.deepEqual(wire.einvoiceFills, [{ at: at("2026-11-08T00:00:00Z"), by: "owner", fields: ["issuer.vatId"] }]);
+  assert.equal(JSON.stringify(wire).includes("CrossIndustryInvoice"), false);
+});

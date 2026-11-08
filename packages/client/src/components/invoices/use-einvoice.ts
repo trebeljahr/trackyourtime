@@ -19,10 +19,24 @@ import type { InvoiceRow } from "./types";
  * Typed read of `error.data.einvoiceIssues`, which the server's error
  * formatter copies from an e-invoice refusal. null for any other error.
  */
-export function einvoiceIssuesFromError(error: unknown): EinvoiceIssue[] | null {
+/**
+ * `error.data` from a standard workspace's server, or the same fields from an
+ * encrypted workspace's device (PrivateContentUnavailableError.details on the
+ * cause the tRPC client wraps; lib/private-invoice-refusal.ts).
+ */
+function einvoiceErrorData(error: unknown): Record<string, unknown> | null {
   if (typeof error !== "object" || error === null) return null;
   const data = (error as { data?: unknown }).data;
-  if (typeof data !== "object" || data === null) return null;
+  if (typeof data === "object" && data !== null && ("einvoiceIssues" in data || "einvoiceFillRefusal" in data)) return data as Record<string, unknown>;
+  const cause = (error as { cause?: unknown }).cause;
+  const details = typeof cause === "object" && cause !== null && (cause as { privateContentRefusal?: unknown }).privateContentRefusal === true ? (cause as { details?: unknown }).details : undefined;
+  if (typeof details === "object" && details !== null) return details as Record<string, unknown>;
+  return typeof data === "object" && data !== null ? data as Record<string, unknown> : null;
+}
+
+export function einvoiceIssuesFromError(error: unknown): EinvoiceIssue[] | null {
+  const data = einvoiceErrorData(error);
+  if (data === null) return null;
   const issues = (data as { einvoiceIssues?: unknown }).einvoiceIssues;
   if (!Array.isArray(issues)) return null;
   return issues.filter(
@@ -41,9 +55,8 @@ export function einvoiceIssuesFromError(error: unknown): EinvoiceIssue[] | null 
  * this client does not know.
  */
 export function einvoiceFillRefusalFromError(error: unknown): EinvoiceFillRefusalCode | null {
-  if (typeof error !== "object" || error === null) return null;
-  const data = (error as { data?: unknown }).data;
-  if (typeof data !== "object" || data === null) return null;
+  const data = einvoiceErrorData(error);
+  if (data === null) return null;
   const code = (data as { einvoiceFillRefusal?: unknown }).einvoiceFillRefusal;
   return (EINVOICE_FILL_REFUSAL_CODES as readonly unknown[]).includes(code)
     ? (code as EinvoiceFillRefusalCode)

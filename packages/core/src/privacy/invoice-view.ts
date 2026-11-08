@@ -53,9 +53,12 @@ const storedInvoiceSchema = z.object({
 
 /** The wire invoice from a stored record: `_id` back to `id`, the logo bytes to `hasLogo`, balance derived. */
 export function privateInvoiceFromRecord(value: Record<string, unknown>): Invoice {
-  const { _id, issuer, ...rest } = storedInvoiceSchema.parse(value) as z.infer<typeof storedInvoiceSchema> & { issuer?: Record<string, unknown> | null };
+  const { _id, issuer, einvoice, ...rest } = storedInvoiceSchema.parse(value) as z.infer<typeof storedInvoiceSchema> & { issuer?: Record<string, unknown> | null; einvoice?: { issuedXml?: { en16931?: unknown; xrechnung?: unknown }; fills?: Array<{ at: string; by: string; fields?: string[] }> } };
   const wireIssuer = issuer ? (() => { const { logo, ...fields } = issuer; return { ...fields, ...(logo ? { hasLogo: true } : {}) }; })() : issuer;
-  const wire = { ...rest, id: _id, issued: false, ...(issuer !== undefined ? { issuer: wireIssuer } : {}) } as unknown as Invoice;
+  // The issued XML never reaches the wire, only that it exists (`toClientInvoice`).
+  const issued = Boolean(einvoice?.issuedXml?.en16931 || einvoice?.issuedXml?.xrechnung);
+  const fills = einvoice?.fills?.length ? { einvoiceFills: einvoice.fills.map((fill) => ({ at: fill.at, by: fill.by, fields: [...(fill.fields ?? [])] })) } : {};
+  const wire = { ...rest, id: _id, issued, ...fills, ...(issuer !== undefined ? { issuer: wireIssuer } : {}) } as unknown as Invoice;
   wire.balance = invoiceBalance(wire);
   return wire;
 }

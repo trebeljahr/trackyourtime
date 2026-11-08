@@ -2045,6 +2045,14 @@ so a caller without invoice access gets `NOT_FOUND`, as on `invoices.get`.
 file (profile `xrechnung`). It is hand-written over a small tree writer
 (`xml.ts`), with no XML dependency.
 
+The e-invoice code itself (CII, XML writer, validation, fill, glyph coverage,
+XMP, the ZUGFeRD renderer) lives in `@starter/invoice-pdf/einvoice/` since
+2026-11-08, so an encrypted workspace issues the same files on the device;
+`services/einvoice/*.ts` are re-export shims, and `pdfa3.ts` passes the fonts
+read from `assets/fonts`. The browser's copies of those fonts are
+`packages/client/public/fonts/einvoice/`: replace both together, or
+`pdf-fonts.test.ts` fails. `documentUuid` hashes with WebCrypto (async).
+
 ```bash
 UPDATE_GOLDEN=1 pnpm --filter @starter/server test      # regenerate the golden XML files
 JAVA=/opt/homebrew/opt/openjdk@11/bin/java pnpm einvoice:validate   # Mustang + KoSIT over every sample

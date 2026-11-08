@@ -14,13 +14,14 @@ import { invoiceNumberCandidates, nextInvoiceNumber, yearOfIsoDate } from "@star
 import { appendInvoicePayment, creditInvoice, creditIssueDate, InvoiceRefusalError } from "@starter/invoice-pdf/follow-through";
 import { paymentTermsSentence } from "@starter/invoice-pdf/payment-terms";
 import type { PlainPrivateRecord } from "./records.js";
+import { privateEinvoiceFill, privateIssueEinvoiceXml } from "./invoice-einvoice.js";
 import { privateViewSource, type PrivateViewOptions } from "./view-source.js";
 import {
   assertPrivateInvoiceAccess, gatherPrivateInvoice, privateInvoiceFromRecord, privateInvoiceLocale, privateInvoiceNumbers, privateInvoiceRecordValue, privateInvoiceRows,
   PrivateInvoiceRefusal, PRIVATE_INVOICE_UNSUPPORTED, taxPrivateInvoice,
 } from "./invoice-view.js";
 
-const paths = ["invoices.create", "invoices.update", "invoices.updateStatus", "invoices.remove", "invoices.recordPayment", "invoices.credit"] as const;
+const paths = ["invoices.create", "invoices.update", "invoices.updateStatus", "invoices.remove", "invoices.recordPayment", "invoices.credit", "invoices.attachEinvoiceData", "invoices.issueEinvoiceXml"] as const;
 export type PrivateInvoiceEditPath = typeof paths[number];
 export const isPrivateInvoiceEdit = (path: string): path is PrivateInvoiceEditPath => (paths as readonly string[]).includes(path);
 /** Everything an invoice write reads: the billed time, its labels and money, the parties. */
@@ -37,7 +38,7 @@ const withoutOrigin = (input: unknown) => {
   const { originId: _origin, ...rest } = raw; void _origin; return rest;
 };
 
-export type PrivateInvoiceEditResult = Invoice | { deleted: true; releasedEntries: number };
+export type PrivateInvoiceEditResult = Invoice | { deleted: true; releasedEntries: number } | { xml: string };
 export async function privateInvoiceEdit(options: PrivateViewOptions & { path: PrivateInvoiceEditPath; input: unknown; preferences?: unknown; now?: number; newId?: () => string }): Promise<{ records: PlainPrivateRecord[]; remove: { kind: PrivateKind; id: string; authorId: string | null }[]; result: PrivateInvoiceEditResult }> {
   const source = privateViewSource(options), { scope } = options, { check, ofKind, value } = source;
   if (!isPrivateInvoiceEdit(options.path)) throw new Error("Unsupported private invoice edit");
@@ -95,6 +96,9 @@ export async function privateInvoiceEdit(options: PrivateViewOptions & { path: P
     check(); return { records, remove: [], result };
   }
 
+  // The e-invoice writes (invoice-einvoice.ts) keep their own checks.
+  if (options.path === "invoices.attachEinvoiceData") return { ...(await privateEinvoiceFill({ ...options, input })), remove: [] };
+  if (options.path === "invoices.issueEinvoiceXml") return { ...privateIssueEinvoiceXml({ ...options, input }), remove: [] };
   const args = z.object({ id: z.string().min(1).max(100), status: z.enum(["draft", "sent", "paid"]).optional() }).passthrough().parse(input);
   const found = rows.find(({ invoice }) => invoice.id === args.id);
   if (!found) throw new PrivateInvoiceRefusal("Invoice not found");
@@ -152,6 +156,7 @@ export async function privateInvoiceEdit(options: PrivateViewOptions & { path: P
     // at, totals recomputed through the same code `create` uses.
     const edit = updateInvoiceSchema.parse(input);
     if (current.status !== "draft") throw new PrivateInvoiceRefusal(INVOICE_UPDATE_REFUSALS.notDraft, "PRECONDITION_FAILED");
+    if (current.issued) throw new PrivateInvoiceRefusal(INVOICE_UPDATE_REFUSALS.einvoiceIssued, "PRECONDITION_FAILED");
     if (Date.parse(edit.updatedAt) !== Date.parse(current.updatedAt)) throw new PrivateInvoiceRefusal("This invoice changed in another window. Reload it.", "CONFLICT");
     if (edit.number?.startsWith("CN-")) throw new PrivateInvoiceRefusal("invoice-reserved-number");
     if (edit.number !== undefined && rows.some(({ invoice }) => invoice.id !== current.id && invoice.number === edit.number)) throw new PrivateInvoiceRefusal(`Invoice number "${edit.number}" is already used.`, "CONFLICT");

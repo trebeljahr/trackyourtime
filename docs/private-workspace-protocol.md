@@ -1630,14 +1630,28 @@ in `lib/private-content-route.ts` and `lib/private-workspace-mutation.ts`).
   by `errorCode`), so the edit form tells a conflict from a taken number.
   Records hold JSON only: the credit snapshot is written through
   `JSON.stringify` because it copies absent invoice fields as `undefined`.
+- **E-invoices** work too (`packages/core/src/privacy/invoice-einvoice.ts`):
+  the check and the fill read today's business profile and client billing
+  from the copy; XRechnung XML and the ZUGFeRD PDF/A-3 are built on the device
+  with the server's code, which moved into `@starter/invoice-pdf/einvoice/`
+  (the server keeps shims). The first export of a non-draft stores its XML in
+  the invoice record through the internal `invoices.issueEinvoiceXml` edit,
+  which rebuilds it from the record rather than trusting the caller, and every
+  later export serves those bytes. The wire carries `issued`, never the XML.
+  ZUGFeRD embeds the same Noto faces as the server: the web app serves copies
+  at `/fonts/einvoice/`, and `pdf-fonts.test.ts` fails if they differ from
+  `packages/server/assets/fonts`. Refusals reach the panel as on the server:
+  `einvoiceIssues` and the fill refusal code ride on
+  `PrivateContentUnavailableError.details` (`lib/private-invoice-refusal.ts`).
 - **Refused for now, with a message:** payment reminders (the server cannot
-  read an encrypted invoice's due date; a decision is open), e-invoices
-  (ZUGFeRD, XRechnung), billing a colleague's entry, and invoicing while
-  timesheet approvals exist.
+  read an encrypted invoice's due date; a decision is open), billing a
+  colleague's entry, and invoicing while timesheet approvals exist.
 - e2e: `e2e/encrypted-invoices.spec.ts` (preview, create, PDF, billed once,
   delete gives the time back, edit a draft, mark sent, record a payment,
   credit with a replacement draft, credit PDF, no plaintext client, project,
-  work or notes in the database).
+  work or notes in the database) and `e2e/encrypted-einvoices.spec.ts`
+  (XRechnung and ZUGFeRD on the device, the issued XML served unchanged after
+  a reload, a refusal naming its field, no plaintext XML in the database).
 - **A page's first private read re-reads in place** (`private-view-lifecycle.ts`).
   The view epoch moves from `"0"` when a page load first shows private
   content, and every epoch change used to clear the query cache and remount

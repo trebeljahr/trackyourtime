@@ -1,5 +1,5 @@
 import { workspaceSelectionInput } from "./private-navigation";
-import { assertEntryClientSupported, accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery, isPrivateInvoiceQuery, privateInvoiceQuery, privateRenderableInvoice, privateRenderableCredit, PrivateInvoiceRefusal, PRIVATE_INVOICE_PERMISSION_REQUIRED } from "@starter/core";
+import { assertEntryClientSupported, accountWorkspacePolicy, PrivateAccountInventoryMissingError, privateCatalogQuery, isPrivateCatalogQuery, privateEntryQuery, isPrivateEntryQuery, privateFavoriteQuery, privateSettingsQuery, privateBusinessProfileQuery, privateReportTrackedSpan, privateReportQuery, isPrivateReportQuery, privateMemberQuery, isPrivateInvoiceQuery, privateInvoiceQuery, privateRenderableInvoice, privateRenderableCredit, privateEinvoiceCheck, privateEinvoiceXml, privateZugferdInvoice, xrechnungFilename } from "@starter/core";
 import { currentServerApiLevel } from "./server-level";
 import { PrivateWorkspaceCreationError } from "./private-workspace-creation-error";
 import { checkPrivateRequestScope, consumePrivateRequestScopes } from "./private-request-scope";
@@ -9,6 +9,7 @@ import { privateAccountId, privateDataOrigin, privateOperationScope, privateSess
 import { privateRoutingRequired, privateRoutingRevision } from "./private-routing-requirement";
 import { openPrivateWorkspaceSession } from "./private-workspace-session";
 import { PrivateContentUnavailableError } from "./private-content-error";
+import { privateInvoiceRefusal } from "./private-invoice-refusal";
 export { PrivateContentUnavailableError } from "./private-content-error";
 import { privateDisplayPreferences } from "./private-display-preferences";
 import { privateWorkspaceMemberMetadata } from "./private-member-metadata";
@@ -100,8 +101,9 @@ export async function assertStandardWorkspaceContent(userId: string, workspaceId
 }
 export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, path: string, input: unknown, type: string) {
   route.check();
+  if (type === "query" && (path === "invoices.exportXrechnung" || path === "invoices.exportZugferd")) return exportPrivateEinvoice(route, path, input);
   if (route.mode !== "encrypted" || !route.scope.workspaceId) throw new PrivateContentUnavailableError();
-  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list" && path !== "settings.get" && path !== "settings.businessProfile" && path !== "reports.trackedSpan" && !isPrivateReportQuery(path) && path !== "members.list" && !isPrivateInvoiceQuery(path) && path !== "invoices.exportPdf" && path !== "invoices.exportCreditPdf" && path !== "invoices.exportCreditXml")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
+  if (type !== "query" || (!isPrivateCatalogQuery(path) && !isPrivateEntryQuery(path) && path !== "favorites.list" && path !== "settings.get" && path !== "settings.businessProfile" && path !== "reports.trackedSpan" && !isPrivateReportQuery(path) && path !== "members.list" && !isPrivateInvoiceQuery(path) && path !== "invoices.exportPdf" && path !== "invoices.exportCreditPdf" && path !== "invoices.exportCreditXml" && path !== "invoices.einvoiceCheck")) throw new PrivateContentUnavailableError("This operation is not available for private workspaces yet. Existing work was kept.");
   let session: Awaited<ReturnType<typeof openPrivateWorkspaceSession>> | null = null;
   try {
     session = await openPrivateWorkspaceSession(route.scope.userId, route.scope.workspaceId);
@@ -123,6 +125,7 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     if (isPrivateCatalogQuery(path)) return privateCatalogQuery({ ...options, path });
     if (isPrivateInvoiceQuery(path)) { const preferences = path === "invoices.preview" ? await privateDisplayPreferences(route.scope.userId) : undefined; route.check(); return await privateInvoiceQuery({ ...options, path, preferences }); }
     if (path === "invoices.exportPdf") return await renderPrivateInvoicePdf(await privateRenderableInvoice(options), route.check);
+    if (path === "invoices.einvoiceCheck") return await privateEinvoiceCheck(options);
     if (path === "invoices.exportCreditPdf") {
       const { generatedAt, ...credit } = await privateRenderableCredit(options);
       const file = await renderPrivateInvoicePdf(credit, route.check, generatedAt);
@@ -133,8 +136,7 @@ export async function readPrivateWorkspaceQuery(route: WorkspaceContentRoute, pa
     throw new PrivateContentUnavailableError();
   } catch (error) {
     if (error instanceof PrivateContentUnavailableError) throw error;
-    if (error instanceof PrivateInvoiceRefusal) throw new PrivateContentUnavailableError(error.message, error.code);
-    if (error instanceof Error && error.message === PRIVATE_INVOICE_PERMISSION_REQUIRED) throw new PrivateContentUnavailableError(error.message);
+    const refusal = privateInvoiceRefusal(error); if (refusal) throw refusal;
     // The page shows a fixed sentence; the cause (no record values) goes to the console.
     console.warn("[private] workspace read failed", path, error instanceof Error ? error.message : error);
     throw new PrivateContentUnavailableError("Private workspace data could not be verified. Existing data was kept.");
@@ -190,4 +192,58 @@ async function renderPrivateInvoicePdf(invoice: Parameters<typeof import("@start
   const bytes = await renderInvoicePdf(invoice, { generatedAt }, undefined, { PDFDocument }); check();
   let binary = ""; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return { filename: invoicePdfFilename(invoice.number), base64: btoa(binary), mimeType: "application/pdf" as const };
+}
+
+/**
+ * An e-invoice export from an encrypted workspace. The XML is the stored one,
+ * or built from the decrypted invoice; a non-draft's first export stores it
+ * first, through a signed edit that rebuilds it from the record, so every later
+ * export serves those bytes (as the server's issued XML). ZUGFeRD draws the
+ * page on this device with the same Noto faces the server embeds.
+ */
+async function exportPrivateEinvoice(route: WorkspaceContentRoute, path: "invoices.exportXrechnung" | "invoices.exportZugferd", input: unknown) {
+  if (route.mode !== "encrypted" || !route.scope.workspaceId) throw new PrivateContentUnavailableError();
+  const profile = path === "invoices.exportZugferd" ? "en16931" as const : "xrechnung" as const;
+  let session: Awaited<ReturnType<typeof openPrivateWorkspaceSession>> | null = null;
+  let prepared: ReturnType<typeof privateEinvoiceXml>, page: Awaited<ReturnType<typeof privateZugferdInvoice>> | null = null;
+  try {
+    session = await openPrivateWorkspaceSession(route.scope.userId, route.scope.workspaceId); route.check();
+    notePrivateView(route.scope); const view = await session.read(); route.check();
+    const opened = session, options = { input, scope: opened.scope, directory: opened.directory, records: view.records, current: () => { try { route.check(); return opened.current(); } catch { return false; } } };
+    // ZUGFeRD validates the snapshot even when an XML is stored, as on the server.
+    if (profile === "en16931") page = await privateZugferdInvoice(options);
+    prepared = privateEinvoiceXml(options, profile);
+  } catch (error) {
+    const refusal = privateInvoiceRefusal(error); if (refusal) throw refusal;
+    if (error instanceof PrivateContentUnavailableError) throw error;
+    console.warn("[private] e-invoice export failed", path, error instanceof Error ? error.message : error);
+    throw new PrivateContentUnavailableError("Private workspace data could not be verified. Existing data was kept.");
+  } finally { session?.close(); }
+  let xml = prepared.xml;
+  if (prepared.persist) {
+    const id = (input as { id: string }).id;
+    const { mutatePrivateWorkspace } = await import("./private-workspace-mutation");
+    xml = (await mutatePrivateWorkspace(route, "invoices.issueEinvoiceXml", { id, profile }) as { xml: string }).xml; route.check();
+  }
+  const bytes = new TextEncoder().encode(xml);
+  if (profile === "xrechnung") return { filename: xrechnungFilename(prepared.number), base64: toBase64(bytes), mimeType: "application/xml" as const };
+  const [{ renderZugferdPdf, zugferdPdfFilename }, { zugferdFontsFromBytes }, standalone, regular, bold] = await Promise.all([
+    import("@starter/invoice-pdf/einvoice/zugferd"), import("@starter/invoice-pdf/einvoice/zugferd-fonts"), import("pdfkit-standalone"),
+    fetchFont("NotoSans-Regular.ttf"), fetchFont("NotoSans-Bold.ttf"),
+  ]); route.check();
+  const PDFDocument = ((standalone as { default?: unknown }).default ?? standalone) as Parameters<typeof zugferdFontsFromBytes>[0];
+  const pdf = await renderZugferdPdf(page!, xml, { generatedAt: new Date().toISOString() }, zugferdFontsFromBytes(PDFDocument, regular, bold), bytes, { PDFDocument: PDFDocument as never }); route.check();
+  return { filename: zugferdPdfFilename(prepared.number), base64: toBase64(pdf), mimeType: "application/pdf" as const };
+}
+
+/** The Noto faces the server embeds (packages/server/assets/fonts), served with the web app. */
+async function fetchFont(name: string): Promise<Uint8Array> {
+  const response = await fetch(`/fonts/einvoice/${name}`);
+  if (!response.ok) throw new PrivateContentUnavailableError("The e-invoice fonts could not be loaded. Nothing was changed.");
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = ""; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }
