@@ -2,7 +2,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { privateViewEpoch, subscribePrivateViewEpoch } from "@/lib/private-view-lifecycle";
+import { privateViewMountKey, subscribePrivateViewEpoch } from "@/lib/private-view-lifecycle";
 import { privateAccountId, privateDataOrigin, privateOperationScope, privateSessionVersion, subscribePrivateSession } from "@/lib/private-session";
 import { privateRoutingRevision, subscribePrivateRoutingRequirement } from "@/lib/private-routing-requirement";
 import { confirmStandardDeviceAccess, privateDeviceAccessRevision, subscribePrivateDeviceAccess } from "@/lib/private-device-access";
@@ -23,7 +23,9 @@ import { signOut } from "@/lib/auth-client";
  * approved checkpoint cannot unmount and cancel its own in-flight confirmation. */
 export function PrivateWorkspaceBoundary({ children, userId }: { children: React.ReactNode; userId: string | null }) {
   const t = useT("settings"), queryClient = useQueryClient();
-  const epoch = React.useSyncExternalStore(subscribePrivateViewEpoch, privateViewEpoch, () => "0");
+  // Forms remount on every private view change except the page's first
+  // private read, which only re-reads (query-client.ts), so an open dialog stays.
+  const epoch = React.useSyncExternalStore(subscribePrivateViewEpoch, privateViewMountKey, () => "0");
   const version = React.useSyncExternalStore(subscribePrivateSession, privateSessionVersion, () => 0);
   const routing = React.useSyncExternalStore(subscribePrivateRoutingRequirement, privateRoutingRevision, () => 0);
   const device = React.useSyncExternalStore(subscribePrivateDeviceAccess, privateDeviceAccessRevision, () => 0);

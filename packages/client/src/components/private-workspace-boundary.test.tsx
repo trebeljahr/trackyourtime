@@ -10,7 +10,7 @@ vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ resetQueries:
 vi.mock("@/lib/private-device-access", () => ({ confirmStandardDeviceAccess: state.confirm, privateDeviceAccessRevision: () => state.device, subscribePrivateDeviceAccess: (fn: () => void) => { state.listeners.add(fn); return () => state.listeners.delete(fn); } }));
 vi.mock("@/lib/private-device-access-state", () => ({ readPrivateDeviceAccessState: async (userId: string) => await state.required({ userId }) ? state.keys ? state.inventory ? "inventory" : "ready" : "locked" : state.unknown ? "unknown" : "standard" }));
 vi.mock("./settings/private-device-unlock", () => ({ PrivateDeviceUnlock: () => { const [draft, setDraft] = React.useState(0); React.useEffect(() => { state.mounts++; return () => { state.unmounts++; }; }, []); return <button onClick={() => setDraft((n) => n + 1)}>Approval request {draft}</button>; } }));
-vi.mock("@/lib/private-view-lifecycle", () => ({ privateViewEpoch: () => state.epoch, subscribePrivateViewEpoch: (fn: () => void) => { state.listeners.add(fn); return () => state.listeners.delete(fn); } }));
+vi.mock("@/lib/private-view-lifecycle", () => ({ privateViewMountKey: () => state.epoch, subscribePrivateViewEpoch: (fn: () => void) => { state.listeners.add(fn); return () => state.listeners.delete(fn); } }));
 vi.mock("@/lib/api-origin", () => ({ whenApiOriginReady: async () => {} }));
 vi.mock("@/lib/auth-client", () => ({ signOut: state.signOut }));
 vi.mock("./startup-screen", () => ({ StartupScreen: () => <p>Checking device</p> }));

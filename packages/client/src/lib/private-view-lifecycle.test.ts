@@ -30,3 +30,21 @@ it("discards private form state across workspace switches while leaving standard
  lifecycle.setPrivateViewWorkspaceContext("private-one"); lifecycle.notePrivateView({ server: state.server, userId: state.user! });
  const privateEpoch = lifecycle.privateViewEpoch(); lifecycle.setPrivateViewWorkspaceContext("standard-two"); expect(lifecycle.privateViewEpoch()).not.toBe(privateEpoch);
 });
+
+it("re-reads in place on a page's first private view, and remounts on every later change", async () => {
+ const lifecycle = await import("./private-view-lifecycle"), changed = vi.fn(); lifecycle.subscribePrivateViewEpoch(changed);
+ const mount = lifecycle.privateViewMountKey();
+ // The first private read of this page load: an open dialog must survive it.
+ lifecycle.notePrivateView({ server: state.server, userId: state.user! });
+ expect(changed).toHaveBeenLastCalledWith("first-view"); expect(lifecycle.privateViewMountKey()).toBe(mount);
+ lifecycle.notePrivateView({ server: state.server, userId: state.user! }); expect(changed).toHaveBeenCalledTimes(1);
+ // A lock or new keys discards everything.
+ state.version++; for (const f of state.sessionListeners) f();
+ expect(changed).toHaveBeenLastCalledWith("change"); const afterLock = lifecycle.privateViewMountKey(); expect(afterLock).not.toBe(mount);
+ // Leaving for a standard account and coming back to a seen private one is
+ // an account change, not a first view, even though the epoch was "0" between.
+ state.user = "standard-b"; for (const f of state.accountListeners) f(); expect(changed).toHaveBeenLastCalledWith("change");
+ const standard = lifecycle.privateViewMountKey(); expect(standard).not.toBe(afterLock);
+ state.user = "private-a"; for (const f of state.accountListeners) f();
+ expect(changed).toHaveBeenLastCalledWith("change"); expect(lifecycle.privateViewMountKey()).not.toBe(standard);
+});

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
-import { logManualEntry, signUpViaUI, TRACK_URL } from "./helpers";
+import { signUpViaUI, TRACK_URL } from "./helpers";
 import { closeDbConnection, getDb } from "./db-utils";
-import { confirmCreate, downloadBytes, idFromTestId, money, pickComboboxOption, PROJECT_RATE, RANGE_FROM, RANGE_TO } from "./invoice-helpers";
+import { confirmCreate, createClientAndProject, downloadBytes, money, openPreview, trackBillableHours } from "./invoice-helpers";
 
 // Invoices in an encrypted workspace (docs/private-workspace-protocol.md →
 // "Invoices in an encrypted workspace"). The server never sees the invoice:
@@ -33,56 +33,6 @@ async function encryptedWorkspace(page: Page, name: string): Promise<void> {
   await expect(switcher).toContainText(name, { timeout: 20_000 });
 }
 
-/**
- * A full page load into an encrypted workspace remounts the app once, when
- * its first private read lands (PrivateWorkspaceBoundary's view epoch), and a
- * dialog opened before that closes. So every step here waits for the page's
- * reads to finish before it touches a form; the shared invoice helpers do not.
- */
-async function settledGoto(page: Page, path: string, testId: string): Promise<void> {
-  await page.goto(path);
-  await expect(page.getByTestId(testId)).toBeVisible({ timeout: 20_000 });
-  await page.waitForLoadState("networkidle");
-}
-
-async function createClientAndProject(page: Page, clientName: string, projectName: string): Promise<void> {
-  await settledGoto(page, "/app/projects", "projects-page");
-  await page.getByTestId("new-project").click();
-  await expect(page.getByTestId("project-dialog")).toBeVisible();
-  await page.getByTestId("project-name-input").fill(projectName);
-  await page.getByTestId("project-client-combobox").click();
-  await page.getByTestId("combobox-search").fill(clientName);
-  await page.getByTestId("combobox-create").click();
-  await expect(page.getByTestId("project-client-combobox")).toContainText(clientName);
-  await page.getByTestId("project-advanced-toggle").click();
-  await page.getByTestId("project-rate-input").fill(PROJECT_RATE);
-  await page.getByTestId("project-submit").click();
-  await expect(page.getByTestId("project-dialog")).toBeHidden();
-  const row = page.locator('[data-testid^="project-row-"]').filter({ hasText: projectName });
-  await expect(row).toHaveCount(1);
-  await idFromTestId(row, "project-row-");
-}
-
-async function trackBillableHours(page: Page, description: string, duration: string, projectName: string): Promise<void> {
-  await settledGoto(page, "/app/track", "track-page");
-  await pickComboboxOption(page, "tracker-project", projectName);
-  await expect(page.getByTestId("tracker-billable")).toHaveAttribute("data-billable", "true");
-  await logManualEntry(page, description, duration);
-}
-
-async function openPreview(page: Page, clientName: string): Promise<void> {
-  await settledGoto(page, "/app/invoices", "invoices-page");
-  await page.getByTestId("new-invoice").click();
-  await expect(page.getByTestId("invoice-dialog")).toBeVisible();
-  await pickComboboxOption(page, "invoice-client-combobox", clientName);
-  await page.getByTestId("invoice-range").click();
-  await expect(page.getByTestId("invoice-range-content")).toBeVisible();
-  await page.getByTestId("invoice-range-from").fill(RANGE_FROM);
-  await page.getByTestId("invoice-range-to").fill(RANGE_TO);
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("invoice-range-content")).toBeHidden();
-  await expect(page.getByTestId("invoice-dialog")).toBeVisible();
-}
 
 test("invoices tracked time on the device, bills it once, draws the PDF and stores no plaintext", async ({ page }) => {
   // Signup, key setup, an encrypted workspace and two invoices: well past the 30 s default.

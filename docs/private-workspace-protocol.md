@@ -1627,11 +1627,17 @@ in `lib/private-content-route.ts` and `lib/private-workspace-mutation.ts`).
 - e2e: `e2e/encrypted-invoices.spec.ts` (preview, create, PDF, billed once,
   delete gives the time back, status change survives a reload, no plaintext
   client, project or work in the database).
-- A full page load remounts the app once, when its first private read lands
-  (`PrivateWorkspaceBoundary`'s view epoch), and a dialog opened before that
-  closes. The remount is load-bearing (it redoes reads made before the
-  private route was known), so the spec waits for the page to settle; fixing
-  it for people is open.
+- **A page's first private read re-reads in place** (`private-view-lifecycle.ts`).
+  The view epoch moves from `"0"` when a page load first shows private
+  content, and every epoch change used to clear the query cache and remount
+  the app, closing any dialog opened in that first second. That first change
+  is now `"first-view"`: the cache is invalidated (every screen refetches) and
+  forms keep their state, because nothing on screen held private data before
+  it. Every other change, including a return to an already-seen private
+  account, is `"change"` and still clears and remounts
+  (`privateViewMountKey`). Tests: `private-view-lifecycle.test.ts`,
+  `query-client-private-view.test.ts`, and the e2e dialog case in
+  `encrypted-workspace.spec.ts`.
 
 The entry view also had to accept the `direction` key tRPC's infinite queries
 add to every page request (`privateEntryQuery`); its strict filter refused

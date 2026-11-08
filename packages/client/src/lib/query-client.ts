@@ -116,7 +116,13 @@ export const createAppQueryClient = (): QueryClient => {
   const client = appQueryClient, persistence = getQueryPersistence(client);
   unbindPrivateViews();
   const protect = subscribePrivateView((scope) => { void persistence.protectPrivateAccount(scope); });
-  const clear = subscribePrivateViewEpoch(() => { void client.cancelQueries(); client.clear(); });
+  // A first private view re-reads in place: screens built before the private
+  // route was known refetch, and keep their local state (an open dialog).
+  // Any other change discards every cached read before new ones are issued.
+  const clear = subscribePrivateViewEpoch((change) => {
+    if (change === "first-view") { void client.invalidateQueries(); return; }
+    void client.cancelQueries(); client.clear();
+  });
   // Scheduling hints never authorize routing. The SDK still verifies inventory,
   // scope and grants for every read. Standard queries keep radio pausing.
   const localPaths = [

@@ -100,6 +100,33 @@ test.describe("Encrypted workspace", () => {
     }
   });
 
+  test("keeps a dialog open that was opened while a page load's first private read was in flight", async ({ page }) => {
+    const space = `Dialog space ${Date.now()}`;
+    await signUpViaUI(page, { name: "Enc", email: `enc-dialog-${Date.now()}@encrypted.example`, password: PASSWORD });
+    await page.getByTestId("recovery-key-saved").click({ timeout: 20_000 });
+    const switcher = page.getByTestId("workspace-switcher");
+    await switcher.click();
+    await page.getByTestId("workspace-create").click();
+    const dialog = page.getByTestId("new-workspace-dialog");
+    await dialog.getByTestId("new-workspace-name").fill(space);
+    await dialog.getByTestId("new-workspace-encrypted").locator("input").check();
+    await dialog.getByTestId("new-workspace-submit").click();
+    await page.waitForURL(TRACK_URL, { timeout: 20_000 });
+    await expect(switcher).toContainText(space, { timeout: 20_000 });
+
+    // A full page load, and the dialog opened at once: the first private read
+    // used to remount the whole app and close it.
+    await page.goto("/app/projects");
+    await page.getByTestId("new-project").click();
+    await page.getByTestId("project-name-input").fill("Typed before the first read");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByTestId("project-dialog")).toBeVisible();
+    await expect(page.getByTestId("project-name-input")).toHaveValue("Typed before the first read");
+    // The reads made before the private route was known were redone: the
+    // switcher shows the decrypted name, not the placeholder.
+    await expect(switcher).toContainText(space, { timeout: 20_000 });
+  });
+
   test("is not offered to an account off the allowlist", async ({ page }) => {
     await signUpViaUI(page, { name: "Std", email: `std-${Date.now()}@example.com`, password: PASSWORD });
     await page.getByTestId("workspace-switcher").click();
