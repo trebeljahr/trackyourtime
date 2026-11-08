@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -95,12 +96,12 @@ describe("Factur-X XMP", () => {
     assert.ok(!xmp.includes("\nBerlin"));
   });
 
-  it("produces well-formed XML for every block", () => {
+  it("produces well-formed XML for every block", async () => {
     for (const block of [
       FACTURX_EXTENSION_SCHEMA_XMP,
       facturxPropertiesXmp(),
       dublinCoreXmp({ title: "<&>", creator: `"'`, description: "ä" }),
-      documentIdXmp(documentUuid("inv-1", Buffer.from("<x/>"))),
+      documentIdXmp(await documentUuid("inv-1", Buffer.from("<x/>"))),
     ]) {
       assertWellFormedXml(inPacket(block));
     }
@@ -110,19 +111,28 @@ describe("Factur-X XMP", () => {
 describe("documentUuid", () => {
   const xml = Buffer.from("<rsm:CrossIndustryInvoice/>", "utf8");
 
-  it("is stable for the same invoice and XML", () => {
-    assert.equal(documentUuid("inv-1", xml), documentUuid("inv-1", Buffer.from(xml)));
+  it("is stable for the same invoice and XML", async () => {
+    assert.equal(await documentUuid("inv-1", xml), await documentUuid("inv-1", Buffer.from(xml)));
   });
 
-  it("changes when one byte of the XML changes, or the invoice id does", () => {
+  it("is the id Node's createHash gave before it moved to WebCrypto", async () => {
+    const digest = createHash("sha256").update("inv-1\n", "utf8").update(xml).digest().subarray(0, 16);
+    const bytes = Buffer.from(digest);
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+    const hex = bytes.toString("hex");
+    assert.equal(await documentUuid("inv-1", xml), `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
+  });
+
+  it("changes when one byte of the XML changes, or the invoice id does", async () => {
     const changed = Buffer.from(xml);
     changed[5] = (changed[5] ?? 0) ^ 1;
-    assert.notEqual(documentUuid("inv-1", xml), documentUuid("inv-1", changed));
-    assert.notEqual(documentUuid("inv-1", xml), documentUuid("inv-2", xml));
+    assert.notEqual(await documentUuid("inv-1", xml), await documentUuid("inv-1", changed));
+    assert.notEqual(await documentUuid("inv-1", xml), await documentUuid("inv-2", xml));
   });
 
-  it("is an RFC 9562 version 8 UUID", () => {
-    const uuid = documentUuid("inv-1", xml);
+  it("is an RFC 9562 version 8 UUID", async () => {
+    const uuid = await documentUuid("inv-1", xml);
     assert.match(uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.ok(documentIdXmp(uuid).includes(`<xmpMM:DocumentID>uuid:${uuid}</xmpMM:DocumentID>`));
   });
