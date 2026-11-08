@@ -18,6 +18,7 @@ const setActive = vi.fn(async (input: { workspaceId: string }) => input);
 const createWorkspace = vi.fn(async (_input: unknown) => ({ workspaceId: "ws-new" }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
+    privacy: { encryptedWorkspaces: { useQuery: () => ({ data: { allowed: false } }) } },
     workspaces: {
       setActive: { useMutation: () => ({ mutateAsync: setActive }) },
       create: { useMutation: () => ({ mutateAsync: createWorkspace }) },
