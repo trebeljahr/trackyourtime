@@ -455,8 +455,7 @@ the local origin, so sign-in fails there; that is expected.
    reconciliation when distributed sync is unavailable and a five-minute
    safety refresh while healthy. Validate native and Raycast reconnects too.
    Scheduler and webhook polling stop when drain starts. Reminder scans stop
-   between records and before starting mail delivery; a claimed invoice reminder
-   interrupted before delivery keeps its consent and becomes eligible again.
+   between records and before starting mail delivery.
    In-flight mail has a 10-second absolute network deadline, including SMTP
    sockets. Scheduler leases renew while accepted work finishes. Renewal failure
    or lease expiry aborts the handler before its next unit of work; releases

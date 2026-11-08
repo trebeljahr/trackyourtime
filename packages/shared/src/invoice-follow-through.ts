@@ -44,26 +44,11 @@ export type InvoiceCredit = {
   snapshot: InvoiceCreditSnapshot;
   replacementId?: string;
 };
-export type InvoiceReminders = {
-  enabled: boolean;
-  recipient: string;
-  timezone: string;
-  consentAt: string;
-  consentBy: string;
-  sentDays: number[];
-  skippedDays?: number[];
-  lastOutcome?: "sent" | "failed" | "cancelled";
-  lastAttemptAt?: string;
-  /** Stable refusal code, never provider messages or credentials. */
-  failure?: string;
-  claim?: { token: string; until: string; day: number };
-};
 export type InvoiceFollowThrough = {
   payments?: InvoicePayment[];
   /** Settled opening balance for a legacy paid row, with no invented payment date. */
   legacySettledMinor?: number;
   credit?: InvoiceCredit;
-  reminders?: InvoiceReminders;
 };
 export type InvoiceBalance =
   | {
@@ -220,36 +205,6 @@ export function invoiceBalance(
     legacySettled,
   };
 }
-export const REMINDER_DAYS = [1, 7, 14] as const;
-export function nextReminderDay(
-  invoice: Pick<
-    Invoice,
-    "total" | "currency" | "status" | "dueDate" | "followThrough" | "timezone"
-  >,
-  now: Date,
-): number | null {
-  const reminder = invoice.followThrough?.reminders;
-  const balance = invoiceBalance(invoice, now);
-  if (
-    !balance.available ||
-    !reminder?.enabled ||
-    invoice.followThrough?.credit ||
-    invoice.status === "draft" ||
-    balance.outstandingMinor === 0
-  )
-    return null;
-  const due = [...REMINDER_DAYS]
-    .reverse()
-    .find((day) => balance.overdueDays >= day);
-  if (
-    due === undefined ||
-    reminder.sentDays.includes(due) ||
-    reminder.skippedDays?.includes(due)
-  )
-    return null;
-  // One email after late opt-in/recovery; earlier stages are skipped, never replayed.
-  return due;
-}
 const base = {
   id: z.string().min(1).max(100),
   originId: z.string().max(64).optional(),
@@ -268,20 +223,4 @@ export const invoiceCreditSchema = z.object({
   requestId: z.string().uuid(),
   reason: z.string().trim().min(1).max(1000),
   replacement: z.boolean().default(false),
-});
-export const invoiceReminderSchema = z.object({
-  ...base,
-  enabled: z.boolean(),
-  recipient: z.string().email().max(254),
-  timezone: z
-    .string()
-    .max(100)
-    .refine((value) => {
-      try {
-        invoiceDay(new Date(), value);
-        return true;
-      } catch {
-        return false;
-      }
-    }),
 });

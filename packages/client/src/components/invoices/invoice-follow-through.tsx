@@ -49,7 +49,6 @@ function InvoiceFollowThroughBody({
   const utils = trpc.useUtils();
   const pay = trpc.invoices.recordPayment.useMutation();
   const credit = trpc.invoices.credit.useMutation();
-  const reminders = trpc.invoices.setReminders.useMutation();
   const [amount, setAmount] = React.useState("");
   const [at, setAt] = React.useState(() =>
     invoiceDay(new Date(), invoice.timezone ?? "UTC"),
@@ -57,23 +56,8 @@ function InvoiceFollowThroughBody({
   const [note, setNote] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [confirmed, setConfirmed] = React.useState(false);
-  const reminder = invoice.followThrough?.reminders;
-  const [recipient, setRecipient] = React.useState(
-    reminder?.recipient ?? invoice.recipient?.email ?? "",
-  );
-  const [timezone, setTimezone] = React.useState(
-    reminder?.timezone ?? invoice.timezone ?? "UTC",
-  );
-  const [enabled, setEnabled] = React.useState(reminder?.enabled ?? false);
-  const [preview, setPreview] = React.useState<{
-    subject: string;
-    text: string;
-    to: string;
-    scheduledDates?: string[];
-  } | null>(null);
   const [busy, setBusy] = React.useState(false);
   const inFlight = React.useRef(false);
-  const previewGeneration = React.useRef(0);
   const mounted = React.useRef(true);
   const [operationScope] = React.useState(entryMutationScope);
   React.useLayoutEffect(() => {
@@ -185,10 +169,6 @@ function InvoiceFollowThroughBody({
       minimumFractionDigits: 2,
       maximumFractionDigits: Math.log10(scale),
     });
-  const canRemind =
-    invoice.status !== "draft" &&
-    !fullCredit &&
-    (balance?.outstandingMinor ?? 0) > 0;
   const payments = invoice.followThrough?.payments ?? [];
   if (balance?.available === false)
     return (
@@ -421,115 +401,6 @@ function InvoiceFollowThroughBody({
               {t("followThrough.correct")}
             </Button>
           </div>
-        </div>
-      ) : null}
-      {canRemind || reminder ? (
-        <div className="space-y-3">
-          <h4 className="font-medium">{t("followThrough.reminders")}</h4>
-          <p className="text-sm text-muted-foreground">
-            {t("followThrough.policy")}
-          </p>
-          <label className="block text-sm">
-            {t("followThrough.recipient")}
-            <Input
-              type="email"
-              value={recipient}
-              onChange={(e) => {
-                previewGeneration.current++;
-                setRecipient(e.target.value);
-                setPreview(null);
-              }}
-            />
-          </label>
-          <label className="block text-sm">
-            {t("followThrough.timezone")}
-            <Input
-              value={timezone}
-              onChange={(e) => {
-                previewGeneration.current++;
-                setTimezone(e.target.value);
-                setPreview(null);
-              }}
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              disabled={!canRemind}
-              checked={enabled && canRemind}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
-            {t("followThrough.consent")}
-          </label>
-          <Button
-            variant="outline"
-            disabled={busy || !recipient}
-            onClick={() =>
-              void run(
-                async () => {
-                  const generation = previewGeneration.current;
-                  const result = await utils.invoices.reminderPreview.fetch({
-                    id: invoice.id,
-                    enabled,
-                    recipient,
-                    timezone,
-                  });
-                  if (isCurrent() && generation === previewGeneration.current)
-                    setPreview(result);
-                },
-                undefined,
-                false,
-              )
-            }
-          >
-            {t("followThrough.preview")}
-          </Button>
-          {preview ? (
-            <div
-              className="rounded border p-3 text-sm"
-              data-testid="invoice-reminder-preview"
-            >
-              <p>{preview.to}</p>
-              <strong>{preview.subject}</strong>
-              <p className="whitespace-pre-wrap">{preview.text}</p>
-              <p>{t("followThrough.schedule", { days: "1 / 7 / 14" })}</p>
-              <p>{preview.scheduledDates?.join(" / ")}</p>
-              <p>{t("followThrough.lateReminder")}</p>
-            </div>
-          ) : null}
-          {enabled && !preview ? (
-            <p className="text-sm">{t("followThrough.previewRequired")}</p>
-          ) : null}
-          <Button
-            disabled={busy || !recipient || (enabled && canRemind && !preview)}
-            onClick={() =>
-              void run(() =>
-                reminders.mutateAsync({
-                  id: invoice.id,
-                  enabled: enabled && canRemind,
-                  recipient,
-                  timezone,
-                  originId: ORIGIN_ID,
-                }),
-              )
-            }
-          >
-            {t("followThrough.save")}
-          </Button>
-          {reminder?.lastOutcome ? (
-            <p className="text-sm" role="status">
-              {t("followThrough.lastOutcome", {
-                outcome: t(
-                  reminder.lastOutcome === "sent"
-                    ? "followThrough.outcomeSent"
-                    : reminder.lastOutcome === "failed"
-                      ? "followThrough.outcomeFailed"
-                      : "followThrough.outcomeCancelled",
-                ),
-                date: reminder.lastAttemptAt ?? "—",
-              })}
-            </p>
-          ) : null}
         </div>
       ) : null}
     </section>

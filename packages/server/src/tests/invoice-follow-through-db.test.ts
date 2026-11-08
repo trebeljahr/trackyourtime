@@ -12,7 +12,6 @@ import { pageTexts } from "./support/pdf-text.js";
 import { TimeEntry } from "../models/TimeEntry.js";
 import { WorkspaceMember } from "../models/WorkspaceMember.js";
 import { invoicesRouter } from "../trpc/routers/invoices.js";
-import { runInvoiceReminders } from "../services/scheduler/invoice-reminders.js";
 import {
   INTEGRATION_MODELS,
   OWNER,
@@ -51,12 +50,6 @@ const payment = (id: string, amount: string) => ({
   kind: "payment" as const,
   at: "2026-09-30T00:00:00.000Z",
   note: "Test only",
-});
-const consent = (id: string, enabled = true) => ({
-  id,
-  enabled,
-  recipient: "synthetic@example.test",
-  timezone: "UTC",
 });
 
 describe(
@@ -103,14 +96,6 @@ describe(
       );
       await assert.rejects(
         owner().updateStatus({ id: invoice.id, status: "paid" }),
-        /invoice-balance-unavailable/,
-      );
-      await assert.rejects(
-        owner().setReminders(consent(invoice.id)),
-        /invoice-balance-unavailable/,
-      );
-      await assert.rejects(
-        owner().reminderPreview(consent(invoice.id)),
         /invoice-balance-unavailable/,
       );
       assert.equal((await owner().get({ id: invoice.id })).status, "sent");
@@ -423,8 +408,6 @@ describe(
               reason: "Test",
               replacement: false,
             }),
-          () => caller.setReminders(consent(invoice.id)),
-          () => caller.reminderPreview(consent(invoice.id)),
           () => caller.exportCreditPdf({ id: invoice.id }),
           () => caller.exportCreditXml({ id: invoice.id }),
         ]) {
@@ -441,101 +424,6 @@ describe(
       assert.deepEqual(await restricted.list({ overdue: true }), {
         invoices: [],
       });
-    });
-    it("fake delivery: opt-in only, finite schedule, failed outcome retry, no claim leak", async () => {
-      const invoice = await sent();
-      let now = new Date("2026-10-02T12:00:00Z");
-      const mails: string[] = [];
-      let fail = false;
-      const deps = {
-        now: () => now,
-        configured: () => true,
-        send: async (mail: { to: string }) => {
-          if (fail) throw new Error("Fake failure");
-          mails.push(mail.to);
-        },
-      };
-      await runInvoiceReminders(deps);
-      assert.deepEqual(mails, []);
-      await owner().setReminders(consent(invoice.id));
-      fail = true;
-      await runInvoiceReminders(deps);
-      assert.equal(
-        (await owner().get({ id: invoice.id })).followThrough?.reminders
-          ?.lastOutcome,
-        "failed",
-      );
-      assert.equal(
-        (await owner().get({ id: invoice.id })).followThrough?.reminders?.claim,
-        undefined,
-      );
-      fail = false;
-      now = new Date("2026-10-02T13:01:00Z");
-      await Promise.all([runInvoiceReminders(deps), runInvoiceReminders(deps)]);
-      assert.deepEqual(mails, ["synthetic@example.test"]);
-      for (const date of ["2026-10-08", "2026-10-15", "2026-11-01"]) {
-        now = new Date(date);
-        await runInvoiceReminders(deps);
-      }
-      assert.equal(mails.length, 3);
-    });
-    it("rechecks cancellation after claiming and before the fake mailer", async () => {
-      const invoice = await sent();
-      await owner().setReminders(consent(invoice.id));
-      await runInvoiceReminders({
-        now: () => new Date("2026-10-20T12:00:00Z"),
-        configured: () => true,
-        beforeRecheck: async () => {
-          await owner().setReminders(consent(invoice.id, false));
-        },
-        send: async () => {
-          assert.fail("cancelled consent must not send");
-        },
-      });
-    });
-    it("shutdown after a claim preserves consent and leaves no delivery attempt", async () => {
-      const invoice = await sent();
-      await owner().setReminders(consent(invoice.id));
-      const controller = new AbortController();
-      await assert.rejects(runInvoiceReminders({
-        now: () => new Date("2026-10-20T12:00:00Z"),
-        configured: () => true,
-        signal: controller.signal,
-        beforeRecheck: async () => { controller.abort(new Error("shutdown")); },
-        send: async () => { assert.fail("shutdown must not start delivery"); },
-      }), /shutdown/);
-      const reminder = (await owner().get({ id: invoice.id })).followThrough?.reminders;
-      assert.equal(reminder?.enabled, true);
-      assert.equal(reminder?.claim, undefined);
-      assert.equal(reminder?.lastAttemptAt, undefined);
-      assert.deepEqual(reminder?.sentDays, []);
-      let sentCount = 0;
-      await runInvoiceReminders({
-        now: () => new Date("2026-10-20T12:00:00Z"), configured: () => true,
-        send: async () => { sentCount += 1; },
-      });
-      assert.equal(sentCount, 1, "the next process can resume the untouched reminder");
-    });
-    it("late opt-in sends one reminder and records skipped stages", async () => {
-      const invoice = await sent();
-      await owner().setReminders(consent(invoice.id));
-      let now = new Date("2026-11-01T12:00:00Z");
-      let count = 0;
-      const deps = {
-        now: () => now,
-        configured: () => true,
-        send: async () => {
-          count++;
-        },
-      };
-      await runInvoiceReminders(deps);
-      now = new Date("2026-11-02T12:00:00Z");
-      await runInvoiceReminders(deps);
-      const reminder = (await owner().get({ id: invoice.id })).followThrough
-        ?.reminders;
-      assert.equal(count, 1);
-      assert.deepEqual(reminder?.sentDays, [14]);
-      assert.deepEqual(reminder?.skippedDays, [1, 7]);
     });
     it("overdue filtering derives outstanding balance and paginates without dropping matching rows", async () => {
       const original = await sent();
@@ -574,43 +462,6 @@ describe(
       } while (cursor);
       assert.equal(new Set(ids).size, ids.length);
       assert.equal(ids.filter((id) => id !== original.id).length, 4);
-    });
-    it("settlement, credit, consent cancellation and revoked rights suppress fake delivery", async () => {
-      const invoice = await sent();
-      const deps = {
-        now: () => new Date("2026-10-20T12:00:00Z"),
-        configured: () => true,
-        send: async () => {
-          assert.fail("must not send");
-        },
-      };
-      await owner().setReminders(consent(invoice.id));
-      await owner().setReminders(consent(invoice.id, false));
-      await runInvoiceReminders(deps);
-      await owner().setReminders(consent(invoice.id));
-      await WorkspaceMember.updateOne(
-        { workspaceId: WORKSPACE, userId: OWNER },
-        { $set: { canViewOthersMoney: false } },
-      );
-      await runInvoiceReminders(deps);
-      await WorkspaceMember.updateOne(
-        { workspaceId: WORKSPACE, userId: OWNER },
-        { $set: { canViewOthersMoney: true } },
-      );
-      await owner().setReminders(consent(invoice.id));
-      await owner().recordPayment(payment(invoice.id, String(invoice.total)));
-      await runInvoiceReminders(deps);
-      await owner().credit({
-        id: invoice.id,
-        requestId: randomUUID(),
-        reason: "Correct paid invoice",
-        replacement: false,
-      });
-      await runInvoiceReminders(deps);
-      assert.equal(
-        (await owner().get({ id: invoice.id })).balance?.refundDueMinor,
-        Math.round(invoice.total * 100),
-      );
     });
   },
 );

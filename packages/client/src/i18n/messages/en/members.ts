@@ -103,7 +103,7 @@ export const members = {
     weekStart: "Week starts on",
     hint: "Your personal workspace stays as it is. You can switch between workspaces at any time.",
     encrypted: "Encrypt this workspace (early access)",
-    encryptedHint: "Its name and everything added to it are encrypted on this device; the server stores only ciphertext. Early access: payment reminders, imports, Raycast and the browser extension do not work yet.",
+    encryptedHint: "Its name and everything added to it are encrypted on this device; the server stores only ciphertext. Early access: imports, Raycast and the browser extension do not work yet.",
     create: "Create workspace",
     creating: "Creating…",
   },

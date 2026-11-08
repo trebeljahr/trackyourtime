@@ -1649,9 +1649,9 @@ in `lib/private-content-route.ts` and `lib/private-workspace-mutation.ts`).
   `E2E_EINVOICE_OUT=<dir>`, copy that folder's files into the validator's
   `<out>/samples` after a normal `pnpm einvoice:validate --out <out>`, and run
   it again with `--skip-generate`.
-- **Refused for now, with a message:** payment reminders (the server cannot
-  read an encrypted invoice's due date; a decision is open), billing a
-  colleague's entry, and invoicing while timesheet approvals exist.
+- **Refused for now, with a message:** billing a colleague's entry, and
+  invoicing while timesheet approvals exist. Payment reminders no longer exist
+  in any workspace (removed 2026-11-08).
 - e2e: `e2e/encrypted-invoices.spec.ts` (preview, create, PDF, billed once,
   delete gives the time back, edit a draft, mark sent, record a payment,
   credit with a replacement draft, credit PDF, no plaintext client, project,

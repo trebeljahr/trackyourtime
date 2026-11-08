@@ -101,11 +101,6 @@ export function appendInvoicePayment(
   ];
   // Hard cap prevents unbounded growth towards MongoDB's document limit.
   if (f.payments.length > 2000) throw new InvoiceRefusalError("invoice-ledger-full");
-  if (
-    invoiceBalance({ ...wire, followThrough: f }, now).outstandingMinor === 0 &&
-    f.reminders
-  )
-    f.reminders.enabled = false;
   return f;
 }
 export function creditSnapshot(wire: InvoiceWire): InvoiceCreditSnapshot {
@@ -186,7 +181,6 @@ export function creditInvoice(
       ? { replacementId: newReplacementId() }
       : {}),
   };
-  if (f.reminders) f.reminders.enabled = false;
   return f;
 }
 /** Older credits keep their original UTC date; never reinterpret them in a new timezone. */

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Payment reminder emails to clients. Mail sent in your name that you did not
+  read first can look like spam. An upgrade deletes the stored reminder
+  settings, including the recipient address, from every invoice.
+
 ### Changed
 
 - The forgotten-timer email is off unless you turn it on. The switch is

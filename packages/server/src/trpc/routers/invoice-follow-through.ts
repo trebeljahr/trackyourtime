@@ -1,8 +1,6 @@
 import {
   invoiceCreditSchema,
   invoicePaymentSchema,
-  invoiceReminderSchema,
-  invoiceBalance,
   idInputSchema,
   type Invoice as InvoiceWire,
   type PdfExportResult,
@@ -24,7 +22,6 @@ import {
   invoicePdfFilename,
 } from "../../services/invoice-pdf.js";
 import { publishSync } from "../../ws/sync.js";
-import { previewInvoiceReminder } from "../../services/scheduler/invoice-reminders.js";
 
 export const invoiceFollowThroughProcedures = {
   recordPayment: workspaceProcedure
@@ -69,60 +66,6 @@ export const invoiceFollowThroughProcedures = {
         input.originId,
       );
       return result;
-    }),
-  setReminders: workspaceProcedure
-    .input(invoiceReminderSchema)
-    .mutation(async ({ ctx, input }): Promise<InvoiceWire> => {
-      requireInvoiceById(ctx);
-      const result = await changeFollowThrough(
-        input.id,
-        ctx.workspaceId,
-        (wire) => {
-          if (
-            input.enabled &&
-            (wire.status === "draft" ||
-              wire.followThrough?.credit ||
-              invoiceBalance(wire).outstandingMinor === 0)
-          )
-            throw invoiceRefusal("invoice-reminder-ineligible");
-          const f = structuredClone(wire.followThrough ?? {});
-          // Snapshot recipient, consent, and timezone. Preserve the finite delivery history even after re-enabling.
-          f.reminders = {
-            enabled: input.enabled,
-            recipient: input.recipient,
-            timezone: input.timezone,
-            consentAt: new Date().toISOString(),
-            consentBy: ctx.user.id,
-            sentDays: f.reminders?.sentDays ?? [],
-            skippedDays: f.reminders?.skippedDays ?? [],
-            ...(f.reminders?.lastOutcome
-              ? {
-                  lastOutcome: f.reminders.lastOutcome,
-                  lastAttemptAt: f.reminders.lastAttemptAt,
-                }
-              : {}),
-          };
-          return f;
-        },
-      );
-      void publishSync(
-        ctx.workspaceId,
-        { kind: "invoice.changed", id: input.id },
-        input.originId,
-      );
-      return result;
-    }),
-  reminderPreview: workspaceProcedure
-    .input(invoiceReminderSchema)
-    .query(async ({ ctx, input }) => {
-      requireInvoiceById(ctx);
-      const doc = await loadFollowThrough(input.id, ctx.workspaceId);
-      return previewInvoiceReminder(
-        renderableInvoice(doc),
-        input.recipient,
-        input.timezone,
-        new Date(),
-      );
     }),
   exportCreditXml: workspaceProcedure
     .input(idInputSchema)

@@ -264,7 +264,6 @@ const invoiceSchema = new Schema<IInvoice>(
  * stay on older databases, safe for rolled-back readers.
  */
 invoiceSchema.index({ workspaceId: 1, createdAt: -1, _id: -1 });
-invoiceSchema.index({ "followThrough.reminders.enabled": 1, _id: 1 });
 invoiceSchema.index({ workspaceId: 1, status: 1, createdAt: -1, _id: -1 });
 invoiceSchema.index({ workspaceId: 1, clientId: 1, createdAt: -1, _id: -1 });
 
@@ -335,8 +334,6 @@ export function toClientInvoice(doc: InvoiceDocLike): InvoiceWire {
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
-  // Claims are internal coordination tokens, never part of a response or export.
-  if (wire.followThrough?.reminders) delete wire.followThrough.reminders.claim;
   wire.balance = invoiceBalance(wire);
   return wire;
 }

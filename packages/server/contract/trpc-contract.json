@@ -3451,42 +3451,6 @@
       },
       "type": "mutation"
     },
-    "invoices.reminderPreview": {
-      "input": {
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "maxLength": 100,
-            "minLength": 1,
-            "type": "string"
-          },
-          "originId": {
-            "maxLength": 64,
-            "type": "string"
-          },
-          "recipient": {
-            "format": "email",
-            "maxLength": 254,
-            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
-            "type": "string"
-          },
-          "timezone": {
-            "maxLength": 100,
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "enabled",
-          "recipient",
-          "timezone"
-        ],
-        "type": "object"
-      },
-      "type": "query"
-    },
     "invoices.remove": {
       "input": {
         "properties": {
@@ -3501,42 +3465,6 @@
         },
         "required": [
           "id"
-        ],
-        "type": "object"
-      },
-      "type": "mutation"
-    },
-    "invoices.setReminders": {
-      "input": {
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "id": {
-            "maxLength": 100,
-            "minLength": 1,
-            "type": "string"
-          },
-          "originId": {
-            "maxLength": 64,
-            "type": "string"
-          },
-          "recipient": {
-            "format": "email",
-            "maxLength": 254,
-            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
-            "type": "string"
-          },
-          "timezone": {
-            "maxLength": 100,
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "enabled",
-          "recipient",
-          "timezone"
         ],
         "type": "object"
       },

@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { randomUUID } from "node:crypto";
-import { invoiceBalance, moneyMinor, nextReminderDay } from "@starter/shared";
+import { invoiceBalance, moneyMinor } from "@starter/shared";
 import {
   appendInvoicePayment,
   creditInvoice,
   creditIssueDate,
 } from "../services/invoice-follow-through.js";
-import { previewInvoiceReminder } from "../services/scheduler/invoice-reminders.js";
 import { readyInvoice } from "./support/einvoice-invoice.js";
 import { renderInvoicePdf } from "../services/invoice-pdf.js";
 import { pageTexts } from "./support/pdf-text.js";
@@ -65,17 +64,6 @@ describe("invoice follow-through arithmetic", () => {
         /invoice-balance-unavailable/,
       );
     }
-  });
-  it("reminder preview retains the fractional outstanding balance on historical JPY invoices", () => {
-    const invoice = { ...readyInvoice(), total: 0.5, currency: "JPY" };
-    const preview = previewInvoiceReminder(
-      invoice,
-      "synthetic@example.test",
-      "UTC",
-      now,
-    );
-    assert.match(preview.text, /(?:¥|JPY)\s*0\.50/);
-    assert.equal(preview.outstandingMinor, 50);
   });
   it("uses the invoice timezone for calendar overdue days, including DST boundaries", () => {
     const invoice = {
@@ -325,51 +313,6 @@ describe("invoice follow-through arithmetic", () => {
       instant,
     ).credit!;
     assert.equal(utcCredit.issueDate, "2026-12-31");
-  });
-  it("reminders need consent, stop on settlement/credit and have only three steps", () => {
-    const invoice = readyInvoice();
-    assert.equal(nextReminderDay(invoice, now), null);
-    const opted = {
-      ...invoice,
-      followThrough: {
-        reminders: {
-          enabled: true,
-          recipient: "fake@example.test",
-          timezone: "UTC",
-          consentAt: now.toISOString(),
-          consentBy: "owner",
-          sentDays: [] as number[],
-        },
-      },
-    };
-    assert.equal(nextReminderDay(opted, now), 1);
-    opted.followThrough.reminders.sentDays = [1, 7, 14];
-    assert.equal(nextReminderDay(opted, new Date("2026-12-01")), null);
-    opted.followThrough.reminders.sentDays = [];
-    assert.equal(nextReminderDay({ ...opted, status: "paid" }, now), null);
-    assert.match(
-      previewInvoiceReminder(opted, "fake@example.test", "UTC", now).text,
-      /Example/,
-    );
-  });
-  it("late opt-in selects day 14 once instead of catching up three emails", () => {
-    const invoice = {
-      ...readyInvoice(),
-      followThrough: {
-        reminders: {
-          enabled: true,
-          recipient: "fake@example.test",
-          timezone: "UTC",
-          consentAt: now.toISOString(),
-          consentBy: "owner",
-          sentDays: [] as number[],
-        },
-      },
-    };
-    const late = new Date("2026-10-30");
-    assert.equal(nextReminderDay(invoice, late), 14);
-    invoice.followThrough.reminders.sentDays = [14];
-    assert.equal(nextReminderDay(invoice, new Date("2026-10-31")), null);
   });
   it("credit PDFs name the original and reason in both languages; CII refuses credits", async () => {
     for (const locale of ["en", "de"] as const) {

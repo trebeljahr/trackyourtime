@@ -1149,7 +1149,7 @@ export const invoicesRouter = router({
 
       const updated = await Invoice.findOneAndUpdate(
         { _id: input.id, workspaceId, status: current.status, updatedAt: current.updatedAt, ...revisionFilter(current), deleting: { $ne: true } },
-        { $set: { status: input.status, ...(input.status === "paid" && current.followThrough?.reminders ? { "followThrough.reminders.enabled": false } : {}) }, $inc: { followThroughRevision: 1 } },
+        { $set: { status: input.status }, $inc: { followThroughRevision: 1 } },
         { returnDocument: "after", projection: { "einvoice.issuedXml": 0 } },
       ).lean();
       // The `status: current.status` guard makes the write conditional on the

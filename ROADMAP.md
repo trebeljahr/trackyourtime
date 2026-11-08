@@ -128,10 +128,10 @@ to agree on the verbs.
 ### Email digests **(undecided)**
 
 **Exists.** A scheduler (`services/scheduler/`) that runs recurring jobs once
-per interval across replicas, and two jobs on it: `runaway-reminder`, which
-enforces the maximum entry duration and sends one reminder email per timer,
-and `invoice-reminders`, which sends the opt-in payment reminders for overdue
-invoices to clients. There is no web push.
+per interval across replicas, and one job on it: `runaway-reminder`, which
+enforces the maximum entry duration and sends one reminder email per timer.
+There is no web push. Payment reminders to clients were removed on 2026-11-08:
+mail sent in the issuer's name without them reading each one reads as spam.
 
 **Missing / undecided.** Whether a weekly summary or a "you tracked nothing
 yesterday" email is wanted. The scheduler makes it cheap to build; the question

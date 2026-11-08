@@ -3,9 +3,10 @@
 import { baseline } from "./001-baseline.js";
 import { personalWorkspaces } from "./002-personal-workspaces.js";
 import { dropSupersededIndexes } from "./003-drop-superseded-indexes.js";
+import { removeInvoiceReminders } from "./004-remove-invoice-reminders.js";
 import type { Migration } from "./types.js";
 
-export const MIGRATIONS: readonly Migration[] = [baseline, personalWorkspaces, dropSupersededIndexes];
+export const MIGRATIONS: readonly Migration[] = [baseline, personalWorkspaces, dropSupersededIndexes, removeInvoiceReminders];
 
 /**
  * The newest schema this build understands: the id of its last migration.
