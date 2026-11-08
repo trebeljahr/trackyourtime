@@ -1589,9 +1589,49 @@ tracker and its entry list opening from the encrypted copy, and no trace of
 the name anywhere in the database. Tracking time works: a start and a stop go
 through the account timer (`timerWrite`), and a second browser that signs in
 sees the entry, decrypted, while the database holds no description in
-plaintext (`e2e/encrypted-workspace.spec.ts`). Not working yet: invoices,
-imports, server exports, tags, bulk edits, approvals, budgets,
-REST/MCP/webhooks, Raycast, the extension and the phone's offline queue.
+plaintext (`e2e/encrypted-workspace.spec.ts`). Invoices work too (next
+section). Not working yet: imports, server exports, tags, bulk edits,
+approvals, budgets, REST/MCP/webhooks, Raycast, the extension and the phone's
+offline queue.
+
+### Invoices in an encrypted workspace
+
+The server never sees an invoice in an encrypted workspace. The device
+answers `invoices.preview`, `list`, `get` and `exportPdf` from the decrypted
+copy, and writes `create`, `updateStatus` and `remove` as signed chained
+edits (`packages/core/src/privacy/invoice-view.ts`, `invoice-edit.ts`; routed
+in `lib/private-content-route.ts` and `lib/private-workspace-mutation.ts`).
+
+- **One set of rules.** The pure invoice code (billable selection, lines per
+  group and rate, status transitions, range parsing, manual lines, VAT
+  resolution, numbering, the payment-terms sentence) moved from the server
+  into `@starter/invoice-pdf` (`invoice-math.ts`, `invoice-lines.ts`,
+  `resolve-tax.ts`, `invoice-number.ts`, `payment-terms.ts`). The server keeps
+  re-export shims at the old paths, so both sides compute the same invoice.
+- **Billed once, in one change.** `create` writes the invoice record and the
+  `invoiceId` stamp on every billed entry in the same signed edit, and
+  `remove` clears the stamps and deletes the record together. The chained
+  history refuses an edit made against a stale head, which is what stops two
+  devices from billing the same hour (the server's `updateMany` guard).
+- **The record is the wire invoice** under `_id`, with the issuer logo bytes
+  stored as the business profile stores them. The wire carries `hasLogo`,
+  never the bytes; `privateRenderableInvoice` is the one reader of the bytes,
+  and checks them like a stored logo before the PDF is drawn on the device
+  with pdfkit's browser build.
+- **Numbers** come from the invoice records in the copy (`nextInvoiceNumber`),
+  and a supplied number already in use is refused.
+- **Refused for now, with a message:** editing a draft, payments, reminders,
+  credit notes, e-invoices (ZUGFeRD, XRechnung), billing a colleague's entry,
+  and invoicing while timesheet approvals exist. Reminder emails need a
+  decision first: the server cannot read an encrypted invoice's due date.
+- e2e: `e2e/encrypted-invoices.spec.ts` (preview, create, PDF, billed once,
+  delete gives the time back, status change survives a reload, no plaintext
+  client, project or work in the database).
+- A full page load remounts the app once, when its first private read lands
+  (`PrivateWorkspaceBoundary`'s view epoch), and a dialog opened before that
+  closes. The remount is load-bearing (it redoes reads made before the
+  private route was known), so the spec waits for the page to settle; fixing
+  it for people is open.
 
 The entry view also had to accept the `direction` key tRPC's infinite queries
 add to every page request (`privateEntryQuery`); its strict filter refused

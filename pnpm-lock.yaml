@@ -303,6 +303,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@starter/invoice-pdf':
+        specifier: workspace:*
+        version: link:../invoice-pdf
       '@starter/shared':
         specifier: workspace:*
         version: link:../shared

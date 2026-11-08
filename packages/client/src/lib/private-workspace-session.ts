@@ -1,4 +1,4 @@
-import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, preparePrivateEntryIntent, privateSettingsEdit, PRIVATE_SETTINGS_EDIT_KINDS, privateBusinessProfileEdit, PRIVATE_BUSINESS_PROFILE_EDIT_KINDS, type PrivateBusinessProfileEditPath, privateMemberRateEdit, PRIVATE_MEMBER_RATE_EDIT_KINDS, type PrivateEntryEditPath } from "@starter/core";
+import { accountWorkspacePolicy, canonicalJson, verifyPrivateWorkspaceRecoveryArchive, createPrivateDirectoryStore, createPrivateWorkspacePolicyStore, createPrivateWorkspaceReplica, decodeSecret, loadPrivateDirectoryCheckpoint, loadPrivateInitialProjection, privateReplicaIdentityFromDirectory, requirePrivateWorkspacePolicy, type PrivateDirectoryTransport, type PrivateProjectionTransport, type PrivateRecoveryIdentity, type SignedPrivateWorkspacePolicy, type PrivateKind, type PrivateReplicaTransport, PRIVATE_FAVORITE_EDIT_KINDS, privateFavoriteEdit, type PrivateFavoriteEditPath, PRIVATE_CATALOG_EDIT_KINDS, privateCatalogEdit, type PrivateCatalogEditPath, PRIVATE_ENTRY_EDIT_KINDS, privateEntryEdit, preparePrivateEntryIntent, privateSettingsEdit, PRIVATE_SETTINGS_EDIT_KINDS, privateBusinessProfileEdit, PRIVATE_BUSINESS_PROFILE_EDIT_KINDS, type PrivateBusinessProfileEditPath, privateMemberRateEdit, PRIVATE_MEMBER_RATE_EDIT_KINDS, type PrivateEntryEditPath, privateInvoiceEdit, PRIVATE_INVOICE_EDIT_KINDS, type PrivateInvoiceEditPath } from "@starter/core";
 import { privateSession } from "./private-session";
 import { privateClientScope } from "./private-client-scope";
 import { privateScopedRpc } from "./private-scoped-rpc";
@@ -118,6 +118,12 @@ async function openPrivateWorkspaceCopy(userId: string, workspaceId: string, rec
           assertPolicy(); return privateBusinessProfileEdit({ scope, directory, records, current, path, input: frozen });
         }); assertPolicy(); return result;
       },
+      editInvoice: async (path: PrivateInvoiceEditPath, input: unknown, preferences: unknown) => {
+        const frozen = structuredClone(input), rendering = structuredClone(preferences); assertPolicy();
+        const result = await replica.transact(PRIVATE_INVOICE_EDIT_KINDS, ({ records, directory }) => {
+          assertPolicy(); return privateInvoiceEdit({ scope, directory, records, current, path, input: frozen, preferences: rendering });
+        }); assertPolicy(); return result;
+      },
       editEntry: async (path: PrivateEntryEditPath, input: unknown, intentId?: string) => {
         const frozen = structuredClone(input); assertPolicy();
         const intent = intentId === undefined ? undefined : await preparePrivateEntryIntent({ scope, path, input: frozen, intentId, current }); assertPolicy();
@@ -179,6 +185,7 @@ export async function openPrivateWorkspaceSyncSession(userId: string, workspaceI
       editEntry: (path: PrivateEntryEditPath, input: unknown, intentId?: string) => { const captured = structuredClone(input); return run(() => copy.editEntry(path, captured, intentId)); },
       editSettings: (input: unknown, preferences: unknown) => { const captured = structuredClone(input), display = structuredClone(preferences); return run(() => copy.editSettings(captured, display)); },
       editBusinessProfile: (path: PrivateBusinessProfileEditPath, input: unknown) => { const captured = structuredClone(input); return run(() => copy.editBusinessProfile(path, captured)); },
+      editInvoice: (path: PrivateInvoiceEditPath, input: unknown, preferences: unknown) => { const captured = structuredClone(input), rendering = structuredClone(preferences); return run(() => copy.editInvoice(path, captured, rendering)); },
       editMemberRate: (input: unknown) => { const captured = structuredClone(input); return run(() => copy.editMemberRate(captured)); },
       pull: (through?: number) => run(() => copy.pull(transport, through)), flushOne: () => run(() => copy.flushOne(transport)),
     };
