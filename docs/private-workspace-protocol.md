@@ -1643,6 +1643,12 @@ in `lib/private-content-route.ts` and `lib/private-workspace-mutation.ts`).
   `packages/server/assets/fonts`. Refusals reach the panel as on the server:
   `einvoiceIssues` and the fill refusal code ride on
   `PrivateContentUnavailableError.details` (`lib/private-invoice-refusal.ts`).
+  Device-made files pass the same Java validators as the server's samples
+  (checked 2026-11-08: veraPDF PDF/A-3b compliant, Mustang and KoSIT valid).
+  To repeat it, run `e2e/encrypted-einvoices.spec.ts` with
+  `E2E_EINVOICE_OUT=<dir>`, copy that folder's files into the validator's
+  `<out>/samples` after a normal `pnpm einvoice:validate --out <out>`, and run
+  it again with `--skip-generate`.
 - **Refused for now, with a message:** payment reminders (the server cannot
   read an encrypted invoice's due date; a decision is open), billing a
   colleague's entry, and invoicing while timesheet approvals exist.

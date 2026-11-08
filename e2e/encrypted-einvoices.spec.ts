@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { signUpViaUI, TRACK_URL } from "./helpers";
 import { closeDbConnection, getDb } from "./db-utils";
@@ -13,6 +15,18 @@ import {
 // ENCRYPTED_WORKSPACE_USERS=@encrypted.example.
 
 const PASSWORD = "Encrypted-Einvoice-123!";
+/**
+ * With E2E_EINVOICE_OUT set, the browser-made files are saved there under the
+ * names `pnpm einvoice:validate --skip-generate` validates (Mustang with
+ * veraPDF, KoSIT), so the device's output can go through the same Java check
+ * as the server's samples.
+ */
+const saveForValidation = (name: string, bytes: Buffer | string): void => {
+  const dir = process.env.E2E_EINVOICE_OUT;
+  if (!dir) return;
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, name), bytes);
+};
 const XRECHNUNG_GUIDELINE = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0";
 
 test.afterAll(async () => {
@@ -71,6 +85,8 @@ test.describe("Encrypted e-invoices", () => {
     const attachments = embeddedFilePayloads(zugferd.bytes).map((bytes) => bytes.toString("utf8"));
     expect(attachments).toHaveLength(1);
     expect(attachments[0]).toContain("<ram:ID>urn:cen.eu:en16931:2017</ram:ID>");
+    saveForValidation("browser-standard-19.zugferd.pdf", zugferd.bytes);
+    saveForValidation("browser-standard-19.en16931.xml", attachments[0] ?? "");
 
     // Sent: the first export is stored in the encrypted invoice, and served again byte for byte.
     await page.getByTestId("invoice-status-set-sent").click();
@@ -81,6 +97,7 @@ test.describe("Encrypted e-invoices", () => {
     await expect(page.getByTestId("invoice-detail")).toBeVisible({ timeout: 20_000 });
     const again = (await downloadBytes(page, "invoice-download-xrechnung")).bytes.toString("utf8");
     expect(again).toBe(issued);
+    saveForValidation("browser-standard-19.xrechnung.xml", issued);
 
     // Neither the buyer, the work nor the XML reached the database in plaintext.
     const db = await getDb();
