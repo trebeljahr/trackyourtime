@@ -112,6 +112,9 @@ test.describe("web app at phone width", () => {
 
     const dialog = page.locator('[data-slot="dialog-content"]');
     await expect(dialog).toBeVisible();
+    // The dialog zooms in from 95 %; measured mid-animation its top edge sits
+    // a few pixels lower than where it comes to rest.
+    await dialog.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((animation) => animation.finished)));
 
     const box = await dialog.boundingBox();
     expect(box?.y).toBeGreaterThanOrEqual(0);
