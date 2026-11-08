@@ -7,6 +7,7 @@ import { WorkspaceWriteFence } from "../models/TimesheetApproval.js";
 import { createEncryptedWorkspace, encryptedWorkspacesAllowed } from "../services/privacy/encrypted-creation.js";
 import { privateProjectionSnapshotPage, privateProjectionSnapshotRoot } from "../services/privacy/projection-snapshots.js";
 import { clearTestDatabase, connectTestDatabase, dropTestDatabase, skipWithoutDatabase } from "./support/test-database.js";
+import { env } from "../config/env.js";
 
 const server = "https://api.example.test";
 const owner = { id: "owner", email: "owner@encrypted.test", name: "Owner" };
@@ -35,6 +36,11 @@ describe("creating an encrypted workspace", { skip: skipWithoutDatabase }, () =>
   const prepared = (workspaceId: string, override: Partial<typeof keys> = {}) => prepareEncryptedWorkspace({ server, workspaceId, userId: owner.id, name: "Client work", createdAt: new Date().toISOString(), reportRangeTimeZone: "UTC", currency: "EUR", weekStartsOn: 1, current: () => true, ...keys, ...override });
   const input = (workspaceId: string, p: Awaited<ReturnType<typeof prepared>>) => ({ workspaceId, currency: "EUR", weekStartsOn: 1 as const, directory: p.signedDirectory, root: p.root, records: p.records });
 
+  // The test account is on the allowlist for this suite only; no CI
+  // environment variable is needed, and other suites see the real value.
+  const configured = env.ENCRYPTED_WORKSPACE_USERS;
+  before(() => { (env as { ENCRYPTED_WORKSPACE_USERS: string[] }).ENCRYPTED_WORKSPACE_USERS = ["@encrypted.test"]; });
+  after(() => { (env as { ENCRYPTED_WORKSPACE_USERS: string[] }).ENCRYPTED_WORKSPACE_USERS = configured; });
   before(() => connectTestDatabase("private-encrypted-creation", [PrivateAccount, PrivateDirectory, PrivateWorkspace, PrivateProjectionRoot, PrivateProjectionReader, PrivateSnapshotChunk, WorkspaceMember, WorkspaceWriteFence] as never));
   beforeEach(async () => {
     await clearTestDatabase(); keys = await keySet();
