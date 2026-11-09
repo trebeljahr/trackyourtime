@@ -157,8 +157,11 @@ test.describe("Weekly timesheet", () => {
       .locator('[data-testid$="-1-blocks"]');
     await expect(tuesdayBlocks).toBeFocused();
     await tuesdayBlocks.press("Enter");
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await page.getByRole("dialog").press("Escape");
+    // Only the open popover: the previous one can still be fading out, with
+    // role="dialog" and data-state="closed", when this one opens.
+    const openDialog = page.locator('[role="dialog"][data-state="open"]');
+    await expect(openDialog).toBeVisible();
+    await openDialog.press("Escape");
     await expect(tuesdayBlocks).toBeFocused();
     await tuesdayBlocks.press("Tab");
     await expect(cells.nth(2)).toBeFocused();
