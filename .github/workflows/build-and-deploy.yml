@@ -63,11 +63,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # `pnpm run build` compiles shared -> core -> server -> client, which
       # leaves packages/extension, packages/raycast and electron/ untypechecked
@@ -133,11 +133,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # start-server.sh's own Mongo readiness loop is inside an
       # `if [ -z "${CI:-}" ]` guard, so under CI nothing else waits for Mongo;
@@ -169,11 +169,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # A replica set, as in the e2e job: entry writes need transactions.
       - run: bash scripts/mongo-replica-set-container.sh mongo-desktop 27019
@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [verify, e2e]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -277,11 +277,11 @@ jobs:
       NEXT_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
       WEB_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://trackyourtime.dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
       # Error reporting is opt-in per build (an empty NEXT_PUBLIC_SENTRY_DSN
       # leaves the SDK out of the bundle), so a build that reports nothing
@@ -402,7 +402,7 @@ jobs:
     steps:
       # The full history, because the rollback compares the migration registry
       # of the commit being deployed with the one it replaces (below).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
@@ -535,7 +535,7 @@ jobs:
       # base..head. The default pull_request ref is the merge commit, whose
       # two parents ARE base.sha and head.sha, so both ends of the range are
       # already present without a second fetch, forks included.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

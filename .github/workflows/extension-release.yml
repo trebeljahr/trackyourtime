@@ -163,13 +163,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "tag=${tag:-none} mode=$mode"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve.outputs.tag || github.ref }}
 
       # No `version:` input — see desktop-release.yml. action-setup reads
       # `packageManager` from package.json and throws on a differing pin.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:
@@ -325,11 +325,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "tag=${tag:-none} mode=$mode"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.resolve.outputs.tag || github.ref }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:

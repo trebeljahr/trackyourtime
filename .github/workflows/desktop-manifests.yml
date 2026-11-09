@@ -39,7 +39,7 @@ jobs:
       HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -131,7 +131,7 @@ jobs:
       WINGETCREATE_VERSION: 1.12.13.0
       WINGETCREATE_SHA256: 24042BD37915805615E6CF969AC57C6439124C3FE85823327F5F3FB24BD9FFEA
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:

@@ -41,8 +41,8 @@ jobs:
       QA_PUBLIC_FEED: ${{ inputs.public_feed }}
       QA_SOURCE_RUN: ${{ inputs.source_run }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: 24
