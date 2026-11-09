@@ -47,7 +47,9 @@ it("does not apply a late account’s requirement to the account now on screen",
 
 it("enrolls an unknown device in standard storage without asking anyone to choose", async () => {
   state.unknown = true; render(<PrivateWorkspaceBoundary userId="owner"><Draft /></PrivateWorkspaceBoundary>);
-  await screen.findByText("Private draft 0"); expect(state.confirm).toHaveBeenCalledOnce(); expect(state.reset).toHaveBeenCalled();
+  await screen.findByText("Private draft 0"); expect(state.confirm).toHaveBeenCalledOnce();
+  // The refused-query reset runs in an effect after the forms paint, so a slow run can see the draft first.
+  await waitFor(() => expect(state.reset).toHaveBeenCalled());
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument(); expect(screen.queryByTestId("unlock-controls")).not.toBeInTheDocument();
 });
 it("shows the failure with a retry when silent enrollment is refused, and never mounts forms meanwhile", async () => {
