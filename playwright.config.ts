@@ -29,6 +29,9 @@ export default defineConfig({
       env: {
         NODE_ENV: "test",
         E2E_DISABLE_AUTH_RATE_LIMIT: "1",
+        // The encrypted-workspace specs sign up as @encrypted.example; only
+        // allowlisted accounts are offered an encrypted workspace.
+        ENCRYPTED_WORKSPACE_USERS: "@encrypted.example",
         PORT: E2E_SERVER_PORT,
         MONGODB_URI:
           process.env.MONGODB_URI ??

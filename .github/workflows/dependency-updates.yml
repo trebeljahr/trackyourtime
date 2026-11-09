@@ -184,8 +184,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # A replica set, as in the e2e job: entry writes need transactions.
       - run: bash scripts/mongo-replica-set-container.sh mongo-desktop 27019
-      # shared and core are what the API and the client import from dist/.
-      - run: pnpm --filter @starter/shared run build && pnpm --filter @starter/core run build
+      # shared, invoice-pdf and core are what the API and the client import from dist/
+      # (core imports @starter/invoice-pdf, so it builds second).
+      - run: pnpm --filter @starter/shared run build && pnpm --filter @starter/invoice-pdf run build && pnpm --filter @starter/core run build
       # Electron 42 has no install script; the binary arrives only when asked.
       - run: pnpm run electron:ensure
       # Chromium's shared libraries for the Electron binary.
