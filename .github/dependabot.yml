@@ -41,6 +41,12 @@ updates:
         update-types: ["version-update:semver-minor"]
       - dependency-name: "@types/chrome"
         update-types: ["version-update:semver-minor"]
+      # @types/node is ^25 everywhere but Raycast, which pins the 22.x its
+      # runtime ships. With one workspace entry Dependabot sees one dependency
+      # and writes Raycast's bump into every package.json, a downgrade to 22
+      # (PR #41: the server typecheck fails on fetch types). A person bumps it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
       # better-auth is pinned on purpose and every upgrade carries a schema
       # migration (CLAUDE.md, docs/versioning.md): a person takes it.
       - dependency-name: "better-auth"
