@@ -97,14 +97,11 @@ describe("the workspace kind on the organization row", () => {
       plugins: [organization(organizationPluginOptions)],
     });
     const context = await kinded.$context;
-    const user = await context.internalAdapter.createUser(
-      {
-        email: "pia@example.com",
-        name: "Pia",
-        emailVerified: true,
-      },
-      { method: "email-password" },
-    );
+    const user = await context.internalAdapter.createUser({
+      email: "pia@example.com",
+      name: "Pia",
+      emailVerified: true,
+    });
     const owner = { id: String(user.id), email: "pia@example.com", name: "Pia" };
 
     const workspaceId = await createPersonalWorkspace(kinded.api as never, owner);
