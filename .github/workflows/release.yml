@@ -216,7 +216,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v3
         if: needs.prepare.outputs.push == 'true'
@@ -245,7 +245,7 @@ jobs:
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
 
       - id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: packages/server/Dockerfile
@@ -286,7 +286,7 @@ jobs:
           mkdir -p /tmp/digests
           touch "/tmp/digests/${DIGEST#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: needs.prepare.outputs.push == 'true'
         with:
           name: digests-server-${{ matrix.arch }}
@@ -316,7 +316,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v3
         if: needs.prepare.outputs.push == 'true'
@@ -341,7 +341,7 @@ jobs:
             org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
 
       - id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           # Deliberately NOT packages/client/Dockerfile — that one packages the
@@ -384,7 +384,7 @@ jobs:
           mkdir -p /tmp/digests
           touch "/tmp/digests/${DIGEST#sha256:}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: needs.prepare.outputs.push == 'true'
         with:
           name: digests-client-selfhost-${{ matrix.arch }}
@@ -417,13 +417,13 @@ jobs:
       # IMAGE_OWNER_REPO at the top of this file.
       IMAGE: ghcr.io/trebeljahr/trackyourtime-${{ matrix.image }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: digests-${{ matrix.image }}-*
           merge-multiple: true
           path: /tmp/digests
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v3
         with:
@@ -554,7 +554,7 @@ jobs:
       matrix:
         image: [server, client-selfhost]
     steps:
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v3
         with:

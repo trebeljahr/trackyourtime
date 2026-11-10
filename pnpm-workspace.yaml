@@ -15,16 +15,16 @@ allowBuilds:
   unrs-resolver: true
 
 # @raycast/api hard-depends on @types/react 19.0.10, so a second copy of the
-# React types lands in the virtual store alongside the client's 19.2.14. pnpm
+# React types lands in the virtual store alongside the client's 19.3.0. pnpm
 # then hoists ONE of them into node_modules/.pnpm/node_modules, and which one
 # wins varies between installs. Next's own bundled .d.ts files resolve `react`
 # from that hoisted directory, so when 19.0.10 wins they drag it into the
-# client's type program next to 19.2.14 and every ReactNode becomes two
+# client's type program next to 19.3.0 and every ReactNode becomes two
 # incompatible types (TS2322 in components/ui/command.tsx). Forcing a single
 # version keeps the hoist deterministic.
 overrides:
   # Share one driver type across Mongoose, Better Auth, and direct imports.
-  "mongodb@>=7 <8": "7.7.0"
+  "mongodb@>=7 <8": "7.8.0"
   # Security backports for transitive pins; see SECURITY-MIGRATION.md.
   "brace-expansion@>=1 <2": "^1.1.18"
   "brace-expansion@>=5 <6": "^5.0.9"
@@ -33,9 +33,12 @@ overrides:
   "undici@>=7 <7.29.1": "^7.29.1"
   "serialize-javascript@>=6 <7.0.5": "^7.0.5"
   "sockjs>uuid": "^11.1.1"
-  "sharp@>=0.34 <0.35.4": "^0.35.4"
+  "sharp@>=0.33 <0.35.4": "^0.35.4"
   "esbuild@>=0.27 <0.28.1": "^0.28.1"
-  "@types/react": "19.2.14"
+  "minimatch@>=9 <11.0.1": "^11.0.1"
+  "glob@>=13 <14.0.2": "^14.0.2"
+  "tinypool@>=1 <2.1.1": "^2.1.1"
+  "@types/react": "19.3.0"
 
 # `pnpm deploy` — which packages/server/Dockerfile runs to materialise the
 # production dependency closure at /prod — refuses to run from pnpm v10 onward

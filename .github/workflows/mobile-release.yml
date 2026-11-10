@@ -189,7 +189,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         if: steps.plan.outputs.build != 'skip'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.plan.outputs.build != 'skip'
         with:
           node-version: 24
@@ -257,7 +257,7 @@ jobs:
       # The unsigned dispatch build says what it is in the artifact name.
       - name: Upload AAB
         if: steps.plan.outputs.build == 'signed' || steps.plan.outputs.build == 'unsigned'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-aab-${{ steps.plan.outputs.version }}${{ steps.plan.outputs.build == 'unsigned' && '-unsigned' || '' }}
           path: android/app/build/outputs/bundle/release/*.aab
@@ -313,7 +313,7 @@ jobs:
       - uses: pnpm/action-setup@v6
         if: steps.plan.outputs.build != 'skip'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.plan.outputs.build != 'skip'
         with:
           node-version: 24
@@ -495,7 +495,7 @@ jobs:
 
       - name: Upload IPA
         if: steps.plan.outputs.build == 'signed'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-ipa-${{ steps.plan.outputs.version }}
           path: ios/App/build/ipa/*.ipa

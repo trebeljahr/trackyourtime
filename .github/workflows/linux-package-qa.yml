@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -64,7 +64,7 @@ jobs:
             "release/trackyourtime-${version}.${RPM_ARCH}.rpm"
       - name: Upload QA evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-package-qa-${{ matrix.arch }}
           path: |
@@ -72,7 +72,7 @@ jobs:
             release/builder-effective-config.yaml
           if-no-files-found: warn
       - name: Upload tested packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-packages-${{ matrix.arch }}
           path: |

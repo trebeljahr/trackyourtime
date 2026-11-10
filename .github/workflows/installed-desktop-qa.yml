@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -60,7 +60,7 @@ jobs:
         run: node scripts/desktop-packages-smoke.mjs --dir test-results/installed-desktop/downloads/new
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installed-desktop-${{ matrix.os }}-${{ inputs.public_feed && 'public' || 'draft' }}
           path: |

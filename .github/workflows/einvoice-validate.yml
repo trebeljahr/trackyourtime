@@ -54,7 +54,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
       - uses: pnpm/action-setup@v6
@@ -66,7 +66,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @starter/shared run build
       - name: Cache validator jars
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache/einvoice-validators
           key: einvoice-validators-${{ hashFiles('scripts/einvoice-validate.mjs') }}
@@ -76,7 +76,7 @@ jobs:
           JAVA: ${{ env.JAVA_HOME }}/bin/java
       - name: Upload samples and reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: einvoice-validation
           path: .cache/einvoice-validation
