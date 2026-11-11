@@ -25,7 +25,7 @@ describe("committed tRPC contract", () => {
     const generated = buildTrpcContract(appRouter);
     const committed = JSON.parse(readFileSync(TRPC_CONTRACT_PATH, "utf8")) as TrpcContract;
     const verdict = contractVerdict(committed, generated);
-    assert.equal(verdict, null, verdict ?? undefined);
+    assert.equal(verdict, null, verdict ?? "contract drift");
     // Byte-for-byte too, so key order and formatting cannot drift.
     assert.equal(readFileSync(TRPC_CONTRACT_PATH, "utf8"), trpcContractJson(generated));
   });
