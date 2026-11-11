@@ -257,8 +257,10 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
+  # Lands on what build-and-deploy.yml deploys on: verify and e2e. desktop runs
+  # and shows, but, as there, a desktop-only failure does not hold up the web.
   land:
-    needs: [target, verify, e2e, desktop]
+    needs: [target, verify, e2e]
     if: needs.target.outputs.land == 'true'
     runs-on: ubuntu-latest
     permissions:
