@@ -5,6 +5,68 @@ native seams, the release workflows and `docs/mobile-app-plan.md`, whose
 structure and lessons this plan reuses. Nothing below has been run yet; the
 claims marked **(unverified)** are what Stage 0 exists to confirm or refute.
 
+## 2026-11-12: the shell moved to Tauri 2 (answer 5 reversed)
+
+Answer 5 below said "Tauri: delete it", and Stage 1 deleted the unused Tauri
+scaffold the starter shipped. On 2026-11-12 Rico asked for the reverse, and
+the Electron shell was replaced by Tauri 2 with feature parity.
+
+**Why.** macOS lists every Electron app under System Settings → Privacy &
+Security → Location Services, although this app never asks for a location
+and every toggle there is off. Electron's bundled Chromium links
+CoreLocation.framework and creates a `CLLocationManager` at startup, which is
+enough for macOS to register the app. A Tauri app renders with the system
+WebView (WKWebView, WebView2, WebKitGTK), links no CoreLocation and does not
+appear there. Tiao and Raptor Runner moved on 2026-10-29 for the same reason;
+Track Your Time was the last Electron app. A smaller download and no V8 JIT
+entitlements are side effects, not the reason.
+
+**What changed.** The main process (`electron/src/**`, about 6,500 lines of
+TypeScript plus tests) was ported to Rust:
+
+- `desktop/crates/wire` — serde mirrors of `packages/shared/src/desktop-bridge.ts`;
+  its contract test reads the TypeScript and fails when a channel exists on one
+  side only.
+- `desktop/crates/model` — the pure decisions: tray and taskbar models,
+  updater model and controller, desktop settings, shortcuts and the
+  accelerator grammar, windows, trust, CSP, profile, secure store.
+- `desktop/crates/activity` — activity capture and Autopilot, including a Rust
+  copy of `packages/core/src/activity`, kept equal to the TypeScript by
+  generated conformance fixtures.
+- `desktop/src-tauri` — the app: the `app` protocol over the export embedded in
+  the binary, the bridge script, IPC dispatch, keychain-backed encryption,
+  idle detection, tray/shortcut/notification/updater bindings, the e2e control
+  channel.
+
+The renderer contract did not change: the shell installs the same
+`window.electronAPI` (`DesktopBridge`) before any page script, so the web app
+needed no logic changes. The origin stays `app://-` on macOS and Linux;
+Windows, where WebView2 cannot serve a custom scheme with its own host, is
+`http://app.localhost`, and both are in `STORE_APP_ORIGINS`.
+
+**Existing installs.** The profile directory is the same
+(`~/Library/Application Support/trackyourtime`, `%APPDATA%\trackyourtime`,
+`~/.config/trackyourtime`), so desktop settings, window state, tray labels,
+the updater id and the activity store are read in place. Two things could not
+be: Chromium's localStorage (the offline queue, its owner stamp, workspace and
+server choices, theme, locale), which the first launch reads from a copy of
+`Local Storage/leveldb` and hands to the page before any app script runs; and
+`safeStorage` ciphertext (`session.bin`, `activity-device-key.bin`), decrypted
+once with the Electron key (macOS Keychain item "trackyourtime Safe Storage",
+Windows DPAPI) and re-encrypted under the new key on the next write. Linux
+sessions are not migrated (a libsecret-held Chromium key); those users sign in
+once more, and their queue still migrates. Releases keep publishing the
+electron-updater feeds next to Tauri's `latest.json`, so an Electron install
+updates into the Tauri app.
+
+**What it costs.** WKWebView has no CDP, so the desktop e2e suite no longer
+uses Playwright's `_electron`: the debug build carries an `e2e` control
+channel (`desktop/src-tauri/src/e2e.rs`) and `e2e/desktop/driver.ts` speaks it
+with Playwright-shaped Page, Locator and `expect`. The Linux package smoke
+tests read a report the app writes in smoke mode instead of probing it over
+CDP. Parity gaps found during the port are listed in "Tauri port — parity
+gaps" at the end of this file.
+
 ## Answers to the open questions (2026-09-15)
 
 1. **Distribution:** GitHub Releases (electron-updater feed), Mac App Store,
@@ -16,7 +78,8 @@ claims marked **(unverified)** are what Stage 0 exists to confirm or refute.
 3. **Platforms:** macOS, Windows and Linux, all verified.
 4. **Desktop activity capture:** wanted, but in a separate workflow after the
    main app runs. Stage 8 is not part of the first build. Built 2026-09-22.
-5. **Tauri:** delete it. Moved into Stage 1.
+5. **Tauri:** delete it. Moved into Stage 1. *(Reversed 2026-11-12: see
+   "the shell moved to Tauri 2" above.)*
 6. **Global shortcut:** ship a default that does not collide with common OS and
    app shortcuts, and make shortcuts extensible — several bindable actions, each
    rebindable or clearable in Settings → Desktop.
@@ -1575,3 +1638,79 @@ extension's lives in the popup. Large enough to plan separately when picked up.
 - A menu-bar-only mode with no window.
 - Google sign-in inside the shell (Stage 3's browser sign-in covers it).
 - Offline-first reads beyond what the web app's React Query cache already gives.
+
+## Tauri port — parity gaps (2026-11-12)
+
+What the move from Electron (top of this file) did not carry over unchanged,
+or could not verify on the Mac it was built on. Each item says what the app
+does now.
+
+**Not verified here (needs CI or a person):**
+
+- **Windows was never compiled or run.** `cargo check` for
+  `x86_64-pc-windows-msvc` fails on this Mac before reaching the app (ring
+  needs a Windows C toolchain), so the Windows-only code in
+  `desktop/src-tauri` (idle via `GetLastInputInfo`, lock via the input
+  desktop's name, the `Run` key, toasts, DPAPI migration, the MSIX check,
+  the theme read) is first compiled by the release workflow. The NSIS hook
+  that removes the Electron per-user install, `sign-windows.ps1` and
+  `msix.ps1` have not run either.
+- **Linux was never compiled or run.** The Docker image for a WebKitGTK build
+  did not finish here; idle (XScreenSaver, then GNOME's Mutter idle monitor),
+  the logind lock state, notify-rust, the Secret Service key, the GTK program
+  name and the deb/rpm dependency lists are first exercised by CI
+  (`linux-package-qa.yml`, the desktop job under xvfb).
+- **The update path from an Electron install into the Tauri app** (Squirrel.Mac
+  taking the Tauri zip, electron-updater running the Tauri NSIS installer,
+  the AppImage swap) is built into the release (legacy `latest*.yml` feeds next
+  to `latest.json`) but has not run end to end: it needs a signed, published
+  release. `installed-desktop-qa.yml` is written for it.
+- **Native tray, global shortcuts, notifications and login items** run only
+  in a non-headless app, which no automated test starts (headless runs use
+  recording fakes, as the Electron specs did). Check them by hand once per
+  release.
+- **Signed and notarized macOS builds**: the unsigned dmg/zip and an unsigned
+  universal Mac App Store app were built here; signing needs the secrets.
+
+**Behaviour that differs from the Electron build:**
+
+- **Windows origin** is `http://app.localhost`, not `app://-` (WebView2 cannot
+  serve a custom scheme with a host). It is in `STORE_APP_ORIGINS`; a server
+  with an explicit `TRUSTED_ORIGINS` must add it, and the hosted API must trust
+  it before the first Windows Tauri release (on 2026-11-12 `/api/health`
+  answered `originTrusted: false` for it).
+- **`navigator.geolocation` does not exist** in the app (`harden.js`). Electron
+  denied the permission; WKWebView offers no denial for an embedder and would
+  leave the request pending.
+- **Downloads go straight to the Downloads folder** under the page's file name
+  (made unique). Electron showed its default save dialog.
+- **macOS 12 and 13 pause the hidden page** after a few minutes: background
+  throttling can only be switched off on macOS 14 and later. The menu bar clock
+  ticks in Rust and keeps going; Autopilot, live sync and the offline-queue
+  flush wait until the window is shown.
+- **Linux sessions are not migrated**: a token Electron sealed with a
+  libsecret-held key is not decrypted, so those users sign in once more. Their
+  offline queue and settings migrate.
+- **Windows jump-list tasks** ("Open Track Your Time", "Compact timer") are not
+  set: Tauri wraps no `ICustomDestinationList`. The model still computes them
+  (`taskbar_model`); `set_user_tasks` answers false.
+- **macOS keeps stacked notices**: a newer notice with the same tag does not
+  withdraw the earlier one there (Windows and Linux replace by tag).
+- **The desktop e2e suite has no screenshots** of the hidden window: the
+  system WebViews give the harness no capture API, so the paint assertion is
+  skipped with its reason. Linux package smoke tests read the app's smoke
+  report and take the screenshot from Xvfb instead of over CDP.
+- **The desktop e2e suite** (`pnpm test:e2e:desktop`, Playwright test runner
+  over the app's e2e control channel) passed 39 of 40 on macOS on 2026-11-12;
+  the clipboard test is skipped outside CI as before. The port surfaced four
+  shell bugs, all fixed before the merge (geolocation request left pending,
+  exports dropped without a download handler, no window background, the hidden
+  page reporting `visibilityState: "hidden"`), and one renderer race that is
+  not the shell's: a timer started within about 200 ms of a reload, while the
+  private session still reads "Checking private workspace sync", raises no idle
+  prompt (suspect: `use-entry-mutations.ts` returning in `onSuccess` at
+  `privateMutationStillCurrent` before `noteServerId`).
+- **Removed with Electron:** `scripts/desktop-shell-lab` (an HTML study that
+  bundled the TypeScript tray model and window policy, now Rust), and the
+  activity fixture generators that ran the Electron TypeScript store
+  (`fixtures/ts-store/`, which that store wrote, stays as the format record).

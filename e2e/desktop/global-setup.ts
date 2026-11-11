@@ -1,11 +1,11 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MongoClient } from "mongodb";
 
-import { API_ORIGIN, API_PORT, EXPORT_DIR, MAIN_JS, REPO_ROOT } from "./support";
+import { API_ORIGIN, API_PORT, APP_ORIGIN, E2E_BINARY_INFO, REPO_ROOT, freshUserDataDir, launchApp, removeWebkitStores } from "./support";
 
 /*
  * Servers and build for the desktop harness, following the E2E isolation
@@ -60,35 +60,37 @@ function stop(child: ChildProcess | null): Promise<void> {
 }
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
-  // 1. The Electron binary (Electron 42 downloads it lazily; see the script).
-  const ensure = spawnSync(process.execPath, [join(REPO_ROOT, "scripts/ensure-electron.mjs")], {
+  // 1. The export (embedded into the binary) and the debug build with the e2e
+  // control channel. build-desktop.mjs reuses an export built for this API
+  // and rebuilds it with DESKTOP_E2E_REBUILD=1; cargo rebuilds only what
+  // changed. A renderer change therefore needs DESKTOP_E2E_REBUILD=1.
+  console.log(`[desktop-e2e] building the desktop app against ${API_ORIGIN}`);
+  const build = spawnSync(process.execPath, [join(REPO_ROOT, "scripts/build-desktop.mjs"), "--e2e"], {
+    cwd: REPO_ROOT,
     stdio: "inherit",
+    env: { ...process.env, NEXT_PUBLIC_API_URL: API_ORIGIN },
   });
-  if (ensure.status !== 0) throw new Error("scripts/ensure-electron.mjs failed");
+  if (build.status !== 0) throw new Error("scripts/build-desktop.mjs --e2e failed");
+  if (!existsSync(E2E_BINARY_INFO)) throw new Error(`scripts/build-desktop.mjs --e2e wrote no ${E2E_BINARY_INFO}`);
 
-  // 2. The export, built against this harness's API — reused when it already is.
-  const target = join(EXPORT_DIR, ".build-target.json");
-  const builtFor = existsSync(target) ? (JSON.parse(readFileSync(target, "utf8")) as { apiUrl?: string }).apiUrl : null;
-  if (builtFor !== API_ORIGIN || !existsSync(MAIN_JS) || process.env.DESKTOP_E2E_REBUILD === "1") {
-    console.log(`[desktop-e2e] building the desktop export against ${API_ORIGIN}`);
-    const build = spawnSync(process.execPath, [join(REPO_ROOT, "scripts/build-desktop.mjs")], {
-      cwd: REPO_ROOT,
-      stdio: "inherit",
-      env: { ...process.env, NEXT_PUBLIC_API_URL: API_ORIGIN },
-    });
-    if (build.status !== 0) throw new Error("scripts/build-desktop.mjs failed");
-  } else {
-    // The export is reused, but main and preload are always re-bundled: they
-    // take a second, and a reused electron/dist runs every spec against the
-    // main process as it was before the change under test.
-    const bundle = spawnSync(process.execPath, [join(REPO_ROOT, "scripts/build-desktop.mjs"), "--electron-only"], {
-      cwd: REPO_ROOT,
-      stdio: "inherit",
-    });
-    if (bundle.status !== 0) throw new Error("scripts/build-desktop.mjs --electron-only failed");
+  // One launch and quit before any spec: macOS scans a freshly built,
+  // unsigned binary on its first launch, which can take longer than a spec's
+  // whole timeout. Headless, with a throwaway profile, like every launch.
+  // The WebKit data store each launch creates on macOS (support.ts →
+  // webkitStoreDir), removed again when the run ends.
+  const storeLogDir = mkdtempSync(join(tmpdir(), "tyt-desktop-e2e-stores-"));
+  const storeLog = join(storeLogDir, "stores.txt");
+  writeFileSync(storeLog, "");
+  process.env.DESKTOP_E2E_STORE_LOG = storeLog;
+
+  const warmProfile = freshUserDataDir();
+  try {
+    await (await launchApp(warmProfile)).app.close();
+  } finally {
+    rmSync(warmProfile, { recursive: true, force: true });
   }
 
-  // 3. MongoDB.
+  // 2. MongoDB.
   let mongod: ChildProcess | null = null;
   let dbPath: string | null = null;
   let mongoUri = process.env.MONGODB_URI;
@@ -118,7 +120,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     }
   }
 
-  // 4. The APIs, production-shaped, trusting the app's origin. Every request
+  // 3. The APIs, production-shaped, trusting the app's origin. Every request
   //    they receive is logged (record-requests.mjs), so a spec can prove from
   //    the server side what the app sent — in particular that no Cookie ever
   //    arrived. The second API is another server the app can be pointed at
@@ -150,7 +152,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         BETTER_AUTH_SECRET: "desktop-e2e-secret-desktop-e2e-secret",
         BETTER_AUTH_URL: origin,
         FRONTEND_URL: "http://127.0.0.1:1",
-        TRUSTED_ORIGINS: "app://-",
+        TRUSTED_ORIGINS: APP_ORIGIN,
         SCHEDULER_ENABLED: "false",
         DESKTOP_E2E_REQUEST_LOG: log,
         E2E_DISABLE_AUTH_RATE_LIMIT: "1",
@@ -181,5 +183,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     await stop(mongod);
     if (dbPath) rmSync(dbPath, { recursive: true, force: true });
     rmSync(logDir, { recursive: true, force: true });
+    removeWebkitStores(storeLog);
+    rmSync(storeLogDir, { recursive: true, force: true });
   };
 }

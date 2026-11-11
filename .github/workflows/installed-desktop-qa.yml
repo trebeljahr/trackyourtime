@@ -1,23 +1,27 @@
 name: Installed Desktop QA
 
+# The Electron → Tauri migration on real machines (scripts/installed-desktop-qa.mjs):
+# install an Electron release (0.3.0 or earlier), let electron-updater update it
+# through the legacy feed a Tauri release publishes, then check the Tauri app is
+# what is installed, in the same profile, and that it starts (its smoke mode).
+# On Windows that includes the NSIS hook removing the Electron install.
+
 on:
   workflow_dispatch:
     inputs:
       from:
-        description: Installed version
-        default: "0.2.2"
+        description: Installed Electron version (0.3.0 or earlier)
+        default: "0.3.0"
         required: true
       to:
-        description: Update version (may still be a draft)
-        default: "0.3.0"
+        description: Tauri version to update to (may still be a draft)
         required: true
       public_feed:
         description: Use the published GitHub feed instead of a loopback draft mirror
         type: boolean
         default: false
       source_run:
-        description: Original Desktop Release run (read-only fallback for draft assets)
-        default: "37729218359"
+        description: Desktop Release run of the `to` tag (read-only fallback for draft assets)
         required: true
 
 permissions:
@@ -48,11 +52,14 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      # The Electron app's libraries for the version being updated FROM, and
+      # WebKitGTK for the Tauri one it becomes (an AppImage carries its own,
+      # but the runner's are what a person's desktop has).
       - name: Install Linux runtime dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb dbus-x11 libgtk-3-0 libnss3 libgbm1 libasound2t64 libsecret-1-0 libnotify4
+          sudo apt-get install -y xvfb dbus-x11 libgtk-3-0 libnss3 libgbm1 libasound2t64 libsecret-1-0 libnotify4 libwebkit2gtk-4.1-0 libayatana-appindicator3-1
       - name: Install released app and update it
         run: node scripts/installed-desktop-qa.mjs
       - name: Install released deb and rpm packages

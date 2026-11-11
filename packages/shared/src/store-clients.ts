@@ -1,4 +1,4 @@
-import { DESKTOP_APP_ORIGIN } from "./desktop-bridge.js";
+import { DESKTOP_APP_ORIGIN, DESKTOP_APP_ORIGIN_WINDOWS } from "./desktop-bridge.js";
 
 /**
  * The document origins of the store-distributed clients.
@@ -44,16 +44,18 @@ export const IOS_APP_ORIGIN = "capacitor://localhost";
 export const ANDROID_APP_ORIGIN = "https://localhost";
 
 /**
- * Every store client's origin, in the order the docs list them. The last is
- * the desktop app's: the privileged `app://-` scheme the Electron shell serves
- * its export from (`electron/src/protocol.ts`), defined beside the bridge type
- * in `desktop-bridge.ts`.
+ * Every store client's origin, in the order the docs list them. The last two
+ * are the desktop app's: the `app://-` scheme the shell serves its export from
+ * on macOS and Linux, and `http://app.localhost` on Windows
+ * (`desktop/src-tauri/src/protocol.rs`), defined beside the bridge type in
+ * `desktop-bridge.ts`.
  */
 export const STORE_APP_ORIGINS: readonly string[] = [
   IOS_APP_ORIGIN,
   ANDROID_APP_ORIGIN,
   `chrome-extension://${STORE_EXTENSION_ID}`,
   DESKTOP_APP_ORIGIN,
+  DESKTOP_APP_ORIGIN_WINDOWS,
 ];
 
 /**

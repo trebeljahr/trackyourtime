@@ -105,8 +105,8 @@ export function parseDesktopEntry(text) {
 }
 
 /**
- * The program an `Exec=` line runs, with the field codes dropped. electron-builder
- * writes `Exec="/opt/App Name/binary" %U`, so the quoted form with a space in
+ * The program an `Exec=` line runs, with the field codes dropped. Packagers
+ * write `Exec="/opt/App Name/binary" %U`, so the quoted form with a space in
  * the path is the normal case rather than an edge one; a first token that is
  * only a field code, or an empty line, gives null.
  */

@@ -1,0 +1,13 @@
+{
+  "identifier": "main",
+  "description": "The app's own document in the main window. desktop_call checks the sender again itself; e2e_result is only registered in e2e builds.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-desktop-call",
+    "allow-e2e-result",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize"
+  ]
+}

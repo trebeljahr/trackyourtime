@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
-# One NSIS installer carries x64 and arm64 (electron-builder combines them), so
-# both entries name the same file. Per-user, like electron-builder's one-click
-# default: no elevation prompt.
+# One NSIS installer per architecture (the Tauri bundler builds one per Rust
+# target; x64 keeps the name the Electron installer, which carried both, had).
+# Per-user (bundle.windows.nsis.installMode currentUser): no elevation prompt.
 PackageIdentifier: ricoslabs.trackyourtime
 PackageVersion: {{version}}
 InstallerType: nullsoft
@@ -16,7 +16,7 @@ Installers:
     InstallerUrl: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-Setup-{{version}}.exe
     InstallerSha256: {{sha256_win_nsis}}
   - Architecture: arm64
-    InstallerUrl: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-Setup-{{version}}.exe
-    InstallerSha256: {{sha256_win_nsis}}
+    InstallerUrl: https://github.com/trebeljahr/trackyourtime/releases/download/v{{version}}/TrackYourTime-Setup-{{version}}-arm64.exe
+    InstallerSha256: {{sha256_win_nsis_arm64}}
 ManifestType: installer
 ManifestVersion: 1.9.0

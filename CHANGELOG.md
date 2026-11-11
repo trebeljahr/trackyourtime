@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The desktop app runs on Tauri instead of Electron. It uses the system's own
+  web view, so it is a smaller download and macOS no longer lists it under
+  Location Services. Settings, the offline queue, activity and window size
+  carry over on the first launch. On Linux you sign in once more. On Windows
+  the app opens from `http://app.localhost`, so a self-hosted server with a
+  hand-written `TRUSTED_ORIGINS` must add it.
+
 ### Removed
 
 - Payment reminder emails to clients. Mail sent in your name that you did not

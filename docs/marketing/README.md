@@ -67,7 +67,7 @@ listed here ships inside a build, at a path that code or a store already names:
 | `ipad-13-{1-track,2-reports,3-more,4-invoice}.png` | 2064×2752 | ASC 13″ slot (uploaded, COMPLETE) |
 | `iphone-duo-outer-{1-track,2-reports,3-more,4-invoice}.png` | 1398×2034 | ASC iPhone Duo slot (`APP_IPHONE_DUO`), outer display |
 | `iphone-duo-inner-{1-track,2-reports,3-more,4-invoice}.png` | 2007×2853 | iPhone Duo inner display, the slot's other accepted size |
-| `mac-{1-track,2-reports,3-calendar,4-invoice}.png` | 2880×1800 | ASC Mac slot (`APP_DESKTOP`), the real Electron shell |
+| `mac-{1-track,2-reports,3-calendar,4-invoice}.png` | 2880×1800 | ASC Mac slot (`APP_DESKTOP`). The set uploaded on 2026-10-08 was captured from the Electron shell |
 
 `scripts/marketing/capture-store.mjs` regenerates every set above at its exact
 size, opaque, against a local server seeded by `seed-demo.mjs`:
@@ -76,9 +76,14 @@ size, opaque, against a local server seeded by `seed-demo.mjs`:
 node scripts/marketing/capture-store.mjs http://localhost:<web-port> <demo-email> <demo-password> [out-dir] [--only mac,iphone-duo-outer]
 ```
 
-The Mac set drives `electron/dist/main.js` headless against the dev server
-(`pnpm build:desktop --electron-only` first) and hides the Activity nav item,
-which the sandboxed Mac App Store build does not offer.
+The Mac set is the same bundle in the desktop app's mode: Chromium at the Mac
+slot's size, with an in-memory stand-in for the desktop bridge
+(`DESKTOP_BRIDGE_STUB` in the script), so the page draws the desktop chrome
+(`html.electron[data-platform=darwin]`: the sidebar title bar and the
+traffic-light inset). It needs no desktop build. The system WebView of the
+Tauri app offers no way to screenshot it, and a capture of the Electron window
+was only its page too, never the macOS title bar. The script hides the Activity
+nav item, which the sandboxed Mac App Store build does not offer.
 
 The 6.9″, 13″ and Mac sets are in App Store Connect app **6814737131** (Mac uploaded 2026-10-08).
 

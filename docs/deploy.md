@@ -846,7 +846,8 @@ env fields in Coolify**:
 
 - `TRUST_STORE_APPS=true` — trusts `capacitor://localhost`, `https://localhost`,
   `chrome-extension://opibnndhibnigcfgfbgbipakadhnbjfi` and the desktop app's
-  `app://-` together, from code. The self-host compose file sets this by default.
+  `app://-` (macOS, Linux) and `http://app.localhost` (Windows) together, from
+  code. The self-host compose file sets this by default.
 - or list them in `TRUSTED_ORIGINS`, comma-separated, if this deployment's
   trust list should stay spelled out by hand.
 
@@ -1321,175 +1322,254 @@ only, and it can be paused or completed early from the same page.
 
 ## Desktop release
 
+The desktop app is Tauri 2 (`desktop/src-tauri`, one Cargo workspace in
+`desktop/`) since 0.4.0; 0.3.0 and earlier were Electron.
 `.github/workflows/desktop-release.yml` builds every desktop artifact from one
-manual dispatch (Actions → Desktop Release → Run workflow). It has one leg per
-channel:
+manual dispatch (Actions → Desktop Release → Run workflow) or a `v*` tag. It has
+one leg per channel:
 
 | Leg | Runner | Output | Signed by |
 | --- | --- | --- | --- |
-| `mac` | macos-latest | dmg + zip, arm64 and x64 | Developer ID, notarized |
+| `mac` | macos-latest | dmg + zip + update archive, arm64 and x64 | Developer ID, notarized |
 | `mas` | macos-latest | pkg, universal | Apple Distribution + Mac Installer Distribution |
-| `win` | windows-latest | one NSIS exe, x64 + arm64 | Azure Trusted Signing or a certificate file |
-| `win-store` | windows-latest | appx, x64 and arm64 | Partner Center, on upload |
+| `win` | windows-latest | NSIS installer per architecture, x64 + arm64 | Azure Trusted Signing or a certificate file |
+| `win-store` | windows-latest | MSIX (`.appx`), x64 and arm64 | Partner Center, on upload |
 | `linux-x64` | ubuntu-24.04 | AppImage, deb, rpm, tar.gz, snap | not signed |
-| `linux-arm64` | ubuntu-24.04-arm | AppImage, deb, rpm, tar.gz (no snap) | not signed |
+| `linux-arm64` | ubuntu-24.04-arm | AppImage, deb, rpm, tar.gz, snap | not signed |
+
+Every leg runs one command, the one a person runs locally:
+`node scripts/build-desktop.mjs --channel <channel> --package <args>`. It builds
+the export into `packages/client/out-desktop` (API URL asserted in a chunk),
+generates the channel's Tauri config (`scripts/lib/desktop-tauri.mjs` →
+`tauriConfigFor`, merged over `desktop/src-tauri/tauri.conf.json` with `tauri
+build --config`), runs `tauri build` per Rust target, notarizes, makes the
+installers and renames every output to the names the Electron releases used
+(`artifactName` in `scripts/lib/desktop-release.mjs`), so download links, the
+Homebrew and winget manifests and `desktop:try-release` keep working:
+
+| File | Leg |
+| --- | --- |
+| `TrackYourTime-<v>-mac-arm64.dmg` / `.zip`, `-mac-x64.dmg` / `.zip` | mac |
+| `TrackYourTime-<v>-mac-<arch>.app.tar.gz` | mac (the Tauri update payload) |
+| `TrackYourTime-<v>-mas-universal.pkg` | mas (a CI artifact, never attached) |
+| `TrackYourTime-Setup-<v>.exe` (x64), `TrackYourTime-Setup-<v>-arm64.exe` | win |
+| `TrackYourTime-<v>-<arch>-store.appx` | win-store (a CI artifact, never attached) |
+| `TrackYourTime-<v>-linux-x86_64.AppImage`, `-linux-arm64.AppImage` | linux |
+| `trackyourtime_<v>_amd64.deb`, `_arm64.deb`; `trackyourtime-<v>.x86_64.rpm`, `.aarch64.rpm` | linux |
+| `TrackYourTime-<v>-linux-x64.tar.gz`, `-linux-arm64.tar.gz` | linux (Flathub's input) |
+| `trackyourtime_<v>_amd64.snap`, `_arm64.snap` | linux (a CI artifact, never attached) |
+
+The Electron installer carried both Windows architectures in one exe; Tauri
+builds one per Rust target, and x64 keeps the old name. On Linux the package
+and executable are `trackyourtime` (`desktop/src-tauri/tauri.linux.conf.json`),
+the Electron packages' name, so a deb or rpm upgrades the Electron one in place.
 
 Every leg follows the all-or-none rule of [Android release signing](#android-release-signing):
 
-- **No secrets for a channel:** the leg still builds. Every dmg, zip and exe
-  has `-unsigned` in its file name. A `mas` leg without secrets packages the
-  `.app` to check the config and uploads nothing, because no unsigned pkg can
-  be submitted. A `win-store` leg with none of the three identity variables
-  is skipped with a notice; with one or two of them it fails.
-  An unsigned build also drops every certificate and notarization variable
-  before electron-builder runs, so nothing named `-unsigned` is ever signed.
+- **No secrets for a channel:** the leg still builds. Every dmg, zip, update
+  archive and exe has `-unsigned` in its file name, the app is ad-hoc signed
+  (`signingIdentity "-"`, which Apple Silicon needs to run it at all) and has no
+  update feed. A `mas` leg without secrets builds the `.app` to check the config
+  and uploads nothing, because no unsigned pkg can be submitted. A `win-store`
+  leg with none of the three identity variables is skipped with a notice; with
+  one or two of them it fails. An unsigned build drops every certificate,
+  notarization and update-key variable before the Tauri CLI runs
+  (`tauriEnvFor`), so nothing named `-unsigned` is ever signed, and never an
+  identity found in a developer's keychain.
 - **A complete set:** the leg signs, then verifies the signature. The checks
-  are `codesign --verify --deep --strict`, `spctl --assess` and
-  `stapler validate` for the Developer ID app, `pkgutil --check-signature` and
-  the sandbox entitlements for the store pkg, and `signtool verify /pa` for
-  Windows.
+  are `codesign --verify --deep --strict`, the hardened-runtime flag,
+  `spctl --assess` and `stapler validate` for the Developer ID app — and the
+  same for the app inside each zip, because that zip is what electron-updater
+  installs on a migrating Electron install — plus `otool -L` showing no
+  CoreLocation (the reason for the port); `pkgutil --check-signature` and the
+  sandbox entitlements for the store pkg; `signtool verify /pa` for Windows.
 - **Part of a set:** the leg fails on "Check the signing secrets", before the
   export is built. The message lists what is set and what is missing.
 
-The decision is `resolveSigning` in `scripts/lib/desktop-release.mjs`, and it
-is unit-tested. The same function runs in `scripts/build-desktop.mjs`, so a
-local `--channel` build refuses in the same way. The API key and team id are
-shared with the iOS release, so they do not start signing on their own. Only
-the certificate does.
+The decisions are `resolveSigning` and `resolveUpdater` in
+`scripts/lib/desktop-release.mjs`, and they are unit-tested. The same functions
+run in `scripts/build-desktop.mjs`, so a local `--channel` build refuses in the
+same way. The App Store Connect API key and team id are shared with the iOS
+release, so they do not start signing on their own. Only the certificate does.
 
-**macOS signing needs electron-builder 26.16.1 or newer.** Up to 26.16.0,
-electron-builder built its throwaway keychain with a random password and then
-ran `security set-key-partition-list … -k <the p12's password>`. That flag takes
-the *keychain's* password. macOS 14 and 15 ignored the mismatch; macOS 26 — the
-image `macos-latest` now resolves to — verifies the unlock and answers
+**How the Apple legs sign.** `scripts/lib/desktop-apple.mjs` imports the
+channel's p12 into a throwaway keychain with a random password, puts it in
+front of the search list for the build, and reads the identity out of it
+(Developer ID Application for `mac`; Apple Distribution and the installer
+identity for `mas`); `close()` restores the search list and deletes the
+keychain. The identity goes into the generated config (`signingIdentity`), and
+the Tauri CLI signs with it. The CLI is never handed `APPLE_API_KEY` and its
+siblings (`TAURI_SELF_SIGNING_VARS`): this repo's `APPLE_API_KEY` is the
+`.p8`'s path, the CLI's is the key id. Notarization is this repo's own step:
+`notarytool submit --wait` for a zip of the app, refusing anything but
+"Accepted" (notarytool exits 0 on "Invalid"), then `stapler staple` and
+`stapler validate`. The dmg is made from the stapled app with `hdiutil`, signed
+with `codesign --timestamp`, notarized and stapled the same way; the zip
+(`ditto -c -k --keepParent`) and the update archive are made from the stapled
+app too.
 
-```
-security: SecKeychainUnlock: The user name or passphrase you entered is not correct.
-```
+**macOS 26 icon.** `build/AppIcon.icon` (an Icon Composer document,
+`pnpm icons:brand`) is compiled by Xcode 26's `actool` into `Assets.car`,
+copied into the bundle (`bundle.macOS.files`) and named by `CFBundleIconName`
+(a generated `Info.plist` fragment, `bundle.macOS.infoPlist`). `icon.icns` from
+`pnpm icons:desktop` stays beside it for macOS 12–15. `build-desktop.mjs`
+refuses an app without both, and needs Xcode 26 on the packaging Mac.
 
-so both Apple legs died at "Build and package" with `⨯ /usr/bin/security
-process failed 1`, with the certificates and passwords never involved (tag
-v0.1.0, run 36108136377). It is fixed upstream in 26.16.1. The floor is
-`MIN_APP_BUILDER_LIB` in `scripts/lib/desktop-release.mjs` and a unit test
-reads the *resolved* app-builder-lib against it — npm's `latest` dist-tag for
-electron-builder still points at 26.15.3, below the fix, so a `pnpm update`
-can walk back into it and the next place that would show up is a tagged
-release that cannot sign macOS at all.
-
-**A signed macOS build must not set `CSC_IDENTITY_AUTO_DISCOVERY=false`.**
-It reads like "pin the identity to the certificate we named" and means "do not
-sign macOS at all": app-builder-lib checks it before it looks at `CSC_LINK`,
-logs
-
-```
-• skipped macOS application code signing  reason=, see https://electron.build/code-signing CSC_IDENTITY_AUTO_DISCOVERY=false
-```
-
-and packages an **ad-hoc signed** app — no entitlements, no hardened runtime —
-under a file name that does not say `-unsigned`, because the mode really is
-signed. `builderEnvFor` therefore sets it only for an unsigned or Store build,
-where not signing is the point, and a unit test pins that. Nothing replaces it
-on a signed build: the flag only governs searching a keychain for an identity,
-and `CSC_LINK` does not go through that search — electron-builder imports the
-p12 into a throwaway keychain and signs with the identity inside it.
-
-The "Verify the Developer ID signature" step is what caught this, on the first
-run that ever got past `security` (run 36273933100). Keep those checks: a
-macOS build that is quietly not signed passes every other step, and `codesign
---verify` alone reports an ad-hoc signature as `valid on disk`.
-
-An AppX is built only with `--channel win-store`, and that channel builds
-nothing else. Outside it electron-builder fills the identity with `CN=ms` and
-the package name, so `build-desktop.mjs` refuses before anything is built.
+**Windows signing.** `scripts/desktop/sign-windows.ps1` is the bundler's
+`signCommand`, configured only for a signed `win` build; the bundler calls it
+for the app, the uninstaller and each installer. With Azure Trusted Signing it
+runs `Invoke-TrustedSigning` with the same account, profile and endpoint
+electron-builder 26 used, so the certificate subject is unchanged — which
+matters, because electron-updater on a migrating Electron install compares the
+installer's publisher with the one it was installed with. It then requires a
+valid, timestamped signature on the file.
 
 Artifacts go to the run's Actions artifacts, with a `SHA256SUMS-<leg>.txt`
 file. Every store upload is manual.
 
-#### What the first tag run (v0.1.0) showed
-
-Run 36108136377 built `linux-x64` and nothing else. All five failures were
-code, in four separate causes, and each is fixed:
-
-- **`linux-arm64`** — the snap target, on `base: core20` under snapcraft 9.
-  That leg no longer builds a snap. See the workflow header and
-  `electron-builder.config.mjs` → `snap`.
-- **`win-store`** — decided `skip` correctly and built nothing, then failed in
-  `actions/setup-node`'s post-job cache save, because a leg that never runs
-  `pnpm install` has no pnpm store to save. The cache is now enabled only when
-  the leg installs.
-- **`mac` and `mas`** — faults stacked behind one another, each hidden by the
-  one in front. First the `set-key-partition-list` bug above, fixed by the
-  electron-builder floor; then `CSC_IDENTITY_AUTO_DISCOVERY=false`, which meant
-  neither leg was signing at all, fixed in `builderEnvFor`. `mac` passes from
-  there. `mas` then needed its **pkg path**: electron-builder writes the MAS
-  installer into the target's own output directory, `release/mas-universal/`,
-  because it comes from `createMasInstaller` rather than a normal target, so
-  `release/*.pkg` found nothing. The verify step, the artifact upload and the
-  checksum list all read `release/mas*/*.pkg` now.
-- **`win`** — a partial Azure Trusted Signing set, which the all-or-none rule
-  above correctly refused: `AZURE_TRUSTED_SIGNING_ENDPOINT` and
-  `AZURE_TRUSTED_SIGNING_ACCOUNT` were set while the other five were missing.
-  Those two have since been removed, so the leg resolves to `unsigned` and
-  passes. Signing it means setting all seven, never a subset.
-
 ### Tags, the draft release and updates
 
-The workflow also runs on every `v*` tag. After every leg passes, the
-`draft-release` job runs `scripts/desktop-release-draft.mjs` and creates or
-updates a **draft** GitHub Release for the tag:
+On a `v*` tag, after every leg passes, the `draft-release` job runs
+`scripts/desktop-release-draft.mjs` and creates or updates a **draft** GitHub
+Release for the tag:
 
-- It attaches the signed dmg, zip and blockmaps, the signed Windows installer,
-  every Linux download except the snap, one `SHA256SUMS.txt`, and the update
-  feeds `latest-mac.yml`, `latest.yml`, `latest-linux.yml` and
-  `latest-linux-arm64.yml`.
+- It attaches the signed dmg, zip and update archives, the signed Windows
+  installers, every Linux download except the snap, one `SHA256SUMS.txt`, and
+  **two kinds of update feed**:
+  - `latest.json` — the Tauri app's feed (tauri-plugin-updater), merged from
+    every leg's `updater-<leg>.json` with this release's download URLs. Keys
+    are both `<os>-<arch>-<installer>` and `<os>-<arch>`, which is what the
+    plugin looks up.
+  - `latest-mac.yml`, `latest.yml`, `latest-linux.yml`,
+    `latest-linux-arm64.yml` — the feeds every **Electron** install (0.3.0 and
+    earlier) still reads with electron-updater, pointing at the Tauri zip, the
+    x64 NSIS installer and the AppImage. That is how those installs move to
+    Tauri (below).
 - It never attaches a file named `-unsigned`, a pkg, an appx or a snap. An
   unsigned mac or win leg is a warning on the run, so the draft simply has no
   download for that platform.
-- It fails when a leg that should have a feed has none, or when a feed names a
-  file that is not attached or whose sha512 or size differs.
+- It fails when a leg that updates itself (signed mac and win, every Linux leg)
+  brought either feed's input short, when a legacy feed names a file that is
+  not attached or whose sha512 or size differs, and when `latest.json` names a
+  payload that is not attached. In particular a Linux leg without
+  `TAURI_SIGNING_PRIVATE_KEY` fails the draft: its AppImages could never update.
 - It refuses a tag whose release is already published. Tag a new version.
-- It writes `stagingPercentage` into every feed when the run has a staging
-  percentage ("Staged rollout" below), and checks the rewritten feeds against
-  the attached files the same way.
+- It writes `stagingPercentage` into every feed, JSON and YAML alike, when the
+  run has a staging percentage ("Staged rollout" below), and checks the
+  rewritten feeds against the attached files the same way.
 
-**Publish the draft by hand.** electron-updater reads the latest *published*
-release, so nothing reaches installed apps until then. Prereleases are never
+**Publish the draft by hand.** Both updaters read the latest *published*
+release (`releases/latest/download/latest.json`; electron-updater's GitHub
+provider), so nothing reaches installed apps until then. Prereleases are never
 offered. `pnpm release:status vX.Y.Z` says whether the draft exists or is
 published (docs/releasing.md → Steps, step 6).
 
 Which builds update themselves is decided twice. At build time,
-`updateFeedFor` in `scripts/lib/desktop-release.mjs` gives signed mac and win
-builds and every Linux build a GitHub feed (`app-update.yml`), and everything
-else `publish: null`. At run time, `updaterPolicy` in
-`electron/src/updater-model.ts` turns the updater on only for the Developer ID
-build, the NSIS install and the AppImage. The Mac App Store, the Microsoft
-Store, Snap, Flatpak, deb, rpm and tar.gz leave updates to their manager. A
-downloaded update installs on quit, or on "Restart to update" in Settings →
-Desktop or the tray. The app never restarts by itself.
+`resolveUpdater` gives signed mac and win builds — always, and they refuse to
+build without the update key — and every Linux build with the key an update
+feed: `plugins.updater` (the endpoint and the public key) and
+`createUpdaterArtifacts` in the generated config. Everything else gets
+`plugins.updater: null`, which the app reads as "no-feed". At run time,
+`tyt_model::updater_model::updater_policy` turns the updater on only for the
+Developer ID build, the NSIS install and the AppImage; the Mac App Store, the
+Microsoft Store, Snap, Flatpak, deb, rpm and tar.gz leave updates to their
+manager. A downloaded update installs on quit, or on "Restart to update" in
+Settings → Desktop or the tray. The app never restarts by itself.
 `TRACKYOURTIME_DISABLE_UPDATES=1` turns the updater off on a managed machine.
+
+#### The update key
+
+Every update payload is signed with a minisign key, and every installed app
+checks each update against the public half before installing it. Generate it
+once, on a trusted machine:
+
+```bash
+pnpm exec tauri signer generate -w ~/.tauri/trackyourtime-updater.key
+```
+
+1. Store the private key and its password as the secrets
+   `TAURI_SIGNING_PRIVATE_KEY` (the file's content) and
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and keep a copy in the password
+   manager. **A lost key strands every installed app:** none of them can
+   accept an update signed with another key, and the only way out is a manual
+   reinstall.
+2. Commit the public key (the `.pub` file's one line of base64) as
+   `build/updater.pub`. It is a reviewed file, never a variable: the build
+   embeds it in every app with a feed, and checks every payload it signs
+   against it (`verifyMinisign`), so a key that does not match fails the build
+   rather than every installed app.
+
+Until both exist, signed mac and win legs refuse to build, and Linux legs build
+without a feed and fail the draft.
+
+#### Electron installs move to Tauri
+
+Every Tauri release also publishes the Electron feeds, so the Electron
+installs' own updater (electron-updater 6.8) carries them over. Per platform:
+
+- **macOS** (Developer ID): electron-updater hands the **zip** of the Tauri app
+  to Squirrel.Mac, which installs it on quit after checking the new app's
+  signature against the running app's designated requirement — same team, same
+  identifier `com.ricoslabs.trackyourtime`. A Tauri app signed with the same
+  Developer ID passes. The arm64 zip goes to Apple Silicon ("arm64" in its
+  name), the x64 one to Intel.
+- **Windows**: electron-updater checks the installer's publisher against the
+  one the Electron app was installed with, then runs the **x64 NSIS
+  installer** with `/S` on quit. Its pre-install hook
+  (`build/windows/installer-hooks.nsh`) finds the Electron install by its
+  uninstall key — `HKCU\…\Uninstall\df978d67-ddd6-5da4-9e68-d9dbb1f39138`,
+  electron-builder's UUID v5 of the app id (`electronUninstallKeys`, pinned by
+  a test) — and runs its uninstaller silently with `--updated /KEEP_APP_DATA`,
+  which removes `%LOCALAPPDATA%\Programs\trackyourtime`, its shortcuts and its
+  "Apps & features" entry and keeps `%APPDATA%\trackyourtime`. The Tauri app
+  installs into `%LOCALAPPDATA%\Track Your Time`. An arm64 Electron install
+  gets the x64 app too (electron-updater cannot choose between two
+  installers), which Windows 11 on arm64 runs emulated; it stays on x64.
+  A taskbar pin of the old executable stops working.
+- **Linux**: electron-updater replaces the **AppImage** file. deb and rpm
+  installs never updated themselves; installing the new package upgrades
+  them in place (`docs/cross-platform-testing.md` → "Upgrading an Electron
+  package in place").
+
+The profile stays where it was (`~/Library/Application Support/trackyourtime`,
+`%APPDATA%\trackyourtime`, `~/.config/trackyourtime`), and the Tauri app reads
+it in place, `.updaterId` included, so a staged rollout keeps every install in
+the bucket it had.
+
+**What has been verified, and what not.** The unsigned macOS package was built
+and inspected locally (layout, Info.plist, icon catalog, no CoreLocation). The
+feed formats are pinned by tests against the v0.3.0 feeds and
+electron-updater's own rules. Not verified on a real machine yet: the
+Squirrel.Mac install of a Developer-ID-signed Tauri zip, the Windows hook (no
+Windows machine was at hand), and the AppImage replacement. **Installed
+Desktop QA** (`.github/workflows/installed-desktop-qa.yml`) runs the Windows
+and Linux paths for real on GitHub's runners — install 0.3.0, let it update
+itself from the draft, check the result — and must pass before the first
+Tauri release is published. The macOS path is checked by hand: install 0.3.0,
+point it at the draft, update, and confirm the Tauri app starts with the same
+data.
 
 ### Staged rollout
 
-The update feeds can offer a release to part of the installed apps first.
-electron-updater reads `stagingPercentage` from `latest.yml`,
-`latest-mac.yml` and `latest-linux*.yml`. Each install has a random id,
-created once in its profile (`<userData>/.updaterId`), and is offered the
-release only when that id falls below the percentage. The id never changes,
-so raising the percentage keeps everybody who was already in. It applies to
-the three builds that update themselves; store and package-manager copies are
-not affected.
+Every feed can offer a release to part of the installed apps first: the Tauri
+app reads `stagingPercentage` from `latest.json`, Electron installs read it
+from the YAML feeds, and both apply electron-updater's rule. Each install has a
+random id, created once in its profile (`<userData>/.updaterId`), and is
+offered the release only when that id falls below the percentage. The id never
+changes, so raising the percentage keeps everybody who was already in. It
+applies to the builds that update themselves; store and package-manager copies
+are not affected.
 
 **Release at 10 %.** Either set the repository variable
 `DESKTOP_STAGING_PERCENTAGE` to `10` before pushing the tag, or run the
 workflow by hand from the tag (Actions → Desktop Release → Run workflow → Use
 workflow from: `v1.4.0`, staging percentage `10`). The input wins over the
-variable. Both empty means every install, as before. The `staging percentage`
-job validates the value at the start of the run and fails on anything that is
-not a whole number from 0 to 100, before any build starts. The
-`draft-release` job writes the value
-into every feed and checks the rewritten feeds against the attached files
-again. Then publish the draft as usual. The variable stays in effect for
-every later tag until you change or delete it (`gh variable delete
+variable. Both empty means every install. The `staging percentage` job
+validates the value at the start of the run and fails on anything that is not
+a whole number from 0 to 100, before any build starts. The `draft-release` job
+writes the value into every feed and checks the rewritten feeds against the
+attached files again. Then publish the draft as usual. The variable stays in
+effect for every later tag until you change or delete it (`gh variable delete
 DESKTOP_STAGING_PERCENTAGE`); a fix-forward release that should reach
 everybody needs it cleared, or the dispatch input set to 100.
 
@@ -1503,12 +1583,13 @@ pnpm desktop:rollout v1.4.0 0              # halt
 pnpm desktop:rollout v1.4.0 100            # everybody (removes the key)
 ```
 
-The script downloads the release's `latest*.yml`, changes that one line in
-each, checks that nothing else changed, and uploads them again with
-`--clobber`. It refuses a release that does not exist, a value outside 0 to
-100, and a feed that does not parse, and then uploads nothing. `100` removes
-the key instead of writing `100`: electron-updater compares with `<`, so an
-explicit 100 would leave out the one id in 2^32 at the very top.
+The script downloads the release's `latest.json` and `latest*.yml`, changes
+that one line in each (in `latest.json` the key is the first member, so it is
+one line with its own comma), checks that nothing else changed, and uploads
+them again with `--clobber`. It refuses a release that does not exist, a value
+outside 0 to 100, and a feed that does not parse, and then uploads nothing.
+`100` removes the key instead of writing `100`: the rule compares with `<`, so
+an explicit 100 would leave out the one id in 2^32 at the very top.
 `--repo <owner>/<name>` targets a fork.
 
 Four limits:
@@ -1517,18 +1598,17 @@ Four limits:
   do not have it yet. An install that already updated stays on it, and one
   that already downloaded it still installs it on quit. To fix a bad release,
   publish a higher version.
-- **Only the newest published release counts.** electron-updater reads the
-  feeds of the latest published release. The script warns when the tag is not
-  that release. A new release replaces the old rollout, so fix forward at
-  whatever percentage the fix needs.
+- **Only the newest published release counts.** The script warns when the tag
+  is not that release. A new release replaces the old rollout, so fix forward
+  at whatever percentage the fix needs.
 - Apps check at launch plus 30 seconds and every six hours, so a change takes
   up to six hours to reach running apps.
 - `--clobber` deletes each feed before it uploads the new one. An app that
   checks in that second gets an error and tries again at the next check.
 
-A headless run (tests, agents) never loads electron-updater, never writes
-`.updaterId` and never reads a feed. A profile moved with
-`TRACKYOURTIME_USER_DATA_DIR` gets its own id.
+A headless run (tests, agents) never checks a feed and never writes
+`.updaterId`. A profile moved with `TRACKYOURTIME_USER_DATA_DIR` gets its own
+id.
 
 ### Publishing a release to the downloads page
 
@@ -1556,6 +1636,7 @@ Secrets (`gh secret set NAME`, which prompts and does not echo):
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` | win | the app registration that may sign |
 | `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_TRUSTED_SIGNING_PROFILE`, `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME` | win | the signing account, certificate profile and the publisher name on it |
 | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | win | the alternative to Azure: base64 `.pfx` and its password. Set one Windows set, never both |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | mac, win, linux | the update key ("The update key" above); its public half is `build/updater.pub` |
 | `HOMEBREW_TAP_TOKEN` | manifests | fine-grained token, contents write on the tap repository only |
 | `WINGET_PKGS_TOKEN` | manifests | **classic** personal access token, `public_repo` scope only. See [Windows, NSIS and winget](#windows-nsis-and-winget) |
 | `SNAPCRAFT_STORE_CREDENTIALS` | linux-x64, linux-arm64 | `snapcraft export-login` output, scoped to `trackyourtime` and the `candidate,beta` channels. Unset means the snap is only a CI artifact ([Linux stores](linux-stores.md)) |
@@ -1586,12 +1667,15 @@ the reserved one.
 2. Notarization uses the App Store Connect API key the iOS release already has.
    If it does not exist yet, create a Team key with the Developer role under
    Users and Access → Integrations and set the three `APPLE_API_*` secrets.
-3. Dispatch the workflow. The `mac` leg is signed only when the certificate
-   and all three key values are set.
+3. Create the update key ("The update key" above).
+4. Dispatch the workflow. The `mac` leg is signed only when the certificate
+   and all three key values are set, and then refuses to build without the
+   update key.
 
 Locally: `NEXT_PUBLIC_API_URL=… node scripts/build-desktop.mjs --channel mac
---package --mac dmg zip --arm64`. Without `CSC_LINK` in the environment, this
-builds the `-unsigned` version.
+--package --arch arm64`. Without `CSC_LINK` in the environment this builds the
+`-unsigned` dmg and zip, ad-hoc signed and with no update feed, in about three
+minutes on an M-series Mac.
 
 ### macOS, Mac App Store (pkg)
 
@@ -1615,45 +1699,48 @@ builds the `-unsigned` version.
 
    It takes the newest successful run (`--run <id>` or `--pkg <file>` for
    another), checks the installer signature, the bundle id, the version against
-   package.json, a fresh CFBundleVersion, ITSAppUsesNonExemptEncryption,
-   ElectronTeamID and the compiled icon, runs `altool --validate-app`, then
-   `altool --upload-app`. `--dry-run` stops after the validation. Choosing the
-   build for the macOS version, review and release happen in App Store Connect.
+   package.json, a fresh CFBundleVersion, ITSAppUsesNonExemptEncryption and
+   the compiled icon, refuses an Electron build, runs `altool --validate-app`,
+   then `altool --upload-app`. `--dry-run` stops after the validation.
+   Choosing the build for the macOS version, review and release happen in App
+   Store Connect.
 
-The pkg's CFBundleVersion is `DESKTOP_BUILD_NUMBER` (run number × 100 +
-attempt, set by the workflow's mas leg), because App Store Connect refuses a
-build number it has seen for a version. Its icon is `build/AppIcon.icon`, an
-Icon Composer document that electron-builder compiles with Xcode 26's actool
-into `Assets.car` (CFBundleIconName) beside a fallback icns; the v0.2.2 pkg
-predates that, carried only an icns, and is refused by `desktop:mas-upload`.
-
-What is different under the sandbox: the app group is
-`<APPLE_TEAM_ID>.com.ricoslabs.trackyourtime`, and the entitlements are
-generated per build by `masEntitlementsPlist`. The app gets network client
-access and read/write access to files the user picks. It has no in-app updater,
-because the store updates it (`selfUpdates` in `electron/src/distribution.ts`).
-Open at login works through SMAppService, as in the Developer ID build.
+The store build is `tauri build --features mas --target universal-apple-darwin`
+with the provisioning profile embedded (`bundle.macOS.files`), no hardened
+runtime (the store re-signs) and the sandbox entitlements generated per build
+by `masEntitlementsPlist`: the App Sandbox, network client, read/write access
+to files the person picks, and `application-identifier` /
+`team-identifier`, which App Store Connect compares with the profile. No JIT
+and no app group (the Electron build needed one for its own IPC). The pkg is
+`productbuild --component … /Applications --sign <installer identity>`. Its
+CFBundleVersion is `DESKTOP_BUILD_NUMBER` (run number × 100 + attempt), because
+App Store Connect refuses a build number it has seen for a version. The `mas`
+feature leaves out the in-app updater and desktop activity capture.
 
 ### Windows, NSIS and winget
 
 1. Pick one signing route:
    - **Azure Trusted Signing.** Create a Trusted Signing account and pass
-     identity validation. Eligibility for individuals and organizations
-     depends on the country, so check the current rules first. Then create a
-     Public Trust certificate profile. Register an app in Entra ID, give it the
-     "Trusted Signing Certificate Profile Signer" role on the account, and set
-     the seven `AZURE_*` secrets.
+     identity validation. Then create a Public Trust certificate profile.
+     Register an app in Entra ID, give it the "Trusted Signing Certificate
+     Profile Signer" role on the account, and set the seven `AZURE_*` secrets.
+     The workflow installs the `TrustedSigning` PowerShell module.
    - **A certificate file.** New OV and EV code-signing certificates have been
      issued on hardware or cloud HSMs since 2023 and cannot be exported as a
      `.pfx`. `WIN_CSC_LINK` therefore only fits a certificate that can still be
-     exported. Cloud HSM services need a custom sign hook, which this repo does
-     not have.
-2. Dispatch the workflow. The `win` leg verifies the installer and the
+     exported.
+2. Create the update key ("The update key" above).
+3. Dispatch the workflow. The `win` leg verifies the installers and the
    unpacked executables with `signtool verify /pa`.
-3. **winget**, once the release is published: run Desktop Manifests (below).
+4. **winget**, once the release is published: run Desktop Manifests (below).
    With `WINGET_PKGS_TOKEN` set, its `winget` job opens the
    `microsoft/winget-pkgs` pull request; without it the manifests are still in
    the run's artifact for a manual submission. Details below.
+
+The installer is per user (`bundle.windows.nsis.installMode currentUser`, no
+elevation prompt) into `%LOCALAPPDATA%\Track Your Time`, with the WebView2
+bootstrapper for a machine without the runtime. It moves an Electron install
+out of the way first ("Electron installs move to Tauri" above).
 
 #### winget
 
@@ -1662,6 +1749,7 @@ Open at login works through SMAppService, as in the Developer ID build.
 | Package identifier | `ricoslabs.trackyourtime` (`WINGET_PACKAGE_IDENTIFIER`) |
 | Manifests path | `manifests/r/ricoslabs/trackyourtime/<version>/` |
 | Files | `ricoslabs.trackyourtime.yaml`, `.installer.yaml`, `.locale.en-US.yaml` |
+| Installers | x64: `TrackYourTime-Setup-<v>.exe`; arm64: `TrackYourTime-Setup-<v>-arm64.exe` |
 | Templates | `packaging/winget/*.template`, rendered by `scripts/desktop-manifests.mjs` |
 | Submitted by | `scripts/winget-submit.mjs`, the `winget` job of Desktop Manifests |
 | Secret | `WINGET_PKGS_TOKEN` |
@@ -1679,9 +1767,6 @@ the **`public_repo`** scope and nothing else:
 - Classic, because `wingetcreate` rejects fine-grained tokens outright, and a
   fine-grained token cannot be granted write on `microsoft/winget-pkgs`
   anyway — GitHub only grants those on repositories the token's owner owns.
-  A cross-fork pull request against somebody else's public repository needs
-  `public_repo` either way, so a hand-rolled fork-and-push would need the same
-  token.
 - `public_repo` is broader than this job: it can push to every public
   repository the account can push to. That is the cost of the winget route, it
   is why the secret exists for this one job only, and it is why the step is
@@ -1694,47 +1779,26 @@ from the manifests winget-pkgs already holds — which a first submission has
 none of — and re-derives the installer entries from URLs handed to it.
 `submit` publishes exactly the manifests this repo rendered from the real
 release files, validated against the manifest schema, into a path it derives
-from the `PackageIdentifier` itself. So what CI opens is what was reviewed in
-this repo's diff, for the first version and every one after it. The tool is a
-Windows `.NET` executable with no other build, which is why the job runs on a
-Windows runner; it is pinned by version and sha256 in the workflow.
+from the `PackageIdentifier` itself. The tool is a Windows `.NET` executable,
+which is why the job runs on a Windows runner; it is pinned by version and
+sha256 in the workflow.
 
-**Signing.** `microsoft/winget-pkgs` has no code-signing requirement, and
-unsigned installers are listed there. `winget install` also does not apply
-Mark of the Web, so it does not raise the "Windows protected your PC" dialog a
-browser download of the same file would. What unsigned still costs:
-
-- SmartScreen's **application reputation** is separate from Mark of the Web and
-  does block unrecognised apps. vim's winget package hit exactly that with an
-  unsigned installer (`vim/vim-win32-installer#319`). An unsigned binary
-  accumulates no publisher reputation, so every version starts from zero.
-- The validation pipeline scans the installer URL for reputation and the binary
-  with several antivirus engines, and installs it in a VM. Unsigned packages
-  reach manual review more often.
-
-None of that is the blocker here. **This repo's own rule is stronger:** a
-`-unsigned` file is never attached to a release (`releasePlan` in
-`scripts/lib/desktop-release.mjs`), so an unsigned Windows build leaves no
-installer URL for a manifest to point at. Windows signing is therefore a hard
-prerequisite for winget, whatever winget's policy says. Until Azure Trusted
-Signing is in place, the Desktop Manifests run skips the winget family with a
-notice and renders Homebrew and Flathub as usual (`--skip-missing`).
+**Signing.** `microsoft/winget-pkgs` has no code-signing requirement, but this
+repo's own rule is stronger: a `-unsigned` file is never attached to a release
+(`releasePlan`), so an unsigned Windows build leaves no installer URL for a
+manifest to point at, and the Desktop Manifests run skips the winget family
+with a notice (`--skip-missing`).
 
 **What is still manual**, in order, and each of these is a person's decision:
 
-1. Finish Windows signing (the seven `AZURE_*` secrets above), so the `win` leg
-   produces `TrackYourTime-Setup-<version>.exe` rather than the `-unsigned`
-   name.
-2. Tag, and **publish** the resulting draft release. winget's `InstallerUrl`
-   points at a published release asset; nothing before that step is
-   downloadable.
-3. Create `WINGET_PKGS_TOKEN` as described above and
+1. Tag, and **publish** the resulting draft release. winget's `InstallerUrl`
+   points at a published release asset.
+2. Create `WINGET_PKGS_TOKEN` as described above and
    `gh secret set WINGET_PKGS_TOKEN`.
-4. Run Actions → Desktop Manifests from the `v<version>` tag. The `winget` job
+3. Run Actions → Desktop Manifests from the `v<version>` tag. The `winget` job
    opens the pull request.
-5. Watch the pull request. winget-pkgs runs its own validation and a human
-   reviews it; a first submission (`New package: …`) gets more scrutiny than
-   the versions after it. Nothing in this repo retries or forces it.
+4. Watch the pull request. winget-pkgs runs its own validation and a human
+   reviews it. Nothing in this repo retries or forces it.
 
 Locally, `node scripts/winget-submit.mjs --manifests manifests/winget --dry-run`
 prints the identifier, the path, the manifests and the pull request title, and
@@ -1749,9 +1813,11 @@ submits nothing.
 3. Dispatch the workflow and upload the `.appx` files from `desktop-win-store`
    to a submission. The package is not signed here, because the Store signs it.
 
-In the Store build, open at login is off. A packaged app's `Run` key is never
-read, and Electron does not expose `StartupTask`. Settings shows the row
-disabled. There is no in-app updater.
+The package is the unpacked app packed by `makeappx`
+(`scripts/desktop/msix.ps1`): a full-trust desktop app with the tiles in
+`build/appx/` (`pnpm icons:brand`), version `<x.y.z>.0`. The app recognises its
+package identity at run time and leaves updates, open at login and activity
+capture to the Store's rules.
 
 ### Linux: AppImage, deb, rpm, Snap Store, Flathub
 
@@ -1759,34 +1825,40 @@ The AppImage, deb, rpm and tar.gz files are for the GitHub Release. No apt or
 rpm repository is hosted, so a deb or rpm install is not updated by the
 package manager.
 
+The deb and rpm declare every library the app needs by name
+(`LINUX_PACKAGE_DEPENDENCIES` in `scripts/lib/desktop-tauri.mjs`): WebKitGTK
+4.1, GTK 3 and libdbus, which the binary links, and the Ayatana AppIndicator
+(the tray) and libXss (the idle time), which it **dlopens** — `ldd` never names
+those, so a package without them installs, starts and has no tray icon. Every
+leg installs each package in a bare container and starts it in the app's smoke
+mode before the draft is written (`pnpm test:desktop:packages`,
+`docs/cross-platform-testing.md`).
+
 **The two Linux stores are `docs/linux-stores.md`**: the Ubuntu One account and
 the `snapcraft register trackyourtime` step, the one CI secret
-(`SNAPCRAFT_STORE_CREDENTIALS`), the Flathub pull request against
-`flathub/flathub`'s `new-pr` branch, both listings' copy, and what stays manual.
-The short version:
+(`SNAPCRAFT_STORE_CREDENTIALS`), the Flathub pull request, both listings' copy,
+and what stays manual. The short version:
 
-- On a `v*` tag the `linux-x64` leg runs `scripts/snap-publish.mjs`, which
-  uploads its snap to the Snap Store's **`candidate`** channel — and only when
-  `SNAPCRAFT_STORE_CREDENTIALS` is set. Unset is a notice and a green leg, the
-  all-or-none rule of every other channel. `snapcraft release … stable` is a
-  person's step, after the draft release is published.
-- The draft release still attaches no snap (`releasePlan`'s `STORE_ONLY`).
-- Flathub builds from `packaging/flatpak/`, rendered by Desktop Manifests. The
-  app id is `com.ricoslabs.trackyourtime`, and the verification badge needs a
-  `.well-known` file on **`ricoslabs.com`** — the domain the id is built from,
-  not `trebeljahr.com`.
-- In the Flatpak, open at login is unsupported and the in-app updater is off,
-  the same as in the stores. In both, desktop activity capture is off and
-  cannot be turned on (`activityCaptureSupport` → `linux-sandbox`), so neither
-  listing offers it.
-- **There is no arm64 snap, so only the x64 leg publishes one.**
-  electron-builder assembles the snap from a prebuilt template published for
-  amd64 and armhf only; on arm64 it falls back to real snapcraft, which refuses
-  the template's `base: core20`. The base cannot move on its own — see
-  `electron-builder.config.mjs` → `snap` and "What the first tag run showed"
-  above. An arm64 snap needs a hand-written `snapcraft.yaml`. The Snap Store
-  step is therefore scoped to `linux-x64`: `snap-publish.mjs` requires exactly
-  one `.snap` and would fail a leg that builds none.
+- The snap is packed by `snapcraft pack --destructive-mode` on the runner, from
+  the deb the same run built (`packaging/snap/snapcraft.yaml.template`): base
+  core24 — what an Ubuntu 24.04 runner is — with the GNOME extension, whose
+  content snap carries WebKitGTK 4.1. Both Linux legs build one, since the
+  arm64 runner is native too. **This path has not run in CI yet**; if the
+  first tag run fails there, remove `snap` from the matrix `args` and the leg
+  builds everything else.
+- On a `v*` tag each Linux leg runs `scripts/snap-publish.mjs`, which uploads
+  its snap to the Snap Store's **`candidate`** channel — and only when
+  `SNAPCRAFT_STORE_CREDENTIALS` is set. Unset is a notice and a green leg.
+  `snapcraft release … stable` is a person's step, after the draft release is
+  published. The draft release attaches no snap.
+- Flathub builds from `packaging/flatpak/`, rendered by Desktop Manifests: the
+  release's tar.gz (the executable, its desktop entry, icon and licence) on the
+  GNOME runtime, with the AppIndicator from Flathub's shared modules. The app
+  id is `com.ricoslabs.trackyourtime`.
+- In the Flatpak and the snap, open at login is unsupported (Flatpak) or goes
+  through the snap's autostart, and the in-app updater is off. In both, desktop
+  activity capture is off and cannot be turned on, so neither listing offers
+  it.
 
 ### Homebrew
 
@@ -1799,13 +1871,10 @@ The short version:
    manifests with real checksums, uploads them as an artifact, commits
    `Casks/track-your-time.rb` to the tap, and — with `WINGET_PKGS_TOKEN` set —
    opens the winget pull request. A family whose release files are missing (an
-   unsigned leg attaches none) is skipped with a notice, so one unsigned
-   platform never costs another its manifest.
+   unsigned leg attaches none) is skipped with a notice.
 3. Install with `brew install --cask <owner>/tap/track-your-time`. The cask
    says `auto_updates true`, because the app updates itself; `brew upgrade`
-   then skips it unless run with `--greedy`. The official
-   `homebrew/cask` repository has notability requirements for new casks, so
-   the tap comes first.
+   then skips it unless run with `--greedy`.
 
 Locally, the same rendering is
 `node scripts/desktop-manifests.mjs --artifacts <folder with the release files> --out manifests`.

@@ -68,10 +68,10 @@ build before anything resolves them — hence the ordering in `pnpm run build`.
 | `e2e/` | Playwright suite: 10 specs, `helpers.ts`, `db-utils.ts`, `serve-static.mjs`, `start-server.sh` (starts its own Mongo/Redis outside CI) |
 | `docs/` | `deploy.md` (the production topology) and `dev-setup.md` (a Tailscale/Caddy dev-URL guide that needs a private CLI) |
 | `scripts/` | Root tooling: `dev.mjs` (port resolution for `dev` / `dev:auto` / `dev:fixed`), `extension-id.mjs` + `lib/`, icon scripts, `newsletter-*.ts`, mobile dev shells |
-| `electron/` | `src/` — main process split by concern (`protocol.ts` serves the export on `app://-`, `window.ts`, `ipc.ts` with sender checks, `security.ts`, `secure-store.ts` for the session token, `desktop.ts` wiring the tray, shortcuts, settings and notifications, `distribution.ts` for which channel installed the app, `updater-model.ts` and `updater.ts` for electron-updater) and `preload.ts`; pure modules have `*.test.ts` beside them. Bundled by `scripts/build-desktop.mjs` into `dist/`, packaged by `electron-builder.config.mjs`, released by `.github/workflows/desktop-release.yml` |
+| `desktop/` | The desktop app, Tauri 2 (releases up to 0.3.0 were Electron). One Cargo workspace: `crates/wire` (serde mirrors of `packages/shared/src/desktop-bridge.ts`, with a contract test against the TypeScript), `crates/model` (the pure decisions: tray, updater, settings, shortcuts, windows, trust, CSP, profile, secure store), `crates/activity` (desktop activity capture and Autopilot) and `src-tauri`, the app: `protocol.rs` serves the export, embedded in the binary, on `app://-` (`http://app.localhost` on Windows), `bridge.js` installs `window.electronAPI` before any page script, `ipc.rs` checks the sender of every bridge call, `secure.rs` encrypts the session token under a key the OS keychain holds, `platform.rs` binds the tray, shortcuts and notifications, `updater.rs` binds tauri-plugin-updater, and `legacy.rs` / `migrate.rs` carry an Electron install's data over. `PORTING.md` in each crate maps it to the TypeScript it replaced. Built by `scripts/build-desktop.mjs`, tested by `pnpm test:desktop` and `pnpm test:e2e:desktop`, released by `.github/workflows/desktop-release.yml` |
 | `packaging/` | Templates for the Homebrew cask, winget and Flathub manifests, filled from a published release by `scripts/desktop-manifests.mjs` |
 | `emails/` | `welcome.html` and `digest-sample.html`, used by the `newsletter:*` scripts |
-| `resources/`, `build/` | Source images for mobile asset generation, and electron-builder's `buildResources` (`build/icon.png`) |
+| `resources/`, `build/` | Source images for mobile asset generation, and the desktop build's inputs: `build/icon.png`, the macOS Icon Composer icon (`AppIcon.icon`), the Microsoft Store tiles (`appx/`), the macOS entitlements, the Windows installer hooks and the Linux desktop entry and pre-install script. The update key's public half, `build/updater.pub`, is committed here once the key exists (`docs/deploy.md` → "The update key") |
 | `docker-compose.dev.yml` | Local infra only — Mongo 27017, Redis 6379. No app containers |
 | `docker-compose.server.yml` / `.client.yml` | Production. One service each, named `server` and `client` — **the service names are load-bearing** (see `docs/deploy.md`) |
 | `docker-compose.yml` | The legacy single-app layout. Kept for reference; don't build on it |
@@ -226,7 +226,7 @@ how that session travels.
 | Client | How the session travels |
 |---|---|
 | Web app | Cookie. `packages/client/src/lib/auth-client.ts` |
-| Desktop and phone apps, browser extension, Raycast, CLI | The same session token as `Authorization: Bearer <token>`, and as the `bearer.<token>` WebSocket subprotocol. The desktop app keeps it in `safeStorage`, the phones in the Keychain or Keystore |
+| Desktop and phone apps, browser extension, Raycast, CLI | The same session token as `Authorization: Bearer <token>`, and as the `bearer.<token>` WebSocket subprotocol. The desktop app keeps it in `session.bin`, encrypted under a key the OS keychain holds; the phones in the Keychain or Keystore |
 
 The `bearer` plugin in `packages/server/src/auth/auth.ts` resolves the header
 before `getSession()` runs, so by the time a request reaches `createContext` a

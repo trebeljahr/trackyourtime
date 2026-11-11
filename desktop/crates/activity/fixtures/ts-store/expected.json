@@ -1,0 +1,203 @@
+{
+ "key": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+ "userId": "user-1",
+ "origin": "https://api.example.test",
+ "account": "c7c24c3094693da0877df3e1868e547a37c42ed70957f39fe8d0225d580204d5",
+ "plain": {
+  "state": {
+   "v": 1,
+   "settings": {
+    "enabled": true,
+    "storeTitles": true,
+    "excludedApps": [
+     "com.example.never"
+    ],
+    "retentionDays": 30,
+    "autopilot": true,
+    "autopilotStartMinutes": 10
+   },
+   "scope": "user-1:workspace-1",
+   "rules": [
+    {
+     "id": "rule-1",
+     "pattern": "com.figma.*",
+     "description": "Website redesign",
+     "projectId": "p-web",
+     "taskId": null,
+     "tagIds": [
+      "t1"
+     ],
+     "billable": true,
+     "scope": "user-1:workspace-1",
+     "createdAt": 1792367400000
+    },
+    {
+     "id": "rule-2",
+     "pattern": "com.microsoft.vscode",
+     "projectId": null,
+     "scope": "user-1:workspace-1",
+     "createdAt": 1792367400001
+    }
+   ],
+   "dismissals": [
+    {
+     "scope": "user-1:workspace-1",
+     "start": 1792367520000,
+     "end": 1792367580000
+    }
+   ],
+   "autopilotOwned": {
+    "scope": "user-1:workspace-1",
+    "start": 1792367700000,
+    "filingKey": "[\"website redesign\",\"p-web\",null]",
+    "app": {
+     "key": "com.figma.desktop",
+     "name": "Figma"
+    },
+    "via": "rule",
+    "logId": "log-1"
+   },
+   "autopilotPause": {
+    "account": "user-1:",
+    "until": 1792371000000
+   }
+  },
+  "open": {
+   "scope": "user-1:workspace-1",
+   "key": "com.google.chrome",
+   "name": "Chrome",
+   "label": "Docs",
+   "start": 1792368960000,
+   "lastSeen": 1792369080000
+  },
+  "segments": [
+   {
+    "scope": "user-1:workspace-1",
+    "source": "desktop",
+    "start": 1792367400000,
+    "end": 1792367700000,
+    "key": "com.figma.desktop",
+    "name": "Figma",
+    "label": "Café — Grüße 😀",
+    "afk": false
+   },
+   {
+    "scope": "user-1:workspace-1",
+    "source": "desktop",
+    "start": 1792367700000,
+    "end": 1792368900000,
+    "key": "com.microsoft.vscode",
+    "name": "Code",
+    "afk": false
+   },
+   {
+    "scope": "user-1:workspace-2",
+    "source": "desktop",
+    "start": 1792369200000,
+    "end": 1792369260000,
+    "key": "a.b",
+    "name": "A",
+    "afk": false
+   }
+  ]
+ },
+ "encrypted": {
+  "state": {
+   "v": 1,
+   "settings": {
+    "enabled": true,
+    "storeTitles": true,
+    "excludedApps": [
+     "com.example.never"
+    ],
+    "retentionDays": 30,
+    "autopilot": true,
+    "autopilotStartMinutes": 10
+   },
+   "scope": "user-1:workspace-1",
+   "rules": [
+    {
+     "id": "rule-1",
+     "pattern": "com.figma.*",
+     "description": "Website redesign",
+     "projectId": "p-web",
+     "taskId": null,
+     "tagIds": [
+      "t1"
+     ],
+     "billable": true,
+     "scope": "user-1:workspace-1",
+     "createdAt": 1792367400000
+    },
+    {
+     "id": "rule-2",
+     "pattern": "com.microsoft.vscode",
+     "projectId": null,
+     "scope": "user-1:workspace-1",
+     "createdAt": 1792367400001
+    }
+   ],
+   "dismissals": [
+    {
+     "scope": "user-1:workspace-1",
+     "start": 1792367520000,
+     "end": 1792367580000
+    }
+   ],
+   "autopilotOwned": {
+    "scope": "user-1:workspace-1",
+    "start": 1792367700000,
+    "filingKey": "[\"website redesign\",\"p-web\",null]",
+    "app": {
+     "key": "com.figma.desktop",
+     "name": "Figma"
+    },
+    "via": "rule",
+    "logId": "log-1"
+   },
+   "autopilotPause": {
+    "account": "user-1:",
+    "until": 1792371000000
+   }
+  },
+  "open": {
+   "scope": "user-1:workspace-1",
+   "key": "com.google.chrome",
+   "name": "Chrome",
+   "label": "Docs",
+   "start": 1792368960000,
+   "lastSeen": 1792369080000
+  },
+  "segments": [
+   {
+    "scope": "user-1:workspace-1",
+    "source": "desktop",
+    "start": 1792367400000,
+    "end": 1792367700000,
+    "key": "com.figma.desktop",
+    "name": "Figma",
+    "label": "Café — Grüße 😀",
+    "afk": false
+   },
+   {
+    "scope": "user-1:workspace-1",
+    "source": "desktop",
+    "start": 1792367700000,
+    "end": 1792368900000,
+    "key": "com.microsoft.vscode",
+    "name": "Code",
+    "afk": false
+   },
+   {
+    "scope": "user-1:workspace-2",
+    "source": "desktop",
+    "start": 1792369200000,
+    "end": 1792369260000,
+    "key": "a.b",
+    "name": "A",
+    "afk": false
+   }
+  ]
+ },
+ "encryptedSegmentsAfterAppend": 3
+}

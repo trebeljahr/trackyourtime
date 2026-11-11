@@ -5,11 +5,14 @@
  * the percentage through `rewriteFeed`, so the two cannot disagree about what
  * a feed says.
  *
- * electron-updater reads `stagingPercentage` from the feed (`latest.yml`,
- * `latest-mac.yml`, `latest-linux*.yml`) and offers the update only when
+ * Two readers, one rule. The Tauri app reads `stagingPercentage` from
+ * `latest.json`, and every Electron install still reads it from `latest.yml`,
+ * `latest-mac.yml` and `latest-linux*.yml`; both offer the update only when
  * `lastFourBytesOf(<userData>/.updaterId) / 0xffffffff < percentage / 100`
- * (`AppUpdater.isStagingMatch`, electron-updater 6.8.9). Three consequences
- * the rules below are built on:
+ * (electron-updater 6.8.9's `AppUpdater.isStagingMatch`, which
+ * `tyt_model::updater_model::is_staging_match` ports byte for byte, reading
+ * the same file — `offeredTo` below is the same rule once more, for the
+ * tests). Three consequences the rules below are built on:
  *
  *   - The id is random per install and never changes, so raising 10 → 50
  *     keeps the first 10 % in and adds 40 % more. Lowering takes nobody back:
@@ -17,16 +20,16 @@
  *   - `0` offers the update to nobody.
  *   - An explicit `100` is NOT everybody: `x < 1` is false for the one id in
  *     2^32 whose last four bytes are all 0xff. A full rollout therefore removes
- *     the key, which is what "no staging" means to electron-updater.
+ *     the key, which is what "no staging" means to both readers.
  *
- * The feed is edited as text, one top-level line, and never re-serialised:
- * every other byte — above all each file's sha512 and size, which
- * `feedProblems` checks and the updater verifies — stays exactly as
- * electron-builder wrote it. `rewriteFeed` proves that by parsing both
- * versions and comparing everything but the key.
+ * A feed is edited as text, one line, and never re-serialised: every other
+ * byte — above all each file's sha512 and size in the YAML feeds and each
+ * signature in latest.json, which the updaters verify — stays exactly as it
+ * was written. `rewriteFeed` proves that by parsing both versions and
+ * comparing everything but the key.
  */
 
-/** The top-level key electron-updater reads. */
+/** The top-level key both updaters read. */
 export const STAGING_KEY = "stagingPercentage";
 
 /**
@@ -86,17 +89,22 @@ function withoutKey(feed) {
 }
 
 /**
- * Rewrite one feed and prove the rewrite. Throws, naming the file, when the
- * input does not parse as an update feed (a mapping with a `version` and a
- * non-empty `files` list), or when the output parses to anything but the input
+ * Rewrite one feed and prove the rewrite: `latest.json` by its name, every
+ * other feed as electron-updater YAML. Throws, naming the file, when the input
+ * does not parse as an update feed (a `version` and a non-empty `files` list,
+ * or `platforms` map), or when the output parses to anything but the input
  * with the new percentage.
  *
  * @param {{ name: string, text: string, percent: number | null, parse: (text: string) => unknown }} input
- *   `parse` is electron-updater's own js-yaml `load`, so the feed is read the
- *   way installed apps read it.
+ *   `parse` is js-yaml's `load`, the parser electron-updater reads the
+ *   feed with, so the feed is read the way installed Electron apps read it.
  * @returns {{ text: string, before: number | null, after: number | null }}
  */
 export function rewriteFeed({ name, text, percent, parse }) {
+  return name.endsWith(".json") ? rewriteJsonFeed({ name, text, percent }) : rewriteYamlFeed({ name, text, percent, parse });
+}
+
+function rewriteYamlFeed({ name, text, percent, parse }) {
   let feed;
   try {
     feed = parse(text);
@@ -123,14 +131,87 @@ export function rewriteFeed({ name, text, percent, parse }) {
   return { text: next, before, after };
 }
 
+/**
+ * latest.json with its `stagingPercentage` set to `percent`, or removed for
+ * null. The key is the object's FIRST member (`tauriFeedText` writes it
+ * there), so adding, changing or removing it is one line with its own comma,
+ * and no other line changes. The text is otherwise re-serialised the way it
+ * was written (two-space JSON), and `rewriteJsonFeed` refuses unless that
+ * reproduces every other line exactly.
+ */
+export function setStagingPercentageJson(text, percent) {
+  const feed = JSON.parse(text);
+  const rest = { ...feed };
+  delete rest[STAGING_KEY];
+  const next = percent === null ? rest : { [STAGING_KEY]: percent, ...rest };
+  return `${JSON.stringify(next, null, 2)}\n`;
+}
+
+const isStagingLine = (line) => new RegExp(`^\\s*"${STAGING_KEY}"\\s*:`).test(line);
+
+function rewriteJsonFeed({ name, text, percent }) {
+  let feed;
+  try {
+    feed = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${name} does not parse as JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (!isPlainObject(feed) || typeof feed.version !== "string" || !isPlainObject(feed.platforms) || Object.keys(feed.platforms).length === 0) {
+    throw new Error(`${name} is not an update feed (no version or no platforms).`);
+  }
+  const before = feed[STAGING_KEY] === undefined ? null : feed[STAGING_KEY];
+  if (before !== null && typeof before !== "number") {
+    throw new Error(`${name} has a ${STAGING_KEY} that is not a number: ${JSON.stringify(before)}.`);
+  }
+  const next = setStagingPercentageJson(text, percent);
+  const reparsed = JSON.parse(next);
+  const after = reparsed[STAGING_KEY] === undefined ? null : reparsed[STAGING_KEY];
+  if (after !== percent) {
+    throw new Error(`${name}: after the rewrite ${STAGING_KEY} reads ${JSON.stringify(after)}, expected ${JSON.stringify(percent)}.`);
+  }
+  const others = (t) => t.split("\n").filter((line) => !isStagingLine(line));
+  if (JSON.stringify(others(next)) !== JSON.stringify(others(text)) || JSON.stringify(withoutKey(reparsed)) !== JSON.stringify(withoutKey(feed))) {
+    throw new Error(`${name}: the rewrite changed more than ${STAGING_KEY}. Nothing was written.`);
+  }
+  return { text: next, before, after };
+}
+
+/**
+ * Whether a feed offers its release to the install with this `.updaterId`:
+ * electron-updater 6.8.9's `isStagingMatch`, which the Tauri app ports
+ * (`tyt_model::updater_model::is_staging_match`). No percentage, or one that
+ * does not parse, offers it to everybody.
+ */
+export function offeredTo(feed, updaterId) {
+  const percentage = Number.parseInt(feed?.[STAGING_KEY], 10);
+  if (Number.isNaN(percentage)) return true;
+  return stagingBucket(updaterId) < percentage / 100;
+}
+
+/**
+ * Where an install falls in a rollout, from 0 to 1: the id's last four bytes
+ * as a big-endian number over 0xffffffff (builder-util-runtime's
+ * `UUID.parse(id).readUInt32BE(12)`, which reads lower-case hex only — an
+ * upper-case pair is 0, here as there).
+ */
+export function stagingBucket(updaterId) {
+  const hex = String(updaterId).replace(/-/g, "").slice(24, 32);
+  let value = 0;
+  for (let i = 0; i < 8; i += 2) {
+    const pair = hex.slice(i, i + 2);
+    value = value * 256 + (/^[0-9a-f]{2}$/.test(pair) ? Number.parseInt(pair, 16) : 0);
+  }
+  return value / 0xffffffff;
+}
+
 /** A release tag as the desktop workflow builds it. */
 export function isReleaseTag(tag) {
   return /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag);
 }
 
-/** The update feeds among a release's asset names. */
+/** The update feeds among a release's asset names: the Tauri one and the Electron ones. */
 export function feedAssetNames(names) {
-  return names.filter((name) => /^latest.*\.yml$/.test(name)).sort();
+  return names.filter((name) => /^latest.*\.yml$/.test(name) || name === "latest.json").sort();
 }
 
 /**

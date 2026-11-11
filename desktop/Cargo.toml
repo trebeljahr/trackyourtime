@@ -1,0 +1,12 @@
+# The desktop app: the Tauri shell and the pure crates it binds.
+# One lockfile and one target directory (desktop/target) for all of them.
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/wire", "crates/model", "crates/activity"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+panic = "abort"

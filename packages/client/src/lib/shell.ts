@@ -1,6 +1,7 @@
 import {
   ANDROID_APP_ORIGIN,
   DESKTOP_APP_ORIGIN,
+  DESKTOP_APP_ORIGIN_WINDOWS,
   IOS_APP_ORIGIN,
   type EntrySource,
 } from "@starter/shared";
@@ -9,7 +10,8 @@ import {
  * Which host this export is running in, split by what a caller means.
  *
  * One static export runs in a browser, an installed PWA, the Capacitor phone
- * shells and the Electron desktop app. The old single `isNative()` meant
+ * shells and the desktop app (Tauri; the names below say "Electron", which it
+ * was until 2026-11). The old single `isNative()` meant
  * three different things at once — "phone UI", "no cookie jar, use the bearer
  * token" and "WKWebView storage and radio" — and the desktop app wants only
  * the second. So there is one predicate per meaning, and no ambiguous one:
@@ -24,7 +26,7 @@ import {
  *
  * All synchronous reads of globals the shell injects before any app script
  * runs (`window.Capacitor` at document start, `window.electronAPI` from the
- * preload), so the answer is right on the first call. Every one of them is
+ * desktop shell's initialization script), so the answer is right on the first call. Every one of them is
  * `false` while prerendering in Node: never branch a first render on them —
  * use `hooks/use-shell.ts`, which hydrates as the web tree.
  */
@@ -78,7 +80,7 @@ export function entrySource(): EntrySource {
  * value to copy.
  */
 export function shellTrustedOrigins(): string {
-  if (isElectron()) return DESKTOP_APP_ORIGIN;
+  if (isElectron()) return window.electronAPI?.platform === "win32" ? DESKTOP_APP_ORIGIN_WINDOWS : DESKTOP_APP_ORIGIN;
   return `${IOS_APP_ORIGIN},${ANDROID_APP_ORIGIN}`;
 }
 

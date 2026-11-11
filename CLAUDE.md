@@ -166,7 +166,7 @@ reload from `packages/shared/src` intact).
 ## How to Test
 
 ```bash
-pnpm run test:unit                    # server unit tests (node:test)
+pnpm run test:unit                    # core, Raycast, server, MCP, extension and desktop (Rust) unit tests
 pnpm run test:client                  # client unit tests (Vitest)
 pnpm --filter @starter/extension test  # extension unit tests (Vitest, fake chrome)
 pnpm run test:e2e                     # Playwright E2E tests
@@ -174,177 +174,327 @@ pnpm run test:e2e:export              # built export stays styled after hydratio
 pnpm run build                        # build all packages
 ```
 
-## Desktop (Electron) + Mobile (Capacitor)
+## Desktop (Tauri) + Mobile (Capacitor)
 
 All native targets wrap the Next.js client as a **static export** (`output: "export"`).
 The Express server is always remote — the client talks to it over HTTPS.
 
-Electron is the one desktop wrapper. The Tauri scaffold the starter shipped
-was deleted on 2026-09-16 (`docs/desktop-app-plan.md`, answer 5).
+Tauri 2 is the one desktop wrapper since 2026-11-12. Releases up to 0.3.0
+were Electron; its main process was ported to Rust with feature parity,
+because Electron's bundled Chromium links CoreLocation and macOS lists every
+Electron app under Location Services (`docs/desktop-app-plan.md` → "the shell
+moved to Tauri 2"). The next desktop release is the first Tauri one.
 
-### Desktop (Electron)
+### Desktop (Tauri)
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:51591 pnpm electron:preview  # export + bundle + unpacked app in release/
-NEXT_PUBLIC_API_URL=… pnpm build:desktop  # export (out-desktop) + electron/dist, no packaging
-pnpm electron:build                   # the same, then electron-builder → dmg/zip/exe/AppImage
-pnpm dev:desktop                      # Next dev on 7130 + Electron window (UI iteration only)
+NEXT_PUBLIC_API_URL=http://localhost:51591 pnpm build:desktop  # export + release build → unpacked app in release/ (mac-arm64/, win-unpacked/, linux-unpacked/)
+NEXT_PUBLIC_API_URL=… pnpm desktop:package  # the same, then this host's installers, unsigned, into release/
+NEXT_PUBLIC_API_URL=http://127.0.0.1:59999 node scripts/build-desktop.mjs --export-only  # out-desktop only; cargo cannot compile the app without one
+pnpm dev:desktop                      # Next dev on 7130 + the debug app loading it (UI iteration only)
 pnpm prod:desktop                     # unpacked app against api.trackyourtime.dev, then opens it
-pnpm test:electron                    # node:test over electron/src (part of test:unit)
-pnpm test:e2e:desktop                 # Playwright _electron harness; own mongod + API
-pnpm electron:ensure                  # download the Electron binary if it is missing
-pnpm icons:desktop                    # regenerate icns/ico from build/icon.png
-node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64  # a release leg, locally
+pnpm test:desktop                     # cargo test --workspace (about 430 tests) + the activity conformance check; part of test:unit
+pnpm typecheck:desktop                # cargo check of the workspace, then the app with --features e2e,mas; part of typecheck
+pnpm test:e2e:desktop                 # Playwright runner over the app's e2e control channel; own mongod + API
+pnpm icons:desktop                    # regenerate desktop/src-tauri/icons from build/icon.png
+node scripts/build-desktop.mjs --channel mac --package --arch arm64  # a release leg, locally
 node scripts/desktop-release-draft.mjs --artifacts <dir> --out <dir>         # what a tag attaches to the draft
 pnpm desktop:rollout v1.4.0 25        # offer a published release to 25 % of installs; 0 halts, 100 finishes
 pnpm desktop:mas-upload [--dry-run]   # validate + upload the newest signed Mac App Store pkg (docs/deploy.md)
 ```
 
+Everything that compiles the app needs Rust (`rust-version = "1.90"` in
+`desktop/src-tauri/Cargo.toml`, `https://rustup.rs`), and Linux also needs the
+packages the workflows install:
+
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf
+```
+
+`desktop-cargo.mjs` and `dev-desktop.mjs` say how to build the export cargo
+needs when there is none.
+
+`desktop/` is one Cargo workspace with one lockfile and one target directory
+(`desktop/target`, or `CARGO_TARGET_DIR`): `crates/wire` (serde mirrors of
+`packages/shared/src/desktop-bridge.ts`; `tests/contract.rs` reads the
+TypeScript and fails when a channel exists on one side only), `crates/model`
+(the pure decisions — tray, updater, settings, shortcuts, windows, trust, CSP,
+profile, secure store — and the desktop and updater controllers over platform
+traits), `crates/activity` (capture and Autopilot) and `src-tauri` (the app,
+which binds them to the OS). `desktop/crates/*/PORTING.md` map every module to
+the TypeScript it replaced and list the rules the shell must keep.
+
 `build/icon.png` is generated — run `pnpm icons:brand` to re-derive it (and
-every other shipped bitmap) from `packages/client/public/brand/mark-tile.svg`,
-then `pnpm icons:desktop` to fan it out to icns/ico. Do not hand-edit it. The macOS
-icon is not that icns: `mac.icon` is `build/AppIcon.icon`, an Icon Composer
-document `icons:brand` also writes, compiled by electron-builder with Xcode 26's
-actool into `Assets.car` — so packaging a Mac build needs Xcode 26, and
-`build-desktop.mjs` fails a mac/mas app without the compiled icon.
+every other shipped bitmap, the tray icons in `desktop/src-tauri/icons/tray/`
+included) from `packages/client/public/brand/mark-tile.svg`, then
+`pnpm icons:desktop` to fan it out to `desktop/src-tauri/icons/` (exactly the
+files `bundle.icon` lists). Do not hand-edit them. The macOS 26 icon is not
+that icns: `build/AppIcon.icon`, an Icon Composer document `icons:brand` also
+writes, is compiled by `build-desktop.mjs` with Xcode 26's `actool` into
+`Assets.car` and named by `CFBundleIconName`, and `icon.icns` stays beside it
+for macOS 12–15. So packaging on a Mac needs Xcode 26, and the build fails a
+mac/mas app without both.
 
 The plan and its measured corrections are `docs/desktop-app-plan.md`. What is
 built, and the rules that fail quietly if broken:
 
-- **The packaged app serves the export from `app://-`** (`electron/src/protocol.ts`,
-  a privileged standard scheme), resolving paths like `serve.mjs`
-  (`resolve-app-path.ts`, unit-tested). Never `file://`: that origin is `null`,
-  sign-in answers 403 `MISSING_OR_NULL_ORIGIN`, and every route but `/` blanks.
-  **Never change the scheme or host** — the origin keys `localStorage` (the
-  offline queue) and every server's `TRUSTED_ORIGINS`.
+- **The export is embedded in the binary and served from `app://-`**
+  (`desktop/src-tauri/src/protocol.rs`): a user-registered `app` URI scheme,
+  which Tauri treats as local, so IPC works with no remote capability. On
+  Windows the same handler answers as `http://app.localhost`, because WebView2
+  cannot give a custom scheme a host of its own. `tauri.conf.json` →
+  `frontendDist` embeds `packages/client/out-desktop` at compile time, and
+  `build.rs` refuses to compile without one (`.build-target.json` is its rerun
+  trigger, so a new export reaches the next cargo build). Paths resolve like
+  `serve.mjs` (`tyt_model::resolve_app_path`: exact lookups, no SPA fallback,
+  which is why `lib.rs` hands the embedded assets to this handler and gives
+  Tauri's own resolver only a view of them), and HTML gets the CSP as a
+  response header (`tyt_model::csp`), so the web export's bytes are
+  untouched. The CSP must keep `ipc: http://ipc.localhost`,
+  Tauri's IPC transport: without it every bridge call fails while the page
+  looks fine. Never `tauri://localhost` or `file://` (origin `null`, sign-in
+  answers 403 `MISSING_OR_NULL_ORIGIN`). **Never change the scheme or host** —
+  the origin keys `localStorage` (the offline queue) and every server's
+  `TRUSTED_ORIGINS`. Both origins are `DESKTOP_APP_ORIGINS` in
+  `desktop-bridge.ts` and in `STORE_APP_ORIGINS`; a self-hoster with an
+  explicit `TRUSTED_ORIGINS` must list `http://app.localhost` for Windows too.
 - **Own export directory, `packages/client/out-desktop`,** written only by
   `scripts/build-desktop.mjs`, which requires `NEXT_PUBLIC_API_URL`, asserts
   it is in a chunk, refuses `"./_next` in any HTML and refuses while a dev
-  server owns `.next`. There is no `assetPrefix` anywhere any more.
-- **Main and preload are esbuild bundles in `electron/dist/`**; the package
-  holds only those, the export and package.json (`electron-builder.config.mjs`
-  `files`, with `!node_modules/**` — electron-builder otherwise packs the root
-  `dependencies`, which are the Capacitor plugins). The build lists the asar and
-  fails on anything else.
-- **Electron 42 has no install script.** The binary downloads on first
-  `require("electron")`; `scripts/ensure-electron.mjs` does it explicitly and
-  detects the truncated extraction Node 26 leaves behind (use Node 24).
-- **`window.electronAPI`'s type is `DesktopBridge` in
-  `packages/shared/src/desktop-bridge.ts`**, imported by the preload and by
-  `types/electron.d.ts`, with the IPC channel names beside it.
-- **Every IPC handler registers through `handle()` in `ipc.ts`,** which refuses
-  a sender frame outside `app://-` (or the dev URL, unpackaged only). A packaged
-  app ignores `ELECTRON_DEV_URL`.
-- **Security baseline** (`security.ts`): navigation and `window.open` never
-  leave the app origin (http(s) goes to the OS browser), no `<webview>`, every
-  permission denied but notifications; a CSP response header on HTML
-  (`csp.ts`, so the web export is untouched); `devTools: false` and no
-  Reload/DevTools menu items outside dev; fuses (RunAsNode, NODE_OPTIONS and
-  `--inspect` off, asar integrity and only-load-from-asar on). The inspector
-  fuse means Playwright's `_electron.launch` cannot drive a **packaged** build
-  (it times out); drive it with `--remote-debugging-port` and
-  `chromium.connectOverCDP`, or use the harness, which runs the same
-  `electron/dist/main.js` unpackaged.
+  server owns `.next`. There is no `assetPrefix` anywhere any more. After
+  packaging it checks the version inside every package (Info.plist, the deb's
+  and rpm's fields, the bundler's file names) against the root `package.json`,
+  and on a tag run the tag against it.
+- **The renderer contract did not change.** `window.electronAPI` (type
+  `DesktopBridge` in `packages/shared/src/desktop-bridge.ts`, declared for the
+  client in `types/electron.d.ts`) is installed by `src-tauri/src/bridge.js` as
+  an initialization script, before any page script, and only in the top-level
+  document of the app origin (or the dev server). `isElectron()`,
+  `html.electron`, `shell: "electron"` and `electronAPI` keep their
+  Electron-era names on purpose, so the web app did not change. `bridge.rs`'s
+  tests fail when `bridge.js` names a channel the shell does not know.
+- **The bridge does three things Electron did for free.** It keeps the page
+  visible while the window is hidden: `visibilityState` reads `"visible"`,
+  `hidden` reads `false`, and the WebView's `visibilitychange` is swallowed.
+  Electron's `backgroundThrottling: false` covered the Page Visibility API, and
+  the renderer pauses private-workspace sync and idle work for a hidden
+  document. It drags the window: a mousedown on `[data-window-drag]`, or on a
+  macOS screen without one in the top 40px, calls `start_dragging` (a double
+  click toggles maximize) and skips controls, overlays and an open modal — no
+  system WebView reads `-webkit-app-region`. And it writes the Electron build's
+  localStorage before any page script runs (below).
+- **Background throttling is off** (`window.rs`,
+  `BackgroundThrottlingPolicy::Disabled`): the hidden window is where the
+  timer, the offline queue, the sync socket and Autopilot's driver run, and
+  WebKit's default policy throttles and then suspends a hidden page. It takes
+  effect on macOS 14 and later; on 12 and 13 the hidden page is still paused
+  after a few minutes (`docs-site/docs/desktop.md` → Limits).
+- **`harden.js` removes `navigator.geolocation` in every frame,** before any
+  other script. WKWebView would leave a location request pending, and the move
+  off Electron was about Location Services listing the app. The signed mac leg
+  of `desktop-release.yml` fails a binary that links CoreLocation (`otool -L`).
+- **Every bridge call is `desktop_call(channel, args)`, and `ipc.rs` refuses
+  it** unless it comes from the main window's own document — the app origin,
+  or the dev server in a dev run. The initialization script runs per
+  navigation, not per origin, so a window that ever showed something else must
+  not hold a working bridge. `capabilities/main.json` grants the app's commands
+  plus `start_dragging` and `internal_toggle_maximize` to the main window only.
+  `TRACKYOURTIME_DEV_URL` is read by debug builds only (`lib.rs`), where
+  `shell.rs` adds a runtime capability for that origin; a release build ignores
+  it, or anything able to set an environment variable could load a page of its
+  choosing with the bridge.
+- **Security baseline** (`window.rs`, `tyt_model::trust`): navigation and new
+  windows never leave the app origin (http(s) and mailto go to the OS through
+  `external.rs`, anything else is refused), every web permission is denied but
+  notifications, devtools exist only in a dev run, and no menu has a reload or
+  inspector item (macOS gets an app menu whose Edit roles make copy and paste
+  work; Windows and Linux get none). `shell.spec.ts` reads WebKit's
+  inspectable state rather than opening an inspector. Downloads
+  (`downloads.rs`): a system WebView cancels an `<a download>` silently without
+  a handler, so every CSV, PDF and invoice export goes to the Downloads folder
+  under the name the page suggests, made unique; headless into
+  `<profile>/downloads`.
 - **`html.electron` + `data-platform`** are set pre-paint
   (`DESKTOP_SHELL_SCRIPT` in `app/pre-paint.ts`) and style only window chrome in
-  `styles/desktop.css`: `[data-window-drag]` (the app header) is the drag region,
-  and on macOS `[data-window-inset]` (the sidebar brand row) clears the traffic
-  lights of the title-bar-less window. Never `html.cap` — that means phone.
-- **Tests and agents run headless: `TRACKYOURTIME_HEADLESS=1`**
-  (`electron/src/headless.ts`). The window is never shown or focused, and on
-  macOS the app uses the accessory activation policy with no Dock icon, so a
-  launch never steals focus or flashes across the screen of whoever is using
-  the machine. `e2e/desktop/support.ts` sets it on every launch and a spec
-  asserts it. Launch the packaged binary with it too; never `open` the `.app`.
-  A hidden window keeps painting (`paintWhenInitiallyHidden`), but reading a
-  frame back OUT of one is per platform: on macOS it keeps a compositor
-  surface whatever its ordering, so `page.screenshot()` and `capturePage()`
-  work and a headless run can be screenshotted. On X11 an unmapped window has
-  no surface to copy from and the capture hangs until the caller times out —
-  so the paint assertion in `e2e/desktop/shell.spec.ts` does not run on Linux,
-  and the Linux smoke test runs the window shown instead (below). The headless
-  contract itself — never shown, never focused, no Dock icon — is asserted on
-  every platform.
-- **One instance per profile** (`requestSingleInstanceLock`); a second launch
-  focuses the first and exits. The profile is pinned by name in `profile.ts`
-  (`trackyourtime` packaged, `trackyourtime-dev` unpackaged, so `dev:desktop`
-  never shares the installed app's lock or offline queue), never derived from
-  package.json. `TRACKYOURTIME_USER_DATA_DIR` moves it (and the lock) — the
-  harness uses it.
+  `styles/desktop.css`: `[data-window-drag]` (the app header) is the drag region
+  (dragged by `bridge.js`; the CSS only stops text selection), and on macOS
+  `[data-sidebar-titlebar]` and `[data-compact-header]`'s padding clear the
+  traffic lights of the title-bar-less window (`TitleBarStyle::Overlay`, lights
+  at 16, 20 in `window.rs`). Never `html.cap` — that means phone.
+- **The main thread never waits on the desktop controller's lock**
+  (`platform.rs`, `shell.rs`). The controller holds its lock while it calls into
+  the platform, and several Tauri calls made there wait for the main thread. So
+  tray clicks, shortcut presses, window events, notification clicks and updater
+  outcomes are posted to a serial executor (`Executor::post`), and no platform
+  method calls the controller back synchronously. Quitting (`request_quit`)
+  runs `before_quit` and `will_quit` on that executor, in Electron's order, then
+  exits. The macOS app menu's Quit is a custom item: the predefined one sends
+  `terminate:`, which ends the event loop with no exit request and skips the
+  unsent-changes notice and install-on-quit. When the loop ends anyway (the
+  Dock menu, logout), `RunEvent::Exit` runs `will_quit` on a helper thread with
+  a 3-second deadline.
+- **Tests and agents run headless: `TRACKYOURTIME_HEADLESS=1`** (`lib.rs`,
+  `shell.rs`, `window.rs`). The window is created hidden and is never shown,
+  focused or put in the taskbar, and on macOS the app uses the accessory
+  activation policy with no Dock icon, so a launch never steals focus or flashes
+  across the screen of whoever is using the machine. Headless also means no
+  tray, OS shortcut, notification, login item, idle monitor or OS browser, the
+  fake activity source and a memory updater. `e2e/desktop/support.ts` sets it
+  on every launch and `shell.spec.ts` asserts the contract on every platform.
+  Launch any build with it; never `open` the `.app`. The harness cannot capture
+  a hidden WebView yet (`e2e.rs` → `screenshot`), so the specs record their
+  screenshots as "not ported", and the Linux smoke test (below) is the proof
+  that the app renders.
+- **One instance per profile** (`instance.rs`): an OS file lock on
+  `<profile>/instance.lock`, which the OS releases when the process dies, plus
+  a loopback TCP hand-over to the port and random token in
+  `<profile>/instance.json` (0600). A second launch passes its arguments to the
+  first (which comes forward or switches window mode) and exits. Not
+  `tauri-plugin-single-instance`, which keys on the bundle id: the harness runs
+  several headless copies side by side, and `dev:desktop` must not hand over to
+  the installed app. The profile is pinned by name (`tyt_model::profile`:
+  `trackyourtime` for a release build, `trackyourtime-dev` for a debug build,
+  `-headless` appended headless) under the base Electron used, never derived
+  from the bundle id or the product name: it is the Electron build's directory,
+  so an update finds every file where it was. `TRACKYOURTIME_USER_DATA_DIR`
+  moves it (and the lock) — the harness uses it. WebView data: on macOS a
+  non-default profile gets its own WebKit data store (`data_store_identifier`,
+  a hash of the path, macOS 14+; the harness deletes test stores); on Windows
+  and Linux it is `<profile>/webview`.
 - **Closing the window hides it** on macOS always, and on Windows and Linux
   only while the tray is on and "Keep running when the window is closed" is
-  (default on for Windows, off for Linux, where GNOME may show no tray icon).
+  (default on for Windows, off for Linux, where GNOME may show no tray icon;
+  `tyt_model::window_policy`, `desktop_settings`). The close handler in
+  `window.rs` keeps the window until the controller has answered
+  `window_close_requested()` on the executor.
 - **The tray and global shortcuts are views of renderer state** (plan Stages 4
-  and 5, `electron/src/desktop.ts`). `DesktopBridgePublisher` in `AppShell`
-  publishes the timer, recents, unsent count and translated labels; commands
-  come back and run through `useEntryMutations`. Headless runs create no tray,
-  register no OS shortcut, post no notification and touch no login item: each
-  is recorded on `globalThis.__trackYourTimeDesktop` for the specs. Shortcut
-  actions and the accelerator grammar are in
-  `packages/shared/src/desktop-shortcuts.ts`, with one default
-  (`CommandOrControl+Alt+Shift+Space`, toggle timer; reasoning in the plan). The
-  toggle rule is `decideTimerToggle` in core, shared with Raycast's
-  `toggle-timer`. Tray icons come from `pnpm icons:brand` into
-  `electron/assets/tray/`.
+  and 5; `tyt_model::desktop_controller`, bound in `platform.rs`).
+  `DesktopBridgePublisher` in `AppShell` publishes the timer, recents, unsent
+  count and translated labels; commands come back and run through
+  `useEntryMutations`. Headless runs create no tray, register no OS shortcut,
+  post no notification and touch no login item: each is recorded on the
+  controller's test hook (the method names of `__trackYourTimeDesktop`), which
+  specs call with `app.hook(name, args)`. Shortcut actions and the accelerator
+  grammar are in `packages/shared/src/desktop-shortcuts.ts`, with one default
+  (`CommandOrControl+Alt+Shift+Space`, toggle timer; reasoning in the plan); the
+  Rust copy of the grammar is `accelerator.rs`. The settings file keeps the
+  canonical spelling, and only the call into `tauri-plugin-global-shortcut`
+  converts it (`tauri_accelerator`, tested against that plugin's own parser); a
+  chord another app holds reads as taken. The toggle rule is
+  `decideTimerToggle` in core, shared with Raycast's `toggle-timer`. Tray icons
+  are compiled into the binary. Windows jump-list tasks are not implemented
+  (`set_user_tasks` returns `false`: Tauri does not wrap
+  `ICustomDestinationList`); `--full-window` and `--compact-timer` still work as
+  launch arguments.
+- **Notifications, open at login and idle are the shell's own code.**
+  Notifications are posted natively (`notify.rs`: mac-notification-sys,
+  notify-rust, tauri-winrt-notification) so a click comes back to the app;
+  `tauri-plugin-notification` reports no clicks on desktop and is not used.
+  Open at login (`login.rs`, mechanism from
+  `tyt_model::distribution::login_item_mechanism`): SMAppService on macOS 13+
+  (it may wait for approval in System Settings), a LaunchAgent on 12, the HKCU
+  `Run` value `com.ricoslabs.trackyourtime` on Windows (the name the Electron
+  build wrote, so an update replaces its entry; not yet checked on a real
+  install), an XDG autostart entry on Linux; unsupported in the Microsoft Store
+  and Flatpak. Idle (`idle.rs`): the OS idle counter every 15 s and the lock
+  state every 2 s; a gap far longer than the poll means the machine slept and
+  is sent as `locked` first.
 - **The desktop app signs in with the phone's bearer path, never a cookie.**
   `lib/shell.ts` splits the old `isNative()` into `isCapacitor()` (phone UI,
-  Preferences storage, the radio), `isElectron()` and `isTokenShell()` (either:
-  bearer token, server picker, running-timer mirror); `hooks/use-shell.ts`
-  hydrates them as web. Never branch phone chrome on `isTokenShell()`. The
-  token is `userData/session.bin`, encrypted by `safeStorage` in the main
-  process (`electron/src/secure-store.ts`) and reached through
-  `electronAPI.secureStore`; on Linux's `basic_text` backend it is refused and
-  kept in memory, and Settings → Devices says so. The auth client sends
-  `credentials: "omit"` in Electron (and on the phone) so the API's cookie
-  never lands in the WebView's jar — a second, silent credential would mask a
-  broken bearer path.
+  Preferences storage, the radio), `isElectron()` (the desktop app) and
+  `isTokenShell()` (either: bearer token, server picker, running-timer mirror);
+  `hooks/use-shell.ts` hydrates them as web. Never branch phone chrome on
+  `isTokenShell()`. The token is `<profile>/session.bin`, AES-256-GCM under a
+  random key the OS keeps (`secure.rs` over the `keyring` crate: the macOS
+  Keychain, the Windows Credential Manager, the Secret Service), reached
+  through `electronAPI.secureStore`. The key is read on first use, never at
+  launch: a Keychain read from a differently signed binary can prompt. With no
+  Secret Service on Linux the store refuses to persist and keeps the token in
+  memory, and Settings → Devices says so (`tyt_model::secure_store`). The auth
+  client sends `credentials: "omit"` in the desktop app (and on the phone) so
+  the API's cookie never lands in the WebView's jar — a second, silent
+  credential would mask a broken bearer path.
 - **"Sign in with your browser"** (`components/browser-sign-in.tsx`) is the
   device flow with client id `trackyourtime-desktop`: the way in for two-factor
   and Google accounts, which the password form cannot finish in a shell.
-- **Headless launches never touch the Keychain or the OS browser.** Headless
-  appends `use-mock-keychain` (measured: no "<name> Safe Storage" item is
-  created, and one is without it), and `openInOs` (`external.ts`) records URLs
-  on `globalThis.__trackYourTimeOpenedExternally` and stdout instead of opening
-  them. A spec that needs the approval URL reads it from there.
-  A headless launch with no `TRACKYOURTIME_USER_DATA_DIR` uses
-  `<profile>-headless`, never the installed app's profile: the mock keychain
-  cannot decrypt its `session.bin`, and the store deletes what it cannot decrypt.
+- **Headless launches never touch the OS secret store or the OS browser.**
+  Headless encrypts under a fixed in-process key (backend `"mock"` in
+  `secure.rs`) and never asks for the Electron key, so a test run creates no
+  Keychain item and raises no prompt. `external.rs` records URLs for the e2e
+  channel (`openedExternally`) and stdout instead of opening them; a spec that
+  needs the approval URL reads it from there. A headless launch with no
+  `TRACKYOURTIME_USER_DATA_DIR` uses `<profile>-headless`, never the installed
+  app's profile: the mock key cannot decrypt its `session.bin`, and the store
+  deletes what it cannot decrypt.
+- **An Electron install carries over** (`legacy.rs`, `migrate.rs`;
+  docs/deploy.md → "Electron installs move to Tauri"). Desktop settings (the
+  file is byte-identical), window state, tray labels, `.updaterId` and the
+  activity store are read in place. Chromium's localStorage (the offline queue,
+  its owner stamp, the running-timer mirror, the workspace and server choices,
+  theme, locale) is read from a throwaway copy of `Local Storage/leveldb`, never
+  the original, and handed to the page in the bridge script, which writes only
+  keys the page does not have yet, before any app script runs. Only the page's
+  `migration:done` marks the profile (`electron-local-storage-migrated.json`),
+  so a launch that died first migrates on the next. safeStorage `v10`/`v11`
+  blobs (`session.bin`, `activity-device-key.bin`) are decrypted once with the
+  Electron key — the macOS Keychain item "trackyourtime Safe Storage" /
+  "trackyourtime Key", Windows DPAPI in `Local State` — and re-encrypted on the
+  next write. On Linux neither blob is decrypted (a libsecret-held Chromium
+  key): those people sign in once more, enter a remembered activity key once
+  more, and keep their queue, which migrates anyway. Releases keep publishing the electron-updater
+  feeds beside `latest.json`, so an Electron install updates into the Tauri
+  app. **Installed Desktop QA** (`.github/workflows/installed-desktop-qa.yml`)
+  must pass before the first Tauri release is published.
 - **Every channel is built by one workflow, and signing fails closed**
   (`.github/workflows/desktop-release.yml`, `scripts/lib/desktop-release.mjs`,
   docs/deploy.md → "Desktop release"). No secrets for a channel builds files
-  named `-unsigned`; a partial set refuses before the export. **electron-builder
-  must stay at or above `MIN_APP_BUILDER_LIB`** (26.16.1): below it,
-  `createKeychain` hands the p12's password to `security set-key-partition-list
-  -k`, which takes the keychain's own, and every signed mac and mas build dies
-  on a macOS 26 runner with `SecKeychainUnlock: … not correct` — the floor is
-  asserted against the resolved app-builder-lib in `desktop-release.test.mjs`,
-  because npm's `latest` dist-tag is still below it. Which channel a
-  running copy came from is `distribution.ts` (`process.mas`,
-  `process.windowsStore`, `SNAP`, `FLATPAK_ID`, `APPIMAGE`), and it decides
-  both open at login and updates.
-- **Only direct downloads update themselves** (`updater-model.ts`,
-  `updater.ts`): the Developer ID dmg/zip, the NSIS installer and the
-  AppImage, and only when the app has an `app-update.yml`. The stores, Snap,
-  Flatpak, deb, rpm and tar.gz never load electron-updater. The feed comes from
-  `updateFeedFor` in the builder config: signed mac and win builds and every
-  Linux build get GitHub Releases, everything else gets `publish: null` —
-  **explicitly null**, because left undefined electron-builder guesses a GitHub
-  feed from `GH_TOKEN`, which every CI runner has. electron-updater is bundled
-  into `main.js` by esbuild and loaded lazily, never packed as a dependency.
+  named `-unsigned`; a partial set refuses before the export. Per channel,
+  `build-desktop.mjs` generates a config (`tauriConfigFor` in
+  `scripts/lib/desktop-tauri.mjs`, merged over `tauri.conf.json` with
+  `tauri build --config`), signs Apple builds with an identity read from a
+  throwaway keychain (`desktop-apple.mjs`), notarizes in its own `notarytool`
+  step, which refuses anything but "Accepted", and renames every output to the
+  Electron releases' names (`artifactName`), so links, manifests and
+  `desktop:try-release` keep working. An unsigned build drops every
+  certificate, notarization and update-key variable before the Tauri CLI runs
+  (`tauriEnvFor`), so nothing named `-unsigned` is ever signed with an identity
+  found in a developer's keychain. Which channel a running copy came from is
+  `tyt_model::distribution` (the `mas` cargo feature, the MSIX package identity
+  at run time, `SNAP`, `FLATPAK_ID`, `APPIMAGE`), and it decides open at login,
+  updates and activity capture. The `mas` feature also leaves the updater and
+  activity capture out of the store build.
+- **Only direct downloads update themselves.** At build time `resolveUpdater`
+  gives signed mac and win builds (which refuse to build without the update
+  key) and every Linux build that has the key a feed: `plugins.updater` (the
+  `releases/latest/download/latest.json` endpoint and the minisign public key)
+  and `createUpdaterArtifacts`. Everything else gets `plugins.updater: null`,
+  and `lib.rs` registers `tauri-plugin-updater` only for a config with a feed.
+  At run time `updater_policy` (`tyt_model::updater_model`) turns the updater
+  on only for the Developer ID build, the NSIS install and the AppImage; the
+  stores, Snap, Flatpak, deb, rpm and tar.gz leave updates to their manager.
+  `TRACKYOURTIME_DISABLE_UPDATES=1` turns it off. Every payload's minisign
+  signature is checked against `build/updater.pub` where it is made
+  (`verifyMinisign`): installed apps reject any other key, and a lost
+  `TAURI_SIGNING_PRIVATE_KEY` strands every install. The public key is a
+  reviewed, committed file, never a variable; until it exists, signed mac and
+  win legs refuse to build and Linux legs build without a feed
+  (docs/deploy.md → "The update key").
 - **Never restart for an update on the person's behalf.** A download installs
-  on quit (`autoInstallOnAppQuit`); `quitAndInstall` has exactly one call site,
-  reached only from the tray's "Restart to update" item and the Settings →
-  Desktop button, and `updater-model.test.ts` greps the source to keep it that
-  way. `markQuitting()` (window.ts) runs first, because on macOS Squirrel
-  closes windows before `before-quit` and the hide-on-close handler would
-  otherwise swallow the restart. Headless runs a memory updater: no network, and
-  `__trackYourTimeDesktop.update` drives it.
+  on quit (`will_quit` → `install_on_quit`; `updater.rs` installs the kept bytes
+  and does not relaunch). `install_and_restart` has exactly one call site, in
+  `updater_controller.rs`, reached only from the tray's "Restart to update" item
+  and the Settings → Desktop button, and a test there reads the sources to keep
+  it that way. It sets the quitting flag first, so the close handler closes
+  instead of hiding, and `shell::before_restart` persists what `will_quit`
+  would have. Headless runs a memory updater: no network, and the hook's
+  `update.*` methods drive it.
 - **A tag builds a DRAFT release, and a person publishes it.** The
-  `draft-release` job attaches signed downloads and each `latest*.yml`, checks
-  every file a feed names against its sha512 and size, never attaches
-  `-unsigned` files or store packages, and never touches a published release.
-  electron-updater reads only published releases, so publishing is the release
-  decision. The Homebrew cask says `auto_updates true` for the same reason.
+  `draft-release` job attaches signed downloads, `latest.json` (merged from
+  each leg's `updater-<leg>.json`) and each `latest*.yml`, checks every file a
+  feed names against its sha512 and size, never attaches `-unsigned` files or
+  store packages, and never touches a published release. Both updaters read
+  only published releases, so publishing is the release decision. The Homebrew
+  cask says `auto_updates true` for the same reason.
 - **The package managers are bumped from a PUBLISHED release, per family.**
   Desktop Manifests renders `packaging/<family>/*.template` against the real
   release files; `--skip-missing` skips a family whose files are absent, because
@@ -360,18 +510,33 @@ built, and the rules that fail quietly if broken:
   winget itself does not require signing, but this repo's `-unsigned` rule means
   there is no installer URL until Windows signing lands
   (docs/deploy.md → winget).
-- **A staged rollout is one line in each feed, and electron-updater decides.**
-  `stagingPercentage` comes from the dispatch input or
+- **A staged rollout is one line in each feed.** `stagingPercentage` goes into
+  `latest.json` and the YAML feeds alike. It comes from the dispatch input or
   `DESKTOP_STAGING_PERCENTAGE` on a tag, and from `pnpm desktop:rollout` after
   publishing; both write through `rewriteFeed` (`scripts/lib/desktop-rollout.mjs`),
   which edits that line as text and refuses if anything else changed, so the
   feed's sha512 and size stay byte-for-byte. `100` removes the key (an explicit
-  100 excludes one id in 2^32). Never assign `isUserWithinRollout` in
-  `electron/src`: the default check reads `<userData>/.updaterId`, stable only
-  because `userData` is pinned by name. Nothing rolls an update back; fix forward.
+  100 excludes one id in 2^32). The app hands the feed's raw value to the
+  controller, which applies electron-updater's rule (`is_staging_match` in
+  `tyt_model::updater_model`) to `<userData>/.updaterId` — the Electron build's
+  id, read and bucketed as before, and stable only because `userData` is
+  pinned by name. Nothing rolls an update back; fix forward.
 - **`/download` never links what does not exist.** Every channel's address is
   `DESKTOP_DOWNLOADS` in `lib/site-links.ts`, `null` until a release is
   published or a store approves the listing.
+- **The e2e harness speaks the app's own control channel, not CDP.** WKWebView
+  offers Playwright no CDP or WebDriver on macOS. Global setup
+  (`e2e/desktop/global-setup.ts`) runs `build-desktop.mjs --e2e`: the export
+  plus a debug build with the cargo feature `e2e`, whose channel (`e2e.rs`) is
+  a loopback port speaking JSON lines, with its port and token in
+  `<profile>/e2e.json`. `e2e/desktop/driver.ts` speaks it with Playwright-shaped
+  Page, Locator and `expect` on Playwright's test runner: every query resolves
+  against the live DOM (`e2e_dom.js`), clicks are DOM events rather than OS
+  input, and the shell's test hooks are `app.hook(name, args)` (`activity.*` goes
+  to the activity controller). Release builds have no channel. Global setup
+  reuses an `out-desktop` built for the same API, so a renderer change needs
+  `DESKTOP_E2E_REBUILD=1`; cargo rebuilds only what changed. CI runs the suite
+  on Linux under `xvfb-run`.
 - **The harness proves auth from the server side.** `e2e/desktop/record-requests.mjs`
   is preloaded into the harness APIs and logs every request's origin, client,
   auth scheme and whether a Cookie was present; the harness's own Node calls
@@ -382,23 +547,30 @@ real apps against the live servers**: each bakes `https://api.trackyourtime.dev`
 into a production-shaped bundle (the same bundle path as a release, not a dev
 server) and opens it in a visible window, Simulator or emulator. Agents and
 tests never run them — they take focus, and they write to production. The
-desktop one needs `app://-` in the live server's `TRUSTED_ORIGINS` (or
-`TRUST_STORE_APPS=true`); `/api/health` with an `Origin: app://-` header says
-whether it is (`originTrusted`).
+desktop one needs the app's origin (`app://-`, or `http://app.localhost` on
+Windows) in the live server's `TRUSTED_ORIGINS` (or `TRUST_STORE_APPS=true`);
+`/api/health` with that `Origin` header says whether it is (`originTrusted`).
 
 **Windows and Linux from a Mac** (`docs/cross-platform-testing.md`, tools in
 `scripts/crossplat/`). `pnpm prod:win` cross-builds the unpacked Windows arm64
-app against the live API and drops it into `~/VMShare` for a UTM VM, where a
+app against the live API with cargo-xwin (`tauri build --runner cargo-xwin
+--target aarch64-pc-windows-msvc --no-bundle`; one-time setup in that doc) and
+drops `release/win-arm64-unpacked/` into `~/VMShare` for a UTM VM, where a
 person double-clicks `run.cmd` — for people, like `prod:desktop`.
-`pnpm test:desktop:linux` builds for the Docker daemon's arch and starts the
-app in a container under Xvfb (pass/fail, screenshot in
-`test-results/linux-smoke/`); safe for agents. Two rules: the smoke runs
-**without** `TRACKYOURTIME_HEADLESS`, because on X11 a never-shown window gives
-CDP no frames and the screenshot hangs — the same reason the desktop harness
-skips its paint assertion on Linux (above), and this smoke test is therefore
-the proof that the app renders there; and `scripts/crossplat/` imports
-nothing from this repo and names no app — it is shared with the other projects
-and headed for hatchkit, so project wiring stays in `package.json` and
+`pnpm test:desktop:linux` builds for the Docker daemon's arch (on a Mac the
+Rust build runs in a container, `scripts/desktop/linux-build.Dockerfile`, into
+`desktop/target/linux-docker/`) and starts the app in a container under Xvfb
+in its **smoke mode**: with `TRACKYOURTIME_SMOKE_REPORT=<path>` (`problems.rs`,
+release builds too) the app loads, waits for its page, writes `{ ok, href,
+title, bridge, platform, bodyText, problems }` there and exits, 0 on ok. A
+WebKitGTK app has no CDP, so that report is the verdict (the probe's `report`
+mode); the result, the report and a screenshot read from Xvfb's framebuffer are
+in `test-results/linux-smoke/`. Safe for agents. Two rules: the smoke runs
+**without** `TRACKYOURTIME_HEADLESS`, because on X11 a never-shown window
+paints nothing, and this smoke test is therefore the proof that the app renders
+there; and `scripts/crossplat/` imports nothing from this repo and names no app
+— it is shared with the other projects (an Electron app uses the probe's `cdp`
+mode) and headed for hatchkit, so project wiring stays in `package.json` and
 `scripts/desktop-linux-smoke.mjs`.
 
 `pnpm desktop:try-release <version> [platform]` is the third one, and the only
@@ -409,13 +581,15 @@ against the release's own `SHA256SUMS.txt`, and drops it through the same
 `vm-drop.mjs`. `scripts/lib/desktop-try-release.mjs` holds everything decidable
 without `gh`, and asset names come from `artifactPatterns()` in
 `desktop-release.mjs` rather than being written out again. Three rules: it
-offers only the AppImage and the NSIS installer, because a deb, rpm or tar.gz
-is not a file a launcher can execute; it starts no VM unless `--start-vm` names
-one; and **Windows names the missing installer as a policy, not an error** —
-with no certificate the workflow builds Windows `-unsigned` and never attaches
-an `-unsigned` file, so the command says that, points at `pnpm prod:win` and
-exits non-zero rather than failing obscurely. It stays right once Windows
-signing lands: the refusal only fires when the asset is genuinely absent.
+offers only the AppImage and the NSIS installer (one per architecture from the
+Tauri releases on; up to 0.3.0 one Electron installer carried both), because a
+deb, rpm or tar.gz is not a file a launcher can execute; it starts no VM unless
+`--start-vm` names one; and **Windows names the missing installer as a policy,
+not an error** — with no certificate the workflow builds Windows `-unsigned`
+and never attaches an `-unsigned` file, so the command says that, points at
+`pnpm prod:win` and exits non-zero rather than failing obscurely. It stays
+right once Windows signing lands: the refusal only fires when the asset is
+genuinely absent.
 
 `test:desktop:linux` runs the UNPACKED app, so it proves nothing about the
 packaging. `pnpm test:desktop:packages`
@@ -424,61 +598,87 @@ takes the files a release ships and installs each one: `apt-get install
 ./x.deb` on Debian, `dnf install ./x.rpm` on Fedora, `chmod +x` and
 `--appimage-extract` for an AppImage. It then reads the installed `.desktop`
 entry, checks its `Exec` and `Icon` resolve, and hands that program to the same
-probe, so the pass criteria are identical. Four rules that fail quietly if
-broken:
+probe in the same report mode, so the pass criteria are identical. Five rules
+that fail quietly if broken:
 
-- **The deb and rpm images carry no Electron runtime library** (`Dockerfile.deb`,
-  `Dockerfile.rpm`): only Xvfb, dbus, Node and playwright-core. That bareness IS
-  the test — `apt`/`dnf` must pull GTK, NSS and the rest from the package's own
-  `Depends`/`Requires`. Adding a runtime library to either image, or passing
-  `--with-recommends` by default, hides the bug it exists to find. The AppImage
-  is the opposite case and uses the `linux-smoke` image, which has a desktop.
-- **`deb.depends` / `rpm.depends` REPLACE electron-builder's defaults**, so
-  `electron-builder.config.mjs` repeats the whole list. v0.1.2 shipped a `.deb`
-  that died on `libgbm.so.1` and an `.rpm` that died on `libasound.so.2`;
-  `libsecret` is dlopened by `safeStorage`, so `ldd` never names it and only the
-  rpm's list had to gain it. A dependency satisfied transitively today (Fedora's
-  `gtk3` happens to pull `mesa-libgbm`) is one the next base image drops.
+- **The deb and rpm images carry no desktop runtime library** (`Dockerfile.deb`,
+  `Dockerfile.rpm`): only Xvfb, dbus, Node and playwright-core (which only the
+  probe's `cdp` mode uses). That bareness IS the test — `apt`/`dnf` must pull
+  WebKitGTK, GTK and the rest from the package's own `Depends`/`Requires`.
+  Adding a runtime library to either image, or passing `--with-recommends` by
+  default, hides the bug it exists to find. The AppImage is the opposite case
+  and uses the `linux-smoke` image, which has a desktop.
+- **The packages declare every library by name**
+  (`LINUX_PACKAGE_DEPENDENCIES` in `scripts/lib/desktop-tauri.mjs`, Tauri's
+  own defaults repeated rather than relied on). WebKitGTK 4.1, GTK 3 and
+  libdbus are linked, so a missing one fails at start; the Ayatana
+  AppIndicator (the tray) and libXss (the idle time) are **dlopened**, so `ldd`
+  never names them and a package without them installs, starts and has no tray
+  icon or idle prompt. The Electron v0.1.2 `.deb` died on `libgbm.so.1` and its
+  `.rpm` on `libasound.so.2`: a dependency satisfied transitively today is one
+  the next base image drops.
+- **The deb and rpm keep the Electron package's name, `trackyourtime`**
+  (`tauri.linux.conf.json` sets `productName` and `mainBinaryName`, because the
+  bundler derives the package name from `productName`), so installing one
+  upgrades an Electron install in place. The Electron package's post-remove
+  script, which dpkg and rpm also run on an upgrade, removes its
+  `update-alternatives` link for `/usr/bin/trackyourtime`; `build/linux/preinstall.sh`
+  removes that registration first, so the old script cannot take the new
+  binary's path with it. Not yet run against a real Electron install.
 - **A container has no `/dev/fuse`,** so an AppImage is unpacked rather than
-  mounted; `--appimage-mode fuse` tests mounting and adds the device. The
-  arm64 AppImage runtime electron-builder bundles needs `libz.so` — the
-  unversioned symlink from `zlib1g-dev`, absent on a user's machine — so that
-  artifact fails on any normal desktop while its payload is sound.
+  mounted; `--appimage-mode fuse` tests mounting and adds the device.
 - **Only the Docker daemon's own architecture is testable**, and the package
   must sit under a path the daemon shares (colima shares `$HOME`, not `/tmp`).
   The other architecture is skipped with a notice, never emulated.
 
-**Desktop activity capture** (plan Stage 8, `electron/src/activity/`, the
-`/app/activity` screen in `components/activity/`, the card in
+**Desktop activity capture** (plan Stage 8; `desktop/crates/activity`, module
+map in its `PORTING.md`, bound to the shell in `desktop/src-tauri/src/activity.rs`;
+the `/app/activity` screen in `components/activity/`, the card in
 `components/settings/desktop-activity.tsx`). The desktop counterpart of the
 extension's "Browser activity capture" below, with its rules carried over:
 off by default, scoped `<userId>:<workspaceId>`, "never record" purges the
 past, the open segment heartbeated and closed AT `lastSeen`, and nothing leaves
 the device until an entry is added. What fails quietly if broken:
 
-- **No native module, no OS prompt.** macOS polls `/usr/bin/lsappinfo` (app
-  name and bundle id, no permission); Windows runs one long-lived
-  `powershell.exe` over user32 with a watchdog; Linux runs `xprop -spy` on X11.
-  macOS window titles need Screen Recording and are deferred, so no code path
-  on any OS requests a permission. `process-runner.ts` is the only file that
-  imports `child_process`, and `headless.test.ts` greps for both rules.
-- **Headless captures from the fake source only** (`source-fake.ts`, driven by
-  `__trackYourTimeDesktop.activity`: `setFrontmost`, `setNow`, `tick`,
-  `setSupport`, `setTitlesAvailable`, `spawns`, `files`). It starts no timer,
-  and `spawns` must stay empty — the e2e spec asserts it.
-- **Where it cannot work, main refuses, whatever the renderer sends.**
-  `activityCaptureSupport` in `distribution.ts`: both stores `store`, Snap and
-  Flatpak `linux-sandbox`, Wayland `wayland`. `enabled` and `storeTitles` are
-  forced off there, and the nav item is hidden (`shell: "electron"` plus
-  `support.supported`).
-- **Suggestions are composed in main**, so raw segments never cross IPC; the
-  renderer sends tracked intervals in and gets suggestions back. Accept asks
-  main to recompute (`checkAccept`) before `createManualEntry`, which gives
-  `source: "desktop"` and the offline queue, then `markAccepted` holds the
-  span for `ACCEPTED_HOLD_MS` so a queued create is not suggested again.
+- **No native module, and one OS prompt.** macOS polls `/usr/bin/lsappinfo`
+  (app name and bundle id, no permission); Windows runs one long-lived
+  `powershell.exe -EncodedCommand` (`CREATE_NO_WINDOW`) over user32 with a
+  watchdog; Linux runs `xprop -spy` on X11. The only permission request is
+  macOS Screen Recording, which window titles need: the shell asks for it
+  (`activity.rs` → `before_call`, `CGRequestScreenCaptureAccess`) when the
+  person turns "Include window titles" on, never headless, and the crate then
+  saves titles off and answers `titlesPermissionRequired` until it is granted.
+  The crate itself has no permission API, `process_runner.rs` is its only
+  module that touches `std::process`, and `tests/no_spawn.rs` checks both by
+  source text, along with no network code and no real source headless.
+- **The Rust core must keep giving what `packages/core/src/activity` gives**
+  (the browser extension runs the TypeScript). `fixtures/generate.mts` runs
+  the TypeScript over 1,343 cases and `tests/conformance.rs` requires the same
+  JSON, every number bit-identical; `fixtures/check.mjs`, which
+  `pnpm test:desktop` runs, fails when a committed fixture is stale. Change
+  both sides, then `node desktop/crates/activity/fixtures/check.mjs --write`.
+  The embedded `windows-foreground.ps1` and `macos-title.js` are their own
+  source of truth since the Electron build went.
+- **Headless captures from the fake source only** (`source_fake.rs`, driven by
+  the activity test hook, `app.hook("activity.<method>", args)`: `setFrontmost`,
+  `setNow`, `tick`, `setSupport`, `setTitlesAvailable`, `spawns`, `files`). It
+  starts no timer, and `spawns` must stay empty — the e2e spec asserts it.
+- **Where it cannot work, the shell refuses, whatever the renderer sends.**
+  `activity_capture_support` in `tyt_activity::distribution`: both stores
+  `store`, Snap and Flatpak `linux-sandbox`, Wayland `wayland`. `enabled` and
+  `storeTitles` are forced off there, and the nav item is hidden
+  (`shell: "electron"` plus `support.supported`).
+- **Suggestions are composed in the shell**, so raw segments never cross the
+  bridge; the renderer sends tracked intervals in and gets suggestions back.
+  Accept asks the shell to recompute (`checkAccept`) before
+  `createManualEntry`, which gives `source: "desktop"` and the offline queue,
+  then `markAccepted` holds the span for `ACCEPTED_HOLD_MS` so a queued create
+  is not suggested again.
 - **The store is `userData/activity/`** (folder 0700, files 0600, one JSONL
-  of segments per UTC day, `v: 1`). A newer `v` locks it: capture stops and
-  nothing is written or deleted. Turning titles off strips stored titles.
+  of segments per UTC day, `v: 1`), the Electron build's files read and written
+  in place: `tests/ts_store_compat.rs` proves byte-identical segment files and
+  `open.json`. A newer `v` locks it: capture stops and nothing is written or
+  deleted. Turning titles off strips stored titles.
 - **Sign-out forgets it directly** in `forgetAccountOnDevice()`
   (`lib/desktop-activity.ts`), never through a component's `onSignOut`, which
   may already be unmounted. The scope comes from `DesktopActivityScope` in
@@ -487,22 +687,25 @@ the device until an entry is added. What fails quietly if broken:
   origin, so a renderer change is not in it: run
   `DESKTOP_E2E_REBUILD=1 pnpm test:e2e:desktop` after touching client code.
 
-**Autopilot** (on top of that capture; core `activity/autopilot.ts`, main
-`electron/src/activity/autopilot.ts`, renderer `components/activity/autopilot-*`
-and `day-timeline*`). With capture on and `settings.autopilot` on — both off by
-default — it starts a timer after `autopilotStartMinutes` in one filed app,
-dated to the first minute of that work; switches an Autopilot timer after 10
-minutes on another filing; and stops one after 20 present minutes off its work.
-User docs: `docs-site/docs/desktop.md` → Autopilot. What fails quietly if broken:
+**Autopilot** (on top of that capture; core `activity/autopilot.ts`, its Rust
+copy `desktop/crates/activity/src/core/autopilot.rs`, the shell's
+`desktop/crates/activity/src/autopilot.rs`, renderer
+`components/activity/autopilot-*` and `day-timeline*`). With capture on and
+`settings.autopilot` on — both off by default — it starts a timer after
+`autopilotStartMinutes` in one filed app, dated to the first minute of that
+work; switches an Autopilot timer after 10 minutes on another filing; and stops
+one after 20 present minutes off its work. User docs:
+`docs-site/docs/desktop.md` → Autopilot. What fails quietly if broken:
 
 - **It only starts what it can name.** `createFilingResolver`: the app's rule,
   else `learnFilings` over the person's own entries (one filing holding 60 % and
   15 minutes of the app's tracked time). No filing, no start — the strip asks
   instead. Never start a nameless entry to "be helpful".
-- **It never touches a timer it did not open.** Main counts the running entry
-  as Autopilot's only after `applied` with the plan's token, and only while its
-  start (±1 s) and `filingKeyOf` its description/project/task are what was
-  written (`written`, after `withKnownCatalog`). An edit makes it the person's.
+- **It never touches a timer it did not open.** The shell counts the running
+  entry as Autopilot's only after `applied` with the plan's token, and only
+  while its start (±1 s) and `filingKeyOf` its description/project/task are
+  what was written (`written`, after `withKnownCatalog`). An edit makes it the
+  person's.
 - **A change Autopilot did not make is a hold.** A running entry that stops or
   changes between plans holds its filing until a 10-minute break
   (`hadBreakSince`); so do Undo and "not work" (`app:<key>`). The settle window
@@ -517,21 +720,22 @@ User docs: `docs-site/docs/desktop.md` → Autopilot. What fails quietly if brok
 - **The write is an ordinary one**: `startTimer` / `splitAtIdle` / `stopTimer`
   from `useEntryMutations`, so offline it queues like any start. The driver
   re-reads the running entry after the plan and drops a plan that no longer
-  fits; main's pending token simply expires.
-- **Only filings cross to the server.** App names and titles never leave main
-  except as the plan's display name; the entry carries the rule's or the
+  fits; the shell's pending token simply expires.
+- **Only filings cross to the server.** App names and titles never leave the
+  shell except as the plan's display name; the entry carries the rule's or the
   earlier entry's fields. Undo dismisses the span, so it is not suggested again.
-- **A pause is main's, and it belongs to the account.** The controller keeps
-  `{ account: "<userId>:", until }` (`AUTOPILOT_PAUSE_MS`, persisted in
+- **A pause is the shell's, and it belongs to the account.** The controller
+  keeps `{ account: "<userId>:", until }` (`AUTOPILOT_PAUSE_MS`, persisted in
   `state.json`): a workspace switch and "Delete all activity" keep it,
   `forget` (sign-out) and switching Autopilot off end it. Paused, `plan` still
   does its ownership bookkeeping, so a timer stopped or edited meanwhile is the
-  person's, and decides nothing. The tray item calls main directly
-  (`pauseAutopilot` into `installDesktop`); its labels and the ✦ on an
+  person's, and decides nothing. The tray item calls the activity controller
+  directly (`pause_autopilot` in `platform.rs`, on a thread of its own, because
+  that controller has a lock of its own); its labels and the ✦ on an
   Autopilot-owned timer come from the renderer like every tray string
-  (`DesktopTimerState.autopilot`, `running.autopilot`). Main pushes nothing
-  when a pause runs out, so every surface compares `pausedUntil` with the
-  clock (`autopilotPausedAt`, `useActivePause`, a tray redraw at the end).
+  (`DesktopTimerState.autopilot`, `running.autopilot`). The shell pushes
+  nothing when a pause runs out, so every surface compares `pausedUntil` with
+  the clock (`autopilotPausedAt`, `useActivePause`, a tray redraw at the end).
 
 **Simulator and emulator runs never take focus either.** `IOS_HEADLESS=1 pnpm
 dev:ios` drives simctl only (without it Simulator.app is opened with `open -g`),
@@ -914,7 +1118,8 @@ TRUSTED_ORIGINS=capacitor://localhost,https://localhost
 ```
 
 or `TRUST_STORE_APPS=true`, which adds both of those, the desktop app's
-`app://-` and the Chrome Web Store extension's pinned `chrome-extension://` id from
+`app://-` and `http://app.localhost` (Windows) and the Chrome Web Store
+extension's pinned `chrome-extension://` id from
 `packages/shared/src/store-clients.ts` — the self-host compose file defaults it
 on, so the store clients can sign in to a fresh self-hosted server with no
 manual step. For the extension the trust covers every request, not only
@@ -923,9 +1128,11 @@ development build), so its traffic to any other server is CORS. Off unless set, 
 says. `STORE_EXTENSION_ID` is recomputed from `STORE_EXTENSION_KEY` in
 `tests/env.test.ts`; rotate both or neither.
 
-Electron serves the app from `app://-` (`electron/src/protocol.ts`), the
-origin to trust; `file://` would send `Origin: null`, which can't be trusted
-with credentials.
+The desktop app serves its export from `app://-` on macOS and Linux and from
+`http://app.localhost` on Windows (`desktop/src-tauri/src/protocol.rs`), the
+origins to trust; `file://` would send `Origin: null`, which can't be trusted
+with credentials. A server whose `TRUSTED_ORIGINS` lists `app://-` by hand
+needs the Windows origin added.
 
 ### Choosing a server on the phone
 
@@ -1402,7 +1609,7 @@ notices.
 - **The Google button renders in every build and decides after mount**
   (`components/google-sign-in-button.tsx`): disabled in the prerendered HTML,
   enabled only on the web app when `health.check` reports
-  `authConfig.googleEnabled`, and disabled with a note in Capacitor and Electron,
+  `authConfig.googleEnabled`, and disabled with a note in Capacitor and the desktop app,
   where the OAuth redirect cannot return to the shell's origin.
 - **Some of these calls replace the caller's own session, and its socket
   still holds the old one.** better-auth's `changePassword` with
@@ -3374,7 +3581,7 @@ Rules that fail quietly if broken:
   bridge kinds are never accepted on `onMessage`, and popup messages never on
   `onMessageExternal`.
 - **Web only, after mount, after the session resolved.** Never under
-  `isAppShell()` (Capacitor and Electron have no `chrome.runtime`, and the
+  `isAppShell()` (Capacitor and the desktop app have no `chrome.runtime`, and the
   prerendered HTML must not differ). A pending or failed session lookup is
   never sent as `userId: null`, or an offline page would withdraw a valid
   offer. The target ids are `NEXT_PUBLIC_EXTENSION_IDS` (comma-separated, each
@@ -3584,7 +3791,7 @@ the root, because mailed links point at them. Three rules:
 - **A public page never redirects a signed-in visitor on the web.** The header's
   `AccountLinks` swaps "Log in" / "Create an account" for "Open the app" after
   mount (never during hydration). `ShellEntryRedirect` on the landing page
-  moves only Capacitor and Electron on to `/app/track`, since both
+  moves only Capacitor and the desktop app on to `/app/track`, since both
   load `index.html`, and it does not wait for a session.
 - **Old root addresses answer 308 in `serve.mjs`** (`/track` →
   `/app/track`, query kept) for bookmarks, sent emails and installed extension
@@ -3631,9 +3838,10 @@ Firefox also checks its optional diagnostic-data grant before sending.
 
 ### Static export caveats
 
-- `NEXT_PUBLIC_API_URL` is baked at build time — desktop binaries are locked
-  to whichever API URL they were built against; rebuild to retarget. The phone
-  apps treat it as the default and let the person choose another server.
+- `NEXT_PUBLIC_API_URL` is baked at build time. The desktop and phone apps
+  treat it as the default and let the person choose another server; changing
+  the default needs a rebuild, and for the desktop app a new cargo build too,
+  because the binary embeds the export.
 - No `rewrites()`, no `middleware.ts`, no server components with runtime
   data. Dynamic routes need `generateStaticParams`.
 - `/docs/` belongs to the docs site copied into `out/` after the build. A Next

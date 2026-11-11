@@ -331,9 +331,15 @@ configured; add to the suite instead.
 
 The root `package.json` `version` is the single source of truth.
 
-- The Next export (web, Capacitor, Electron) reads it in
+- The Next export (web, Capacitor, the desktop app) reads it in
   `next.config.ts` and inlines it as `NEXT_PUBLIC_APP_VERSION`
   (`lib/app-version.ts`).
+- The desktop shell reads it at build time: `desktop/src-tauri/tauri.conf.json`
+  sets `version` to `../../package.json`. After packaging,
+  `scripts/build-desktop.mjs` refuses a package whose `Info.plist`, deb or rpm
+  version differs from it, and on a tag run a tag that is not `v<version>`.
+  A desktop build that reports an older version would be offered its own
+  update forever.
 - Settings also shows the source commit (12 hex digits). Phone apps show the
   native store build number from Capacitor alongside that commit. A release
   version alone may cover more than one build.

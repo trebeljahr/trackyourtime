@@ -30,8 +30,9 @@
   },
 
   // pnpm is pinned by package.json "packageManager" (pnpm@11.1.2); corepack
-  // installs exactly that version. Electron 42 has no postinstall, so the
-  // install does not fetch its binary; `pnpm electron:ensure` does, on demand.
+  // installs exactly that version. The desktop app (desktop/, Tauri) also
+  // needs Rust and the WebKitGTK development packages, which this container
+  // does not install; `pnpm test:desktop` and `typecheck:desktop` need them.
   "postCreateCommand": "corepack enable && pnpm install --frozen-lockfile",
 
   "forwardPorts": [

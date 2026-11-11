@@ -68,6 +68,7 @@ jobs:
           gh release download "$GITHUB_REF_NAME" --dir release-files \
             --pattern "TrackYourTime-$VERSION-mac-*.dmg" \
             --pattern "TrackYourTime-Setup-$VERSION.exe" \
+            --pattern "TrackYourTime-Setup-$VERSION-arm64.exe" \
             --pattern "TrackYourTime-$VERSION-linux-*.tar.gz"
           ls -l release-files
 

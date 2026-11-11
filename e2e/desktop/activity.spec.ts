@@ -1,16 +1,28 @@
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { test } from "@playwright/test";
 
-import { createAccount, launchApp, signInThroughForm, trpcCall, webSession } from "./support";
+import {
+  APP_ORIGIN,
+  APP_ORIGIN_RE,
+  createAccount,
+  expect,
+  launchApp,
+  signInThroughForm,
+  trpcCall,
+  webSession,
+  type DesktopApp,
+  type Page,
+} from "./support";
 
 /*
  * Stage 8 of docs/desktop-app-plan.md, Stage 2 of its design: desktop
  * activity capture → a suggestion on /app/activity → an entry.
  *
  * Every launch is headless (support.ts), so capture reads the FAKE frontmost
- * source that `globalThis.__trackYourTimeDesktop.activity` drives — never the
- * app actually in front on the machine running the suite — and never spawns a
- * process or asks the OS for a permission. The clock is pinned through the
- * same hook, so the recorded blocks sit at fixed times yesterday.
+ * source that the activity test hook drives (`app.hook("activity.…")`,
+ * desktop/crates/activity/src/test_hook.rs) — never the app actually in front
+ * on the machine running the suite — and never spawns a process or asks the
+ * OS for a permission. The clock is pinned through the same hook, so the
+ * recorded blocks sit at fixed times yesterday.
  */
 
 type Files = { state: { scope: string | null; rules: unknown[]; dismissals: unknown[] } | null; open: unknown; segments: unknown[] };
@@ -30,23 +42,15 @@ type RendererWindow = {
 const EDITOR = { key: "com.example.editor", name: "Editor" };
 const CHAT = { key: "com.example.chat", name: "Chat" };
 
-let app: ElectronApplication | null = null;
+let app: DesktopApp | null = null;
 
 test.afterEach(async () => {
   await app?.close().catch(() => undefined);
   app = null;
 });
 
-const hook = <T>(fn: string, arg?: unknown): Promise<T> =>
-  app!.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    async (_electron, [body, value]) =>
-      new Function("hook", "arg", body)(
-        (globalThis as Record<string, { activity?: unknown }>).__trackYourTimeDesktop?.activity,
-        value,
-      ),
-    [fn, arg] as const,
-  ) as Promise<T>;
+/** The activity test hook, by method name. */
+const hook = <T>(method: string, arg?: unknown): Promise<T> => app!.hook<T>(`activity.${method}`, arg) as Promise<T>;
 
 /** `app` in front from `from` for `minutes`, one detection a minute at the pinned clock. */
 async function frontFor(
@@ -54,18 +58,18 @@ async function frontFor(
   from: number,
   minutes: number,
 ): Promise<void> {
-  await hook("hook.setFrontmost(arg)", target);
+  await hook("setFrontmost", target);
   for (let minute = 0; minute <= minutes; minute += 1) {
-    await hook("hook.setNow(arg)", from + minute * MIN);
-    await hook("return hook.tick()");
+    await hook("setNow", from + minute * MIN);
+    await hook("tick");
   }
 }
 
 /** Nothing in front at `at`: closes the open segment there. */
 async function nothingAt(at: number): Promise<void> {
-  await hook("hook.setFrontmost(null)");
-  await hook("hook.setNow(arg)", at);
-  await hook("return hook.tick()");
+  await hook("setFrontmost", null);
+  await hook("setNow", at);
+  await hook("tick");
 }
 
 /** Yesterday at `hour`:00, local time — always in the past, always one day. */
@@ -83,7 +87,7 @@ const dayKey = (ms: number): string => {
 };
 
 async function openActivity(page: Page, day: string): Promise<void> {
-  await page.goto(`app://-/app/activity/?day=${day}`);
+  await page.goto(`${APP_ORIGIN}/app/activity/?day=${day}`);
   await expect(page.getByTestId("activity-screen")).toBeVisible();
 }
 
@@ -96,8 +100,8 @@ test("fake capture becomes a suggestion, and Add files it as a desktop entry", a
   await signInThroughForm(page, account);
 
   // Headless: the fake source, and nothing spawned — ever.
-  expect(await hook<string | null>("return hook.sourceKind()")).toBe("fake");
-  expect(await hook<string[]>("return hook.spawns()")).toEqual([]);
+  expect(await hook<string | null>("sourceKind")).toBe("fake");
+  expect(await hook<string[]>("spawns")).toEqual([]);
 
   // Capture is off by default. Turn it on through the bridge (the Settings
   // card is Stage 3), then wait for the shell to publish whose activity it is.
@@ -109,7 +113,7 @@ test("fake capture becomes a suggestion, and Add files it as a desktop entry", a
       ),
     )
     .toBe(true);
-  await expect.poll(() => hook<boolean>("return hook.capturing()")).toBe(true);
+  await expect.poll(() => hook<boolean>("capturing")).toBe(true);
 
   // The nav item shows, because capture works on this (simulated) channel.
   await expect(page.getByTestId("nav-activity")).toBeVisible();
@@ -166,10 +170,10 @@ test("fake capture becomes a suggestion, and Add files it as a desktop entry", a
   // Sign-out forgets everything recorded for this account; the settings stay.
   await page.getByTestId("user-menu").click();
   await page.getByTestId("sign-out").click();
-  await page.waitForURL(/^app:\/\/-\/login\//);
+  await page.waitForURL(new RegExp(`^${APP_ORIGIN_RE}/login/`));
   await expect
     .poll(async () => {
-      const files = await hook<Files>("return hook.files()");
+      const files = await hook<Files>("files");
       return {
         scope: files.state?.scope ?? null,
         rules: files.state?.rules.length ?? 0,
@@ -180,7 +184,7 @@ test("fake capture becomes a suggestion, and Add files it as a desktop entry", a
     })
     .toEqual({ scope: null, rules: 0, dismissals: 0, open: null, segments: 0 });
 
-  expect(await hook<string[]>("return hook.spawns()")).toEqual([]);
+  expect(await hook<string[]>("spawns")).toEqual([]);
 });
 
 test("the nav has no Activity item where capture cannot work", async () => {
@@ -188,14 +192,14 @@ test("the nav has no Activity item where capture cannot work", async () => {
   const launched = await launchApp();
   app = launched.app;
   const { page } = launched;
-  await hook("return hook.setSupport(arg)", { supported: false, reason: "store", hint: null });
+  await hook("setSupport", { supported: false, reason: "store", hint: null });
   await signInThroughForm(page, account);
   await expect(page.getByTestId("nav-track")).toBeVisible();
   await expect(page.getByTestId("nav-activity")).toHaveCount(0);
 });
 
 type Segment = { key: string; label?: string };
-const segmentsNow = async (): Promise<Segment[]> => (await hook<Files>("return hook.files()")).segments as Segment[];
+const segmentsNow = async (): Promise<Segment[]> => (await hook<Files>("files")).segments as Segment[];
 
 test("Settings → Desktop turns capture on, and its controls reach what is stored", async () => {
   const account = await createAccount();
@@ -204,7 +208,7 @@ test("Settings → Desktop turns capture on, and its controls reach what is stor
   const { page } = launched;
   await signInThroughForm(page, account);
 
-  await page.goto("app://-/app/settings/?tab=desktop");
+  await page.goto(`${APP_ORIGIN}/app/settings/?tab=desktop`);
   const card = page.getByTestId("settings-desktop-activity");
   await expect(card).toBeVisible();
 
@@ -215,14 +219,18 @@ test("Settings → Desktop turns capture on, and its controls reach what is stor
   await expect(page.getByTestId("desktop-activity-status")).toHaveText("Off.");
   await enabled.click();
   await expect(enabled).toHaveAttribute("aria-checked", "true");
-  await expect.poll(() => hook<boolean>("return hook.capturing()")).toBe(true);
+  await expect.poll(() => hook<boolean>("capturing")).toBe(true);
   await expect(page.getByTestId("desktop-activity-status")).toHaveAttribute("data-recording", "true");
-  expect(await hook<string[]>("return hook.spawns()")).toEqual([]);
+  expect(await hook<string[]>("spawns")).toEqual([]);
 
-  // The headless app reports macOS's answer for titles until told otherwise.
+  // Titles are on offer on every OS (macOS asks for Screen Recording only
+  // when a person switches them on outside a headless run), and the card
+  // follows the shell's answer.
   const titles = page.getByTestId("desktop-activity-titles");
-  if (process.platform === "darwin") await expect(titles).toBeDisabled();
-  await hook("return hook.setTitlesAvailable(true)");
+  await expect(titles).toBeEnabled();
+  await hook("setTitlesAvailable", false);
+  await expect(titles).toBeDisabled();
+  await hook("setTitlesAvailable", true);
   await expect(titles).toBeEnabled();
   await titles.click();
   await expect(titles).toHaveAttribute("aria-checked", "true");
@@ -254,17 +262,17 @@ test("Settings → Desktop turns capture on, and its controls reach what is stor
   expect(await segmentsNow()).toEqual([]);
 
   // A channel that must not record: the card says why, the switch is off
-  // and disabled, main refuses it anyway, and the nav drops Activity.
-  await hook("return hook.setSupport(arg)", { supported: false, reason: "store", hint: null });
+  // and disabled, the shell refuses it anyway, and the nav drops Activity.
+  await hook("setSupport", { supported: false, reason: "store", hint: null });
   await expect(page.getByTestId("desktop-activity-status")).toHaveAttribute("data-reason", "store");
   await expect(enabled).toBeDisabled();
   await expect(enabled).toHaveAttribute("aria-checked", "false");
-  await expect.poll(() => hook<boolean>("return hook.capturing()")).toBe(false);
+  await expect.poll(() => hook<boolean>("capturing")).toBe(false);
   await expect(page.getByTestId("nav-activity")).toHaveCount(0);
   const refused = await page.evaluate(() =>
     (window as unknown as RendererWindow).electronAPI?.activity?.updateSettings({ enabled: true }),
   );
   expect((refused as { settings: { enabled: boolean } }).settings.enabled).toBe(false);
 
-  expect(await hook<string[]>("return hook.spawns()")).toEqual([]);
+  expect(await hook<string[]>("spawns")).toEqual([]);
 });

@@ -1,13 +1,18 @@
-import { createHmac } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { _electron, type ElectronApplication, type Page } from "@playwright/test";
+import { createHash, createHmac } from "node:crypto";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
+import { DesktopApp, DesktopPage, expect, Locator } from "./driver";
+
+export { expect, Locator };
+export type { DesktopApp, DesktopPage };
+/** Playwright's name, which the specs and helpers use for the page. */
+export type Page = DesktopPage;
 
 export const REPO_ROOT = resolve(__dirname, "..", "..");
-export const MAIN_JS = join(REPO_ROOT, "electron", "dist", "main.js");
-export const PRELOAD_JS = join(REPO_ROOT, "electron", "dist", "preload.js");
 export const EXPORT_DIR = join(REPO_ROOT, "packages", "client", "out-desktop");
+/** Written by `scripts/build-desktop.mjs --e2e` (global-setup.ts runs it). */
+export const E2E_BINARY_INFO = join(REPO_ROOT, "desktop", "target", "e2e-binary.json");
 
 /**
  * The API the export is built against. Fixed rather than random, because the
@@ -16,14 +21,17 @@ export const EXPORT_DIR = join(REPO_ROOT, "packages", "client", "out-desktop");
  */
 export const API_PORT = Number(process.env.DESKTOP_E2E_API_PORT ?? "49764");
 export const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
-export const APP_ORIGIN = "app://-";
+/** The document origin the app runs at (desktop/src-tauri/src/protocol.rs). */
+export const APP_ORIGIN = process.platform === "win32" ? "http://app.localhost" : "app://-";
+/** `APP_ORIGIN` as a RegExp source, for URL assertions. */
+export const APP_ORIGIN_RE = APP_ORIGIN.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
-/** The electron executable, as scripts/ensure-electron.mjs installed it. */
-export function electronExecutable(): string {
-  const dir = resolve(REPO_ROOT, "node_modules", "electron");
-  const executable = join(dir, "dist", readFileSync(join(dir, "path.txt"), "utf8").trim());
-  if (!existsSync(executable)) throw new Error(`No Electron binary at ${executable}; run pnpm electron:ensure`);
-  return executable;
+/** The debug build with the e2e control channel, as global setup built it. */
+export function desktopExecutable(): string {
+  if (!existsSync(E2E_BINARY_INFO)) throw new Error(`No ${E2E_BINARY_INFO}; run through the desktop Playwright config (its global setup builds the app)`);
+  const { path } = JSON.parse(readFileSync(E2E_BINARY_INFO, "utf8")) as { path: string };
+  if (!existsSync(path)) throw new Error(`No desktop binary at ${path}; run: node scripts/build-desktop.mjs --e2e`);
+  return path;
 }
 
 export function freshUserDataDir(): string {
@@ -36,45 +44,71 @@ export function launchEnv(userDataDir: string): Record<string, string> {
     if (value !== undefined) env[key] = value;
   }
   // Never the dev URL: these specs are about the app:// build.
-  delete env.ELECTRON_DEV_URL;
-  // An inherited ELECTRON_RUN_AS_NODE (set by some tool runners) turns the
-  // binary into plain Node and the launch hangs.
-  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.TRACKYOURTIME_DEV_URL;
+  delete env.TRACKYOURTIME_SMOKE_REPORT;
   env.TRACKYOURTIME_USER_DATA_DIR = userDataDir;
   // Never show, focus or activate a window while tests run on somebody's
-  // machine (electron/src/headless.ts).
+  // machine (desktop/src-tauri/src/window.rs).
   env.TRACKYOURTIME_HEADLESS = "1";
   return env;
 }
 
 /**
- * Uncaught page errors and CSP violations, collected from the moment of the
- * call. A route can "render" its shell while its own chunk was blocked, so the
- * navigation specs assert this stays empty.
+ * Uncaught page errors and CSP violations since the document loaded, as
+ * collected in the page (desktop/src-tauri/src/problems.rs). A route can
+ * "render" its shell while its own chunk was blocked, so the navigation specs
+ * assert this stays empty.
  */
-export function collectPageProblems(page: Page): string[] {
-  const problems: string[] = [];
-  page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
-  page.on("console", (msg) => {
-    const text = msg.text();
-    if (msg.type() === "error" && /Content Security Policy|Refused to (load|execute|connect|apply)/i.test(text)) {
-      problems.push(`csp: ${text}`);
-    }
-  });
-  return problems;
+export function pageProblems(page: Page): Promise<string[]> {
+  return page.problems();
 }
 
-export async function launchApp(userDataDir = freshUserDataDir()): Promise<{
-  app: ElectronApplication;
-  page: Page;
+/**
+ * macOS keeps a WebKit data store per profile (window.rs →
+ * data_store_identifier); a test profile's store is removed when its run ends.
+ */
+function webkitStoreDir(executable: string, userDataDir: string): string | null {
+  if (process.platform !== "darwin") return null;
+  const digest = createHash("sha256").update(userDataDir).digest();
+  const id = Buffer.from(digest.subarray(0, 16));
+  id[6] = (id[6] & 0x0f) | 0x80;
+  id[8] = (id[8] & 0x3f) | 0x80;
+  const hex = id.toString("hex");
+  const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return join(homedir(), "Library", "WebKit", basename(executable), "WebsiteDataStore", uuid);
+}
+
+/**
+ * Every store a run created, for global-setup's teardown to remove
+ * (DESKTOP_E2E_STORE_LOG). The `exit` hook is only a fallback: Playwright
+ * stops its workers without letting it run.
+ */
+const launched = new Set<string>();
+process.once("exit", () => {
+  for (const dir of launched) rmSync(dir, { recursive: true, force: true });
+});
+
+export function removeWebkitStores(log: string): void {
+  if (!existsSync(log)) return;
+  const root = join(homedir(), "Library", "WebKit");
+  for (const dir of readFileSync(log, "utf8").split("\n")) {
+    if (dir.startsWith(`${root}/`) && dir.includes("/WebsiteDataStore/")) rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export async function launchApp(userDataDir = freshUserDataDir(), args: string[] = []): Promise<{
+  app: DesktopApp;
+  page: DesktopPage;
   userDataDir: string;
 }> {
-  const app = await _electron.launch({
-    executablePath: electronExecutable(),
-    args: [MAIN_JS],
-    env: launchEnv(userDataDir),
-  });
-  const page = await app.firstWindow();
+  const executable = desktopExecutable();
+  const store = webkitStoreDir(executable, userDataDir);
+  if (store) {
+    launched.add(store);
+    if (process.env.DESKTOP_E2E_STORE_LOG) appendFileSync(process.env.DESKTOP_E2E_STORE_LOG, `${store}\n`);
+  }
+  const app = await DesktopApp.launch({ executable, args, env: launchEnv(userDataDir), userDataDir });
+  const page = app.page;
   await page.waitForLoadState("domcontentloaded");
   return { app, page, userDataDir };
 }
@@ -227,11 +261,17 @@ export async function signInThroughForm(page: Page, account: Account): Promise<v
   await page.getByTestId("login-email").fill(account.email);
   await page.getByTestId("login-password").fill(account.password);
   await page.getByTestId("login-submit").click();
-  await page.waitForURL(/^app:\/\/-\/app\/track\/?(\?.*)?$/);
+  try {
+    await page.waitForURL(new RegExp(`^${APP_ORIGIN_RE}/app/track/?(\\?.*)?$`), { timeout: 20_000 });
+  } catch (error) {
+    // Say what the form says, not only where the page stayed.
+    const shown = await page.getByTestId("login-error").allInnerTexts().catch(() => []);
+    throw new Error(`${String(error)}; the login form shows: ${JSON.stringify(shown)}`);
+  }
 }
 
 async function expectLoginForm(page: Page): Promise<void> {
-  await page.waitForURL(/^app:\/\/-\/login\//);
+  await page.waitForURL(new RegExp(`^${APP_ORIGIN_RE}/login/`));
   await page.getByTestId("login-email").waitFor();
 }
 
@@ -265,12 +305,11 @@ export function apiRequests(since = 0, log = process.env.DESKTOP_E2E_REQUEST_LOG
 
 /**
  * What the app handed to the OS browser or mail client. Headless launches
- * never open anything (electron/src/external.ts); they record it here.
+ * never open anything (desktop/src-tauri/src/external.rs); they record it
+ * for the control channel instead.
  */
-export function openedExternally(app: ElectronApplication): Promise<string[]> {
-  return app.evaluate(
-    () => (globalThis as { __trackYourTimeOpenedExternally?: string[] }).__trackYourTimeOpenedExternally ?? [],
-  );
+export function openedExternally(app: DesktopApp): Promise<string[]> {
+  return app.openedExternally();
 }
 
 /** RFC 6238 from an otpauth:// URI, what an authenticator app computes. */

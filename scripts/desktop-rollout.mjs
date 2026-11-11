@@ -10,11 +10,14 @@
  *   node scripts/desktop-rollout.mjs --check "<value>"   # CI: validate only
  *
  * A person's command, not CI's: it uses the `gh` CLI with the caller's own
- * login. It downloads the release's `latest*.yml` feeds, rewrites
+ * login. It downloads the release's feeds — `latest.json`, which the Tauri app
+ * reads, and the `latest*.yml` that Electron installs still read — rewrites
  * `stagingPercentage` in each (scripts/lib/desktop-rollout.mjs →
  * `rewriteFeed`, which touches that one line and proves it), and uploads them
  * again with `--clobber`. Every feed is rewritten and checked before the first
- * upload, so a feed that does not parse leaves the release as it was.
+ * upload, so a feed that does not parse leaves the release as it was, and the
+ * Tauri and the Electron installs are always offered the release in the same
+ * proportion.
  *
  * What it cannot do: take an update back from an install that already has it.
  * Fix forward with a higher version (docs/deploy.md → "Staged rollout").
@@ -24,11 +27,11 @@
  * Actions, writes `percentage=<n or empty>` to $GITHUB_OUTPUT.
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { appendFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+
+import yaml from "js-yaml";
 
 import { UPDATE_FEED } from "./lib/desktop-release.mjs";
 import {
@@ -72,11 +75,6 @@ function main() {
   const gh = (ghArgs, options = {}) =>
     execFileSync("gh", ghArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options });
 
-  // js-yaml from electron-updater, so the feed is read the way installed apps read it.
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const updaterDir = realpathSync(join(repoRoot, "node_modules/electron-updater"));
-  const yaml = createRequire(join(updaterDir, "package.json"))("js-yaml");
-
   let release;
   try {
     release = JSON.parse(gh(["release", "view", args.tag, "--repo", repo, "--json", "tagName,isDraft,isPrerelease,assets,url"]));
@@ -91,10 +89,10 @@ function main() {
   }
 
   const feedNames = feedAssetNames(release.assets.map((asset) => asset.name));
-  if (feedNames.length === 0) fail(`${args.tag} has no latest*.yml feeds; nothing to roll out.`);
+  if (feedNames.length === 0) fail(`${args.tag} has no update feeds (latest.json, latest*.yml); nothing to roll out.`);
 
-  // electron-updater's GitHub provider reads the feeds of the newest published
-  // release only. Staging an older one changes nothing for anybody.
+  // Both updaters read the feeds of the newest published release only
+  // (`releases/latest`). Staging an older one changes nothing for anybody.
   if (release.isDraft) {
     console.log(`Note: ${args.tag} is a draft. The percentage applies once it is published.`);
   } else if (release.isPrerelease) {

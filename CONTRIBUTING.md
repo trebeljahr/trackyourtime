@@ -105,12 +105,22 @@ thing that keeps four clients able to share code.
 | Node.js | 24 | `.nvmrc`; `engines.node` in `package.json` is `>=24` |
 | pnpm | 11.1.2 | `packageManager` in `package.json` |
 | Docker | any recent | runs MongoDB and Redis for local dev |
+| Rust | 1.90 or later | `rust-version` in `desktop/src-tauri/Cargo.toml`. `pnpm run typecheck` and `pnpm run test:unit` compile the desktop app. Install it with [rustup](https://rustup.rs) |
+
+On Linux the desktop app also needs the WebKitGTK and tray libraries to link
+against. CI installs them on Ubuntu with:
+
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf
+```
 
 If you would rather not install those locally,
 [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) describes
 a ready-made environment — open the repository in a devcontainer-aware editor
 or in GitHub Codespaces and you get Node, pnpm and the tooling already set up.
-The web app, the unit tests and the typecheck all work there. Be aware that the
+The web app works there, and so do the TypeScript half of the unit tests and the
+typecheck. The container has no Rust, so `pnpm run typecheck` and
+`pnpm run test:unit` stop at the desktop app's Rust checks. Be aware that the
 browser extension, Raycast and any native build bake their API URL in and
 cannot follow a forwarded or remapped port, so those surfaces are still easiest
 to work on locally. The rest of this section assumes a local setup.
@@ -146,6 +156,14 @@ fails later and less clearly — set it now.
 You can leave `FRONTEND_URL`, `BETTER_AUTH_URL`, `MONGODB_URI`, `PORT` and
 `TRUSTED_ORIGINS` alone: `scripts/dev.mjs` passes all five to the server as real
 process environment, which takes precedence over the file.
+
+The desktop app embeds the web app's desktop export when it compiles, so build
+one once before the first typecheck or unit test run. Any API address works for
+the checks:
+
+```bash
+NEXT_PUBLIC_API_URL=http://127.0.0.1:59999 node scripts/build-desktop.mjs --export-only
+```
 
 ### Start the services and the app
 
@@ -207,7 +225,8 @@ e2e/           Playwright specs and their harness
 docs/          deploy.md, dev-setup.md
 docs-site/     Docusaurus site, served at trackyourtime.dev/docs/
 scripts/       dev orchestration, extension id, icon and newsletter scripts
-electron/      Electron main + preload for the desktop wrapper
+desktop/       the desktop app: one Cargo workspace with the Tauri 2 shell
+               (src-tauri/) and the pure Rust crates it binds (crates/)
 ```
 
 Domain logic that more than one client needs belongs in `packages/shared` (types
@@ -232,11 +251,11 @@ given you the shape.
 
 | Command | What it covers |
 |---|---|
-| `pnpm run test:unit` | Server unit tests — `node:test` over `packages/server/src/tests/*.test.ts`. Pure logic: budgets, CSV, PDF, import parsing, invoicing guards, timesheet rules, runaway timers, workspace scoping, schemas. No MongoDB, Redis or Docker needed. |
+| `pnpm run test:unit` | Unit tests of core, Raycast, the server, MCP, the extension and the desktop app. The server's are `node:test` over `packages/server/src/tests/*.test.ts`: budgets, CSV, PDF, import parsing, invoicing guards, timesheet rules, runaway timers, workspace scoping, schemas. The desktop app's are `pnpm test:desktop`: `cargo test` over `desktop/`, plus a check that the Rust activity code still gives what `packages/core/src/activity` gives. No MongoDB, Redis or Docker needed; the desktop part needs Rust and a desktop export (see [Development setup](#development-setup)). |
 | `pnpm run test:client` | Client unit tests — Vitest + `@testing-library/react` over colocated `*.test.ts(x)` files under `packages/client/src`. jsdom; no services needed. |
 | `pnpm run test:e2e` | Playwright, chromium, serial. Specs in `e2e/`. **Needs Docker** — `e2e/start-server.sh` starts its own Mongo and Redis containers on separate ports, and the suite runs against the client's static export, so the first run includes a full build. |
 | `pnpm run build` | Full production build in dependency order: shared → core → server → client. |
-| `pnpm run typecheck` | Builds shared + core (they resolve through `package.json` exports to `dist/`), then `tsc --noEmit` across every other package, plus the Electron main process. |
+| `pnpm run typecheck` | Builds shared + core (they resolve through `package.json` exports to `dist/`), then `tsc --noEmit` across every other package, then `pnpm typecheck:desktop` (`cargo check` over `desktop/`, and the app again with its `e2e` and `mas` features). |
 | `pnpm --filter @starter/client run lint` | ESLint over the client package. There is no root `lint` script. |
 | `pnpm test` | All three test commands in sequence. |
 
@@ -247,7 +266,7 @@ that you do not run locally: `e2e` (below) and `dco`, which checks that every
 commit carries a `Signed-off-by` trailer. Do not skip the typecheck
 because the build passes: `pnpm run build` compiles shared → core → server →
 client and never touches `packages/extension`, `packages/raycast` or
-`electron/`, so a change that breaks one of those is invisible to the build.
+`desktop/`, so a change that breaks one of those is invisible to the build.
 
 E2E is the awkward one. CI does run it on pull requests, but you are not
 expected to run it locally: it needs Docker, it takes minutes because of the
@@ -467,12 +486,13 @@ Everything is in one workflow file,
 which runs on pushes to `main` and on pull requests. A pull request gets the
 checks and none of the publishing.
 
-**On a pull request**, three jobs run:
+**On a pull request**, four jobs run:
 
 | Job | What it does |
 |---|---|
-| `verify` | `pnpm install --frozen-lockfile`, then `pnpm run typecheck`, `pnpm run build`, `pnpm run test:unit`, `pnpm run test:client`. |
+| `verify` | `pnpm install --frozen-lockfile`, Rust and the WebKitGTK packages, a throwaway desktop export, then `pnpm run typecheck`, `pnpm run build`, `pnpm run test:unit`, `pnpm run test:client`. |
 | `e2e` | Playwright, after `verify` passes. Mongo and Redis as service containers, then the full suite against the client's static export. This is the slow one. |
+| `desktop` | The desktop harness, after `verify` passes: builds the desktop export and a debug build of the desktop app with its e2e control channel, starts its own API and database, and runs `pnpm run test:e2e:desktop` under `xvfb-run`. Not in the deploy jobs' `needs:`. |
 | `dco` | Checks that every non-merge commit in the pull request carries a `Signed-off-by` trailer. |
 
 Every credential those jobs need is a throwaway literal in the workflow file
@@ -480,8 +500,8 @@ itself — none of them reads a repository secret — so they work unchanged fro
 fork, and each pins `permissions: contents: read` so pull request code never
 runs with a token that can publish anything.
 
-**On a push to `main`**, `verify` and `e2e` run the same way, and then three
-more jobs follow that a pull request can never reach: `build-server` and
+**On a push to `main`**, `verify`, `e2e` and `desktop` run the same way, and
+then three more jobs follow that a pull request can never reach: `build-server` and
 `build-client` publish the two Docker images to `ghcr.io`, and `deploy` calls
 the Coolify deploy API. Each of those three is gated on
 `if: github.event_name == 'push'` in its own right, not merely through the

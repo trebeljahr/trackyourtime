@@ -366,7 +366,7 @@ rasterize an SVG itself, so the bitmaps have to be committed — the script is
 what keeps them derived from the SVG rather than drifting.
 
 The same command regenerates every other bitmap the repo ships from that one
-file: the Electron icon source, Raycast's command and menu bar
+file: the desktop app's icon source, Raycast's command and menu bar
 icons, and the Capacitor icon and splash. They are one mark on purpose, so run
 it for all of them, not just these four.
 

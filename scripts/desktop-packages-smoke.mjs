@@ -8,6 +8,12 @@
  * dependencies or the install scriptlets. Both drive the project-agnostic
  * runners in scripts/crossplat/. docs/cross-platform-testing.md.
  *
+ * Each package's program is started in the app's smoke mode
+ * (TRACKYOURTIME_SMOKE_REPORT, honoured by release builds): it loads, waits for
+ * its page, writes a report and exits. A WebKitGTK app has no CDP to drive, so
+ * the report and the exit code are the verdict, and the screenshot is read
+ * from Xvfb's framebuffer.
+ *
  *   pnpm test:desktop:packages                     # every package in release/
  *   pnpm test:desktop:packages --dir <dir>         # somewhere else, e.g. a `gh release download`
  *   pnpm test:desktop:packages <file>...           # exactly these
@@ -23,13 +29,15 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { SMOKE_REPORT_ENV } from "./lib/desktop-tauri.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * The architecture a release artifact is built for, from the name
- * electron-builder gives it: `-linux-arm64.AppImage` / `-linux-x86_64.AppImage`
- * (electron-builder.config.mjs `names.linux`), `_arm64.deb` / `_amd64.deb` and
- * `.aarch64.rpm` / `.x86_64.rpm`. Kept here rather than in scripts/crossplat/
+ * The architecture a release artifact is built for, from the name the release
+ * gives it: `-linux-arm64.AppImage` / `-linux-x86_64.AppImage`, `_arm64.deb` /
+ * `_amd64.deb` and `.aarch64.rpm` / `.x86_64.rpm` (`artifactName` in
+ * scripts/lib/desktop-release.mjs). Kept here rather than in scripts/crossplat/
  * because it is this project's naming, not a rule about packages.
  */
 export function artifactArch(file) {
@@ -97,7 +105,8 @@ function main(argv) {
   const candidates = files.length ? files.map((file) => resolve(file)) : findPackages(searched);
   if (!candidates.length) {
     fail(
-      `no .AppImage, .deb or .rpm in ${searched}. Build them (\`node scripts/build-desktop.mjs --package --linux --${daemonArch === "aarch64" ? "arm64" : "x64"}\`) ` +
+      `no .AppImage, .deb or .rpm in ${searched}. Build them on Linux ` +
+        "(`node scripts/build-desktop.mjs --channel linux --package --bundles appimage,deb,rpm`) " +
         "or download a release's (`gh release download <tag> --dir <dir>`) and pass --dir.",
     );
   }
@@ -122,9 +131,12 @@ function main(argv) {
     const args = [
       "scripts/crossplat/linux-package-smoke.mjs",
       "--package", step.file,
+      "--mode", "report",
+      "--report-env", SMOKE_REPORT_ENV,
       "--expect-url-prefix", "app://-",
-      // Not TRACKYOURTIME_HEADLESS: a never-shown window gives CDP no frames on
-      // X11, and Xvfb is virtual, so a shown window reaches no real screen.
+      // Not TRACKYOURTIME_HEADLESS: a window that is never shown paints
+      // nothing on X11, and Xvfb is virtual, so a shown window reaches no
+      // real screen.
       "--env", "TRACKYOURTIME_USER_DATA_DIR=/tmp/trackyourtime-package-smoke",
       "--out", outDirFor(step.file),
     ];

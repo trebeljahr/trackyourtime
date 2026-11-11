@@ -1,9 +1,9 @@
 /*
  * Preloaded into the harness's API process (`node --import`), so the specs can
  * read what reached the SERVER — the only place the "no Cookie header" claim
- * can be proved. A browser-side check would miss a cookie added by the network
- * stack after the page's fetch, and Electron's webRequest does not report the
- * WebSocket upgrade at all (Stage 0).
+ * can be proved. A page-side check would miss a cookie added by the WebView's
+ * network stack after the page's fetch, and would not see the WebSocket
+ * upgrade's headers at all (Stage 0).
  *
  * Every HTTP request and upgrade is appended to DESKTOP_E2E_REQUEST_LOG as one
  * JSON line. Header VALUES of credentials are never written: only whether a

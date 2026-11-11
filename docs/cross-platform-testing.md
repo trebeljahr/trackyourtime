@@ -1,10 +1,13 @@
 # Trying the desktop app on Windows and Linux
 
-Three commands, built on the project-agnostic tools in `scripts/crossplat/`:
+The desktop app is Tauri 2 (`desktop/src-tauri`): one Rust executable with the
+static export inside it, on the system WebView — WebView2 on Windows,
+WebKitGTK on Linux. Three commands, built on the project-agnostic tools in
+`scripts/crossplat/`:
 
 ```bash
 pnpm prod:win                       # Windows arm64 build against api.trackyourtime.dev, dropped for a UTM VM
-pnpm desktop:try-release 0.1.2      # the file a release published, downloaded and dropped for a VM
+pnpm desktop:try-release 0.4.0      # the file a release published, downloaded and dropped for a VM
 pnpm test:desktop:linux             # Linux build, started in Docker under Xvfb: pass/fail + screenshot
 ```
 
@@ -16,27 +19,34 @@ host's screen.
 The first two answer different questions. `prod:win` cross-builds an **unpacked**
 app on this Mac, which tests the code; `desktop:try-release` downloads the
 **installer or AppImage a user downloads**, which tests what the release
-workflow actually produced — the packaging, the launcher, the file's own
+workflow actually produced — the packaging, the installer, the file's own
 integrity. Use it before publishing a draft release.
-
-`prod:win` and `test:desktop:linux` need Node 24, like every desktop build
-(`nvm use 24`). `desktop:try-release` builds nothing and needs only `gh`.
 
 ## pnpm prod:win
 
-1. The command builds the unpacked Windows arm64 app on the Mac. electron-builder
-   cross-builds it with no Wine.
+1. The command cross-builds the unpacked Windows arm64 app on the Mac:
+   `tauri build --runner cargo-xwin --target aarch64-pc-windows-msvc --no-bundle`
+   (`scripts/build-desktop.mjs --package --dir --target …`). The app is one
+   executable, `release/win-arm64-unpacked/Track Your Time.exe`.
 2. It copies the build to `~/VMShare/trackyourtime/windows-arm64/`, next to
    `run.cmd`.
 3. In the Windows VM, open the share and double-click
    `trackyourtime\windows-arm64\run.cmd`. The launcher copies the build to
    `%LOCALAPPDATA%\crossplat\` and starts it.
 
+The cross build needs, once: `cargo install --locked cargo-xwin`,
+`rustup target add aarch64-pc-windows-msvc` and `brew install llvm` (clang-cl
+and lld-link). cargo-xwin downloads the MSVC CRT and Windows SDK headers on
+first use, after accepting their licence on your behalf; read
+<https://github.com/rust-cross/cargo-xwin> before the first run. The installer
+(NSIS) is never built on a Mac: the release workflow builds it on Windows.
+
 Quit the app in the VM before the next drop. Otherwise the launcher cannot
 replace the files it is still running.
 
 The build is arm64 to match a Windows VM on Apple Silicon. Most Windows users
-have x64 machines; the release workflow builds x64 on a real Windows runner.
+have x64 machines; the release workflow builds both on a real Windows runner.
+The app needs the WebView2 runtime, which Windows 11 ships with.
 
 Windows shows a SmartScreen warning ("Windows protected your PC") because the
 build is unsigned. Click **More info**, then **Run anyway**.
@@ -51,37 +61,40 @@ export CROSSPLAT_UTM_VM="Windows 11"
 ### Against a local API instead
 
 The VM reaches the Mac at `192.168.64.1` on UTM's default Shared Network. The
-dev server listens on every interface and trusts `app://-`. So pin the API
-port, then bake that address into the build:
+dev server listens on every interface. On Windows the app's document origin is
+`http://app.localhost` (WebView2 serves a custom scheme that way), which the
+dev server trusts with the other desktop origins. So pin the API port, then
+bake that address into the build:
 
 ```bash
 API_PORT=51590 PORT=33920 pnpm run dev
 ```
 
 ```bash
-NEXT_PUBLIC_API_URL=http://192.168.64.1:51590 node scripts/build-desktop.mjs --package --win --arm64 --dir && node scripts/crossplat/vm-drop.mjs --project trackyourtime --platform windows-arm64 --source release/win-arm64-unpacked --launch "Track Your Time.exe" --note "local API"
+NEXT_PUBLIC_API_URL=http://192.168.64.1:51590 node scripts/build-desktop.mjs --package --dir --target aarch64-pc-windows-msvc && node scripts/crossplat/vm-drop.mjs --project trackyourtime --platform windows-arm64 --source release/win-arm64-unpacked --launch "Track Your Time.exe" --note "local API"
 ```
 
 ## pnpm desktop:try-release
 
 ```bash
-pnpm desktop:try-release 0.1.2                  # Linux arm64 AppImage (the default)
-pnpm desktop:try-release v0.1.2 linux-x64
-pnpm desktop:try-release 0.1.2 --start-vm "Ubuntu 24.04"
+pnpm desktop:try-release 0.4.0                  # Linux arm64 AppImage (the default)
+pnpm desktop:try-release v0.4.0 linux-x64
+pnpm desktop:try-release 0.4.0 windows-arm64
+pnpm desktop:try-release 0.4.0 --start-vm "Ubuntu 24.04"
 ```
 
 1. It asks `gh` for that release — a **draft** counts, which is where every
    release sits until a person publishes it (CLAUDE.md → desktop release).
 2. It downloads the one asset that platform can start by itself, and the
    release's `SHA256SUMS.txt`, and refuses the drop if the sha256 does not
-   match. A 120 MB AppImage that arrived short should fail here, not in the VM.
+   match. An AppImage that arrived short should fail here, not in the VM.
 3. It hands the file to `scripts/crossplat/vm-drop.mjs`, which writes
    `~/VMShare/trackyourtime/<platform>/` with the asset, a `run.sh` (or
    `run.cmd`) and a `DROP.json` noting the tag.
 4. In the VM, double-click the launcher. It copies the file to the guest's own
    disk, marks it executable and starts it.
 
-The version may be written `0.1.2` or `v0.1.2`. No VM is started unless
+The version may be written `0.4.0` or `v0.4.0`. No VM is started unless
 `--start-vm` names one (or `CROSSPLAT_UTM_VM` is exported), because that opens
 UTM's window.
 
@@ -96,58 +109,67 @@ UTM's window.
 | Platform | Asset |
 |---|---|
 | `linux-arm64` | `TrackYourTime-<version>-linux-arm64.AppImage` |
-| `linux-x64` | `TrackYourTime-<version>-linux-x86_64.AppImage` (electron-builder writes the machine's own arch string) |
-| `windows-x64`, `windows-arm64` | `TrackYourTime-Setup-<version>.exe` — one installer carries both |
+| `linux-x64` | `TrackYourTime-<version>-linux-x86_64.AppImage` (the machine's own arch string, as every release has named it) |
+| `windows-x64` | `TrackYourTime-Setup-<version>.exe` |
+| `windows-arm64` | `TrackYourTime-Setup-<version>-arm64.exe`; up to 0.3.0 (Electron) one installer carried both, so those releases give `TrackYourTime-Setup-<version>.exe` |
 
 The deb, rpm and tar.gz on a release are installs and archives, not files a
 launcher can execute, so the command does not offer them. Fetch one by hand
 with `gh release download <tag> --repo trebeljahr/trackyourtime --pattern
 "*.deb"`.
 
-### Windows asks for a file that does not exist yet
+### Windows asks for a file that is not there
 
 ```
-pnpm desktop:try-release 0.1.2 windows-arm64
-```
-
-```
-desktop:try-release — v0.1.2 publishes no Windows asset (TrackYourTime-Setup-0.1.2.exe
+desktop:try-release — v0.4.0 publishes no Windows asset (TrackYourTime-Setup-0.4.0.exe
   is not there), so there is nothing a Windows VM can install.
 ```
 
-That is not a bug in the command. Windows signing is not set up: with no
-certificate (`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD`, or Azure Trusted
-Signing) the release workflow builds Windows as `-unsigned`, and it never
-attaches an `-unsigned` file to a release (docs/deploy.md → "Desktop release",
-and → winget, which waits on the same installer). So until signing lands,
-`pnpm prod:win` is the way to try the app on Windows, and the command says so
-and exits non-zero.
+That is not a bug in the command: that release's Windows leg was built
+unsigned. With no certificate (`WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD`, or
+Azure Trusted Signing) the release workflow builds Windows as `-unsigned`, and
+it never attaches an `-unsigned` file to a release (docs/deploy.md → "Desktop
+release"). Then `pnpm prod:win` is the way to try the app on Windows, and the
+command says so and exits non-zero.
 
 ## pnpm test:desktop:linux
 
 The command builds the unpacked Linux app for the Docker daemon's architecture
 (arm64 on this Mac, x64 on an x64 runner). The build points at a closed
-loopback port, `127.0.0.1:59999`, so no server is needed.
+loopback port, `127.0.0.1:59999`, so no server is needed. On Linux it is
+`build-desktop.mjs --package --dir`; on a Mac, which has no WebKitGTK to link
+against, the Rust build runs in a container of the daemon's architecture
+(`scripts/desktop/linux-build.Dockerfile`), from the export built on the host,
+into `desktop/target/linux-docker/`. The first build there takes a while (2
+CPUs and 2 GB in colima's default VM); later ones reuse the target directory.
 
-It then starts the app in a container, under Xvfb, and checks four things:
+It then starts the app in a container, under Xvfb, **in its smoke mode**: with
+`TRACKYOURTIME_SMOKE_REPORT=<path>` (release builds honour it too) the app
+loads, waits for its page, writes `{ ok, href, title, bridge, platform,
+bodyText, problems }` there and exits, 0 on ok. A WebKitGTK app has no CDP, so
+that report is the verdict, through the probe's `report` mode
+(`scripts/crossplat/linux-smoke/probe.mjs`). It passes when:
 
-- a page at `app://-` appears;
-- the page throws no uncaught error;
-- a screenshot succeeds;
-- the app is still running 5 seconds later.
+- the report says `ok` — the bridge is installed, the page rendered text, and
+  no page error or CSP violation was collected;
+- the page is at `app://-`;
+- the app exited 0;
+- Xvfb showed a non-blank frame, which becomes the screenshot. It is read from
+  Xvfb's own framebuffer file (`-fbdir`), so no screenshot tool is installed in
+  any image.
 
-The output is in `test-results/linux-smoke/`: `result.json`, `screenshot.png`
-and `app.log`. A pass shows the login screen with two refused requests in the
-console, which are expected with no server.
+The output is in `test-results/linux-smoke/`: `result.json`,
+`app-report.json`, `screenshot.png` and `app.log`. A pass shows the login
+screen.
 
 | Flag | Effect |
 |---|---|
-| `--reuse-export` | Package the export already in `out-desktop` instead of building it again |
-| `--skip-build` | Test what is already in `release/` |
+| `--reuse-export` | Build from the export already in `out-desktop` instead of building it again |
+| `--skip-build` | Test what is already in `release/linux*-unpacked/` |
 
 The app runs without `TRACKYOURTIME_HEADLESS`. On X11 a window that was never
-shown gives CDP no frames, and the screenshot waits forever. Xvfb is a virtual
-display, so the shown window never reaches a real screen.
+shown paints nothing. Xvfb is a virtual display, so the shown window never
+reaches a real screen.
 
 Setup, once:
 
@@ -166,9 +188,9 @@ minutes. Later runs take about 15 seconds plus the app build.
 
 `test:desktop:linux` above runs the **unpacked** app, so it never touches the
 packaging: the desktop entry, the icon paths, the AppImage runtime, the declared
-dependencies and the install scriptlets are all untested by it. This command
-takes the files a release actually ships — `.AppImage`, `.deb`, `.rpm` — and
-proves each one installs and starts.
+dependencies and the install scripts are all untested by it. This command takes
+the files a release actually ships — `.AppImage`, `.deb`, `.rpm` — and proves
+each one installs and starts.
 
 ```bash
 pnpm test:desktop:packages                 # every package in release/
@@ -176,9 +198,13 @@ pnpm test:desktop:packages --dir <dir>     # e.g. a `gh release download` folder
 pnpm test:desktop:packages <file>...       # exactly these
 ```
 
+The packages are built on Linux only (`node scripts/build-desktop.mjs --channel
+linux --package --bundles appimage,deb,rpm`, or the release workflow); on a Mac,
+test a release's with `--dir`.
+
 Each kind is installed the way a person installs it, in an image that carries
-**only the test harness** — a virtual display, a session bus, Node and
-playwright-core, and no Electron runtime library at all:
+**only the test harness** — a virtual display, a session bus and Node, and no
+desktop runtime library at all:
 
 | Kind | Image | How it is installed |
 |---|---|---|
@@ -187,14 +213,17 @@ playwright-core, and no Electron runtime library at all:
 | `.AppImage` | the `linux-smoke` image, which has the desktop libraries an AppImage expects to find | `chmod +x`, then `--appimage-extract` and run the AppDir |
 
 That bareness is the point: a dependency the package forgot to declare fails the
-install here instead of being satisfied by accident.
+install here instead of being satisfied by accident. WebKitGTK, GTK and dbus are
+linked, so a missing one fails at start; the tray's AppIndicator and the idle
+time's libXss are **dlopened**, so `ldd` never names them and a missing one
+would only lose the tray icon or the idle prompt. All of them are declared by
+name (`LINUX_PACKAGE_DEPENDENCIES` in `scripts/lib/desktop-tauri.mjs`).
 
 It then reads the installed `.desktop` file, checks its `Exec` and `Icon`
 resolve to files that exist, and hands the program to the same probe
-`test:desktop:linux` uses — so the pass criteria are identical: a page at
-`app://-`, no uncaught page error, a screenshot, and still running after the
-settle time. Output is `test-results/linux-packages/<kind>-<arch>/`, with
-`install.json` beside the usual `result.json`, `screenshot.png` and `app.log`.
+`test:desktop:linux` uses, in the same report mode — so the pass criteria are
+identical. Output is `test-results/linux-packages/<kind>-<arch>/`, with
+`install.json` beside the usual files.
 
 | Flag | Effect |
 |---|---|
@@ -213,46 +242,37 @@ Two limits:
   /tmp/...` is invisible inside the container. The runner says so when it
   happens.
 
-Like `test:desktop:linux`, the app runs without `TRACKYOURTIME_HEADLESS`, for
-the same reason: on X11 a never-shown window gives CDP no frames.
+### Upgrading an Electron package in place
 
-### What it found
+The deb and rpm keep the Electron packages' name, `trackyourtime`, so
+`apt install ./trackyourtime_<v>_amd64.deb` upgrades an Electron install
+rather than installing a second app. One trap is handled in the new package:
+the Electron package's post-remove script, which dpkg and rpm also run on an
+upgrade, removes its `update-alternatives` link for `/usr/bin/trackyourtime`.
+The Tauri package's pre-install script (`build/linux/preinstall.sh`) removes
+that registration first, so the old script has nothing left to remove and
+cannot take the new binary's path with it. This path has not been run against
+a real Electron install yet; check it with an old deb before the first Tauri
+release.
 
-Run against the v0.1.2 arm64 artifacts, all three failed, each for its own
-reason. The `.deb` and `.rpm` are fixed in `electron-builder.config.mjs`
-(`deb.depends`, `rpm.depends`). The AppImage fix selects the static runtime
-with `toolsets.appimage: "1.0.3"`, instead of the legacy runtime below.
+### What it found in the Electron packages
 
-| Artifact | Verdict | Cause |
-|---|---|---|
-| `trackyourtime_0.1.2_arm64.deb` | failed | `libgbm.so.1: cannot open shared object file` — `libgbm1` and `libasound2` are DT_NEEDED and were in neither `Depends` nor electron-builder's default list |
-| `trackyourtime-0.1.2.aarch64.rpm` | failed | `libasound.so.2` — `alsa-lib` undeclared. `mesa-libgbm` only arrived because `gtk3` happens to pull it, and `libsecret` (dlopened by `safeStorage`, so invisible to `ldd`) was missing entirely |
-| `TrackYourTime-0.1.2-linux-arm64.AppImage` | failed | The AppImage **runtime** has `DT_NEEDED: libz.so` — the unversioned symlink, which ships in `zlib1g-dev` and is not on a user's machine. The payload is sound: with that symlink present the app extracts and reaches `app://-` |
-
-`depends` **replaces** electron-builder's defaults rather than adding to them,
-so the config repeats the whole list. Dropping one is silent until an install
-fails.
-
-On 30 September 2026, the original v0.1.2 ARM64 packages failed again after
-their checksums were verified. The rebuilt AppImage and deb passed clean
-install/startup tests with the fixes. See [release readiness](release-readiness.md)
-for the full results and remaining platform checks. Release CI now runs these
-package tests on both Linux architectures before creating the draft.
+Against the v0.1.2 arm64 artifacts, all three Electron packages failed, each
+for its own reason: the `.deb` on `libgbm.so.1` and the `.rpm` on
+`libasound.so.2` (both DT_NEEDED and undeclared), and the AppImage on its
+runtime's `DT_NEEDED: libz.so`. The fixes were in the electron-builder config
+of the time; the lesson — declare every library by name, and never rely on one
+arriving transitively — is what `LINUX_PACKAGE_DEPENDENCIES` follows.
 
 For package QA before tagging, use **Linux Package QA**
-(`.github/workflows/linux-package-qa.yml`) after the workflow reaches main.
-It builds and tests all three packages on native x64 and ARM64 runners.
-Results and tested packages stay in Actions artifacts. It does not publish a
-release or upload to a store. After authorization to push and dispatch:
+(`.github/workflows/linux-package-qa.yml`). It builds and tests all three
+packages on native x64 and ARM64 runners. Results and tested packages stay in
+Actions artifacts. It does not publish a release or upload to a store:
 
 ```bash
 gh workflow run linux-package-qa.yml --ref main
 ```
 
-The local RPM rebuild exposed a separate resource failure: Colima's kernel
-killed `rpmbuild` during multithreaded xz compression in its 2 GB VM. The RPM
-configuration now uses gzip to reduce memory use, at the cost of a larger
-archive. Native CI run [36651056513](https://github.com/trebeljahr/trackyourtime/actions/runs/36651056513) passed RPM build, installation and startup on x64 and ARM64, alongside AppImage and deb.
 Do not restart shared Docker services to make room for QA.
 
 ## One-time setup: a Windows 11 VM in UTM
@@ -266,7 +286,7 @@ Set them up once, not once per project.
    **Virtualize** → **Windows**. Tick **Install drivers and SPICE tools** and
    select the ISO. Give it 8 GB of memory, 4 cores and at least 64 GB of disk.
    Leave **Shared Directory** empty: it uses WebDAV, which refuses files over
-   50 MB, and the app's executable is about 200 MB.
+   50 MB, and other projects' builds are larger than that.
 3. **Install Windows.** Follow UTM's guide, <https://docs.getutm.app/guides/windows/>,
    which also covers accounts. When setup finishes, run the SPICE guest tools
    installer from the mounted CD drive, then restart.
@@ -295,7 +315,8 @@ without it the AppImage exits saying so.
 ## Other projects
 
 `scripts/crossplat/README.md` lists what another project copies, and how an
-Electron app and a Tauri app each feed the same drop folder.
+Electron app (the probe's `cdp` mode) and a Tauri app (its `report` mode) each
+use the same runners and drop folder.
 
 
 ## Isolated iOS simulator QA

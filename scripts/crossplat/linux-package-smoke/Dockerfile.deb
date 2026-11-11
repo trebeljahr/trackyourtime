@@ -2,10 +2,10 @@
 #
 # The point of this image is what it does NOT contain. It carries only what the
 # TEST needs — a virtual display, a session bus, Node and playwright-core — and
-# none of the libraries an Electron app needs to start. `apt-get install
-# ./app.deb` therefore has to pull libgtk-3-0, libnss3 and the rest out of the
-# package's own Depends field, so a missing or misspelled dependency fails the
-# install instead of being satisfied by accident.
+# none of the libraries a desktop app needs to start (GTK, WebKitGTK, NSS…).
+# `apt-get install ./app.deb` therefore has to pull them out of the package's
+# own Depends field, so a missing or misspelled dependency fails the install
+# instead of being satisfied by accident.
 #
 # Project-agnostic on purpose: nothing here names an app. Build it for the
 # Docker host's architecture; the installer refuses a package built for another.

@@ -6,7 +6,7 @@
  *   pnpm desktop:mas-upload --dry-run                  # newest successful run, validate only
  *   pnpm desktop:mas-upload                            # validate, then upload
  *   pnpm desktop:mas-upload --run 36941084893
- *   pnpm desktop:mas-upload --pkg release/mas-universal/Track-Your-Time-0.2.3-universal.pkg
+ *   pnpm desktop:mas-upload --pkg release/TrackYourTime-0.4.0-mas-universal.pkg
  *
  * A person's command, like `desktop:rollout`: `gh` with the caller's login
  * downloads the artifact, and the App Store Connect API key comes from

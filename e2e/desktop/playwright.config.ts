@@ -1,15 +1,16 @@
 import { defineConfig } from "@playwright/test";
 
 /*
- * The Electron harness: `pnpm test:e2e:desktop`.
+ * The desktop harness: `pnpm test:e2e:desktop`.
  *
  * Separate from the browser suite (playwright.config.ts ignores this folder)
  * because it needs different servers and a different build: global-setup.ts
- * starts its own `mongod` and a production-mode API on high ports, builds the
- * desktop export against that API when the one on disk was built for another,
- * and every spec launches `electron/dist/main.js` over `app://-` — the same
- * main process, scheme and export a packaged build runs, minus the fuses
- * (which disable the inspector Playwright drives Electron through).
+ * starts its own `mongod` and a production-mode API on high ports, and builds
+ * the desktop export against that API plus a debug build of the shell with
+ * the `e2e` cargo feature. Every spec launches that binary headless over
+ * `app://-` — the same shell, scheme and export a release runs, plus the
+ * control channel the specs drive it through (driver.ts), which no release
+ * build has.
  *
  * On Linux CI it runs under `xvfb-run`.
  */

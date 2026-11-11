@@ -69,11 +69,29 @@ jobs:
           node-version-file: .nvmrc
       - uses: pnpm/action-setup@v6
       - run: pnpm install --frozen-lockfile
+      # The desktop app is Rust (desktop/, one Cargo workspace): `pnpm run
+      # typecheck` cargo-checks it and `pnpm run test:unit` runs its tests.
+      # Both compile the Tauri app, which links WebKitGTK and embeds
+      # packages/client/out-desktop at compile time, so the toolchain, the
+      # system libraries and a throwaway export (against a dead loopback API)
+      # come first.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop -> target
+      - name: Install the desktop app's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf
+      - name: Build a desktop export for the Rust checks
+        run: node scripts/build-desktop.mjs --export-only
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:59999
       # `pnpm run build` compiles shared -> core -> server -> client, which
-      # leaves packages/extension, packages/raycast and electron/ untypechecked
+      # leaves packages/extension, packages/raycast and desktop/ untypechecked
       # — they are not in the build graph at all. A change that breaks the
-      # browser extension, the Raycast extension or the Electron main process
-      # would otherwise go green through the entire pipeline.
+      # browser extension, the Raycast extension or the desktop app would
+      # otherwise go green through the entire pipeline.
       - run: pnpm run typecheck
       # Before the build, so a lint failure costs seconds rather than the full
       # compile. This is the only place eslint is enforced for everyone: the
@@ -157,11 +175,12 @@ jobs:
           BETTER_AUTH_URL: http://127.0.0.1:5006
           FRONTEND_URL: http://127.0.0.1:3001
 
-  # Also runs on both events, and reads no secret. The Electron harness
-  # (e2e/desktop/): its global setup builds the desktop export and the bundled
-  # main/preload, starts its own production-mode API against the replica set
-  # started below, and every spec launches electron/dist/main.js over app://-. Linux
-  # has no display, hence xvfb-run. Not in build-server's or build-client's
+  # Also runs on both events, and reads no secret. The desktop harness
+  # (e2e/desktop/): its global setup builds the desktop export and the debug
+  # Tauri app with its e2e control channel (scripts/build-desktop.mjs --e2e),
+  # starts its own production-mode API against the replica set started below,
+  # and every spec launches that binary headless. Linux has no display, hence
+  # xvfb-run. Not in build-server's or build-client's
   # `needs:`, so a desktop-only failure does not hold up a web deploy.
   desktop:
     runs-on: ubuntu-latest
@@ -180,14 +199,22 @@ jobs:
       # shared, invoice-pdf and core are what the API and the client import from dist/
       # (core imports @starter/invoice-pdf, so it builds second).
       - run: pnpm --filter @starter/shared run build && pnpm --filter @starter/invoice-pdf run build && pnpm --filter @starter/core run build
-      # Electron 42 has no install script; the binary arrives only when asked.
-      - run: pnpm run electron:ensure
-      # Chromium's shared libraries for the Electron binary.
-      - run: npx playwright install-deps chromium
+      # The Tauri app: Rust, WebKitGTK and the tray's AppIndicator to build
+      # it, Xvfb to show its (never-focused) window. The harness builds the
+      # export and the debug app with the e2e channel itself
+      # (scripts/build-desktop.mjs --e2e).
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop -> target
+      - name: Install the desktop app's build and run dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf xvfb dbus-x11
       # Ubuntu 24.04's AppArmor forbids the unprivileged user namespaces
-      # Chromium's sandbox needs, and Electron aborts at launch without them.
-      # Lifting that on the throwaway runner keeps `sandbox: true` in force
-      # under test instead of launching with --no-sandbox.
+      # WebKitGTK's bubblewrap sandbox puts each web process in. Lifting that
+      # on the throwaway runner keeps the sandbox in force under test rather
+      # than turning it off.
       - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Run the desktop harness
         run: xvfb-run --auto-servernum -- pnpm run test:e2e:desktop
@@ -322,7 +349,7 @@ jobs:
           CI: "true"
       # The docs, at https://trackyourtime.dev/docs/, copied into out/docs/.
       # Not part of the client's own `build` script, which also feeds the
-      # Electron, Capacitor and E2E builds. Fails on noindex, a foreign
+      # desktop, Capacitor and E2E builds. Fails on noindex, a foreign
       # canonical link or a broken docs link.
       - run: node scripts/docs/build-into-client.mjs
       # Which commit and release this is, and which API it was built against:

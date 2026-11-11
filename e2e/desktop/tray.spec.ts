@@ -1,14 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { test } from "@playwright/test";
 
 import {
   createAccount,
+  expect,
   launchApp,
   signInThroughForm,
   trpcCall,
   webSession,
   type Account,
+  type DesktopApp,
+  type Page,
 } from "./support";
 
 /*
@@ -16,36 +19,32 @@ import {
  * Settings → Desktop and the notifications a hidden window needs.
  *
  * Every launch is headless (support.ts), so no tray icon, OS shortcut,
- * notification, dialog or badge is created. The main process records each on
- * `globalThis.__trackYourTimeDesktop` (electron/src/desktop.ts), and these
- * specs drive and read that hook through `app.evaluate` — the same handlers a
- * tray click, a hotkey or a notification click reaches. "From the web" is a
- * second session for the same account, as in sign-in.spec.ts.
+ * notification, dialog or badge is created. The desktop controller records
+ * each instead (tyt_model::desktop_controller → test_call), and these specs
+ * drive and read it through `app.hook` — the same handlers a tray click, a
+ * hotkey or a notification click reaches. "From the web" is a second session
+ * for the same account, as in sign-in.spec.ts.
  */
 
 type TrayItem = { type: "item"; id: string; label: string } | { type: "heading"; label: string } | { type: "separator" };
 type TimerState = { signedIn: boolean; running: { description: string } | null; unsent: number } | null;
 type Entry = { id: string; description: string; source: string; end: string | null; start: string } | null;
 
-let app: ElectronApplication | null = null;
+let app: DesktopApp | null = null;
 
 test.afterEach(async () => {
   await app?.close().catch(() => undefined);
   app = null;
 });
 
-const hook = <T>(fn: string, arg?: unknown): Promise<T> =>
-  app!.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    (_electron, [body, value]) => new Function("hook", "arg", body)((globalThis as Record<string, unknown>).__trackYourTimeDesktop, value),
-    [fn, arg] as const,
-  ) as Promise<T>;
+/** The desktop controller's test hook, by method name. */
+const hook = <T>(name: string, arg?: unknown): Promise<T> => app!.hook<T>(name, arg) as Promise<T>;
 
-const trayMenu = (): Promise<TrayItem[]> => hook<TrayItem[]>("return hook.trayMenu()");
-const trayState = (): Promise<TimerState> => hook<TimerState>("return hook.state()");
-const clickTray = (id: string): Promise<void> => hook<void>("hook.clickTray(arg)", id);
-const trigger = (action: string): Promise<void> => hook<void>("hook.trigger(arg)", action);
-const registered = (): Promise<string[]> => hook<string[]>("return hook.registered()");
+const trayMenu = (): Promise<TrayItem[]> => hook<TrayItem[]>("trayMenu");
+const trayState = (): Promise<TimerState> => hook<TimerState>("state");
+const clickTray = (id: string): Promise<void> => hook<void>("clickTray", id);
+const trigger = (action: string): Promise<void> => hook<void>("trigger", action);
+const registered = (): Promise<string[]> => hook<string[]>("registered");
 
 async function signedInWithRecent(description: string): Promise<{
   page: Page;
@@ -97,8 +96,8 @@ test("start from the tray, stop from the web: the tray clears within a second", 
     .toBe("Tray recent/desktop");
   await expect(page.getByTestId("tracker-toggle")).toHaveAttribute("data-state", "running");
   await expect.poll(async () => (await trayMenu()).some((item) => item.type === "item" && item.id === "stop")).toBe(true);
-  expect(await hook<string>("return hook.trayTooltip()")).toMatch(/^Tray recent — (<1m|\d+m|\d+h \d{2}m)$/);
-  if (process.platform === "darwin") expect(await hook<string>("return hook.trayTitle()")).toMatch(/^(<1m|\d+m|\d+h \d{2}m)$/);
+  expect(await hook<string>("trayTooltip")).toMatch(/^Tray recent — (<1m|\d+m|\d+h \d{2}m)$/);
+  if (process.platform === "darwin") expect(await hook<string>("trayTitle")).toMatch(/^(<1m|\d+m|\d+h \d{2}m)$/);
 
   await trpcCall(web, "entries.stop", {}, "mutation");
   const stoppedAt = Date.now();
@@ -112,7 +111,7 @@ test("start from the tray, stop from the web: the tray clears within a second", 
 test("the toggle shortcut stops and resumes with the window hidden", async () => {
   const { web } = await signedInWithRecent("Shortcut work");
   await continueItem("Shortcut work");
-  const revealsBefore = await hook<number>("return hook.reveals()");
+  const revealsBefore = await hook<number>("reveals");
 
   // Only the default is registered, and only with the in-memory registrar.
   expect(await registered()).toEqual(["CommandOrControl+Alt+Shift+Space"]);
@@ -128,9 +127,9 @@ test("the toggle shortcut stops and resumes with the window hidden", async () =>
   await expect.poll(async () => await trpcCall<Entry>(web, "entries.current", undefined, "query")).toBeNull();
 
   // Neither press showed or asked for the window.
-  expect(await hook<number>("return hook.reveals()")).toBe(revealsBefore);
-  expect(await app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible()))).toBe(false);
-  expect(await hook<{ kind: string }[]>("return hook.commands")).toEqual([{ kind: "toggle" }, { kind: "toggle" }]);
+  expect(await hook<number>("reveals")).toBe(revealsBefore);
+  expect((await app!.windowState())?.visible).toBe(false);
+  expect(await hook<{ kind: string }[]>("commands")).toEqual([{ kind: "toggle" }, { kind: "toggle" }]);
 });
 
 test("offline: start and stop from the tray are counted in the menu, flush when back, and warn on quit", async () => {
@@ -151,12 +150,11 @@ test("offline: start and stop from the tray are counted in the menu, flush when 
   // Nothing reached the server.
   expect(await trpcCall<Entry>(web, "entries.current", undefined, "query")).toBeNull();
 
-  // Quitting now names the count. Emitted rather than quitting for real, so
-  // the app is still there to read; the handler is the one a real quit runs.
-  await app!.evaluate(({ app: electronApp }) => {
-    electronApp.emit("before-quit", { preventDefault: () => undefined });
-  });
-  expect(await hook<{ title: string; body: string }[]>("return hook.quitNotices")).toEqual([
+  // Quitting now names the count. Run as the quit sequence's first step
+  // rather than quitting for real, so the app is still there to read; it is
+  // the handler a real quit runs (shell.rs → finish_quit).
+  await hook("beforeQuit");
+  expect(await hook<{ title: string; body: string }[]>("quitNotices")).toEqual([
     {
       title: "2 changes are not sent yet",
       body: "They stay on this computer. Track Your Time sends them the next time it starts and reaches the server.",
@@ -210,7 +208,7 @@ test("Settings → Desktop rebinds, refuses a taken chord, clears, persists, and
   await expect.poll(async () => (await registered()).sort()).toEqual(["CommandOrControl+Alt+Shift+Space", "Control+Alt+N"]);
 
   // A chord another application holds is saved but reported, not swallowed.
-  await hook("hook.takeChord(arg)", "Control+Alt+K");
+  await hook("takeChord", "Control+Alt+K");
   await page.getByTestId("desktop-shortcut-record-open-palette").click();
   await page.keyboard.press("Control+Alt+KeyK");
   await expect(page.getByTestId("desktop-shortcut-problem-open-palette")).toHaveAttribute("data-problem", "taken");
@@ -261,7 +259,7 @@ test("a runaway prompt posts a notification while hidden, and its click opens th
   await page.reload();
   await expect(page.getByTestId("runaway-prompt")).toBeVisible({ timeout: 15_000 });
   await expect
-    .poll(async () => hook<{ kind: string; title: string; body: string }[]>("return hook.notifications"))
+    .poll(async () => hook<{ kind: string; title: string; body: string }[]>("notifications"))
     .toEqual([
       expect.objectContaining({
         kind: "runaway",
@@ -272,14 +270,14 @@ test("a runaway prompt posts a notification while hidden, and its click opens th
   // Away on another screen, the click brings the window back to the prompt.
   await page.getByTestId("nav-reports").click();
   await page.waitForURL(/\/app\/reports\//);
-  const revealsBefore = await hook<number>("return hook.reveals()");
-  await hook("hook.clickNotification(0)");
+  const revealsBefore = await hook<number>("reveals");
+  await hook("clickNotification", 0);
   await page.waitForURL(/\/app\/track\/?$/);
-  expect(await hook<number>("return hook.reveals()")).toBe(revealsBefore + 1);
+  expect(await hook<number>("reveals")).toBe(revealsBefore + 1);
   await expect(page.getByTestId("runaway-prompt")).toBeVisible();
 
   // A window in front gets no notification: the prompt is already on screen.
-  await hook("hook.pretendFocused(true)");
+  await hook("pretendFocused", true);
   const posted = await page.evaluate(() =>
     window.electronAPI!.desktop.notify({ kind: "idle", title: "In front", body: "", tag: "idle" }),
   );
@@ -287,28 +285,28 @@ test("a runaway prompt posts a notification while hidden, and its click opens th
 
   // The running badge follows its setting and the running timer; the login
   // item never reaches the OS in a headless run.
-  expect(await hook<boolean>("return hook.badge()")).toBe(false);
+  expect(await hook<boolean>("badge")).toBe(false);
   const update = await page.evaluate(() =>
     window.electronAPI!.desktop.updateSettings({ runningBadge: true, openAtLogin: true }),
   );
   expect(update.snapshot.loginItem).toBe("enabled");
-  expect(await hook<boolean>("return hook.badge()")).toBe(true);
+  expect(await hook<boolean>("badge")).toBe(true);
 });
 
 test("an update waits for the person: Restart to update in the tray and Settings, never on its own", async () => {
   const { page } = await signedInWithRecent("Updates");
 
-  // Headless runs a memory updater (electron/src/updater.ts): no network.
+  // Headless runs a memory updater (tyt_model::updater_controller): no network.
   await clickTray("settings");
   await page.waitForURL(/\/app\/settings\/?\?tab=desktop$/);
   await expect(page.getByTestId("settings-desktop-updates")).toHaveAttribute("data-status", "idle");
   await page.getByTestId("desktop-update-check").click();
-  await expect.poll(() => hook<number>("return hook.update.checks()")).toBe(1);
+  await expect.poll(() => hook<number>("update.checks")).toBe(1);
   expect((await trayMenu()).some((item) => item.type === "item" && item.id === "restart-to-update")).toBe(false);
 
-  await hook("hook.update.dispatch(arg)", { kind: "available", version: "9.9.9" });
+  await hook("update.dispatch", { kind: "available", version: "9.9.9" });
   await expect(page.getByTestId("desktop-update-status")).toContainText("9.9.9");
-  await hook("hook.update.dispatch(arg)", { kind: "downloaded", version: "9.9.9" });
+  await hook("update.dispatch", { kind: "downloaded", version: "9.9.9" });
   await expect(page.getByTestId("settings-desktop-updates")).toHaveAttribute("data-status", "ready");
   await expect
     .poll(async () => (await trayMenu()).some((item) => item.type === "item" && item.id === "restart-to-update"))
@@ -316,11 +314,11 @@ test("an update waits for the person: Restart to update in the tray and Settings
 
   // Downloaded, announced, and nothing restarted.
   await page.waitForTimeout(1_000);
-  expect(await hook<number>("return hook.update.installs()")).toBe(0);
+  expect(await hook<number>("update.installs")).toBe(0);
 
   // The tray item and the button each install exactly once when clicked.
   await clickTray("restart-to-update");
-  expect(await hook<number>("return hook.update.installs()")).toBe(1);
+  expect(await hook<number>("update.installs")).toBe(1);
   await page.getByTestId("desktop-update-restart").click();
-  await expect.poll(() => hook<number>("return hook.update.installs()")).toBe(2);
+  await expect.poll(() => hook<number>("update.installs")).toBe(2);
 });

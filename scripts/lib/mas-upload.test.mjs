@@ -50,8 +50,7 @@ describe("masInfoProblems", () => {
     CFBundleShortVersionString: "0.2.2",
     CFBundleVersion: "4512301",
     ITSAppUsesNonExemptEncryption: false,
-    ElectronTeamID: "4BHY8H2J25",
-    CFBundleIconName: "Icon",
+    CFBundleIconName: "AppIcon",
   };
 
   it("passes a store-ready app", () => {
@@ -65,7 +64,7 @@ describe("masInfoProblems", () => {
     assert.match(problems({ CFBundleVersion: "0.2.2" }).join(), /without DESKTOP_BUILD_NUMBER/);
     assert.match(problems({ CFBundleVersion: "build-7" }).join(), /not a build number/);
     assert.match(problems({ ITSAppUsesNonExemptEncryption: undefined }).join(), /ITSAppUsesNonExemptEncryption/);
-    assert.match(problems({ ElectronTeamID: undefined }).join(), /ElectronTeamID/);
+    assert.match(problems({ ElectronTeamID: "4BHY8H2J25" }).join(), /Electron build/);
     assert.match(problems({}, false).join(), /placeholder/);
     assert.match(problems({ CFBundleIconName: undefined }).join(), /placeholder/);
   });
@@ -89,16 +88,19 @@ describe("altoolArgs", () => {
 });
 
 describe("the release wiring", () => {
-  it("numbers the mas build in desktop-release.yml, which the config reads", () => {
+  it("numbers the mas build in desktop-release.yml, which the build hands to the bundle", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/desktop-release.yml"), "utf8");
     assert.match(workflow, /DESKTOP_BUILD_NUMBER=\$\(\(GITHUB_RUN_NUMBER \* 100 \+ GITHUB_RUN_ATTEMPT\)\)/);
-    const config = readFileSync(join(repoRoot, "electron-builder.config.mjs"), "utf8");
-    assert.match(config, /bundleVersion: env\("DESKTOP_BUILD_NUMBER"\)/);
+    const build = readFileSync(join(repoRoot, "scripts/build-desktop.mjs"), "utf8");
+    assert.match(build, /process\.env\.DESKTOP_BUILD_NUMBER/);
+    const config = readFileSync(join(repoRoot, "scripts/lib/desktop-tauri.mjs"), "utf8");
+    assert.match(config, /bundleVersion: String\(buildNumber\)/);
   });
 
-  it("gives macOS the Icon Composer document icons:brand writes", () => {
-    const config = readFileSync(join(repoRoot, "electron-builder.config.mjs"), "utf8");
-    assert.match(config, /icon: "build\/AppIcon\.icon"/);
+  it("compiles the Icon Composer document icons:brand writes into the bundle", () => {
+    const build = readFileSync(join(repoRoot, "scripts/build-desktop.mjs"), "utf8");
+    assert.match(build, /resolve\(repoRoot, "build\/AppIcon\.icon"\)/);
+    assert.match(build, /"--app-icon", "AppIcon"/);
     const doc = JSON.parse(readFileSync(join(repoRoot, "build/AppIcon.icon/icon.json"), "utf8"));
     const layer = doc.groups[0].layers[0]["image-name"];
     assert.ok(readFileSync(join(repoRoot, "build/AppIcon.icon/Assets", layer), "utf8").startsWith("<svg"));

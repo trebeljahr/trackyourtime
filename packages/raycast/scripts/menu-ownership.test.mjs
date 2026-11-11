@@ -30,7 +30,7 @@ const hook = registerHooks({
 });
 after(() => hook.deregister());
 const { publishMenuPresence, desktopHasYielded } = await import("../src/lib/menu-ownership.ts");
-const { hasRaycastMenu, publishDesktopMenu, watchRaycastMenu } = await import("../../../electron/src/raycast-menu.ts");
+const { hasRaycastMenu, publishDesktopMenu, watchRaycastMenu } = await import("./fixtures/desktop-menu-reference.ts");
 const { RAYCAST_MENU_LEASE_PARTS, DESKTOP_MENU_LEASE_PARTS } = await import("../src/vendor/index.ts");
 
 const home = mkdtempSync(path.join(tmpdir(), "timer-menu-test-"));

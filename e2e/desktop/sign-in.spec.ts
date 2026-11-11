@@ -1,18 +1,21 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { test } from "@playwright/test";
 
 import {
   API_ORIGIN,
   APP_ORIGIN,
-  apiRequests,
+  APP_ORIGIN_RE,
   appRequests,
   createAccount,
+  expect,
   launchApp,
   signInThroughForm,
   trpcCall,
   webSession,
   type Account,
+  type DesktopApp,
+  type Page,
 } from "./support";
 
 /*
@@ -25,7 +28,7 @@ import {
  * (record-requests.mjs) is what proves what the app sent.
  */
 
-let app: ElectronApplication | null = null;
+let app: DesktopApp | null = null;
 
 test.afterEach(async () => {
   await app?.close().catch(() => undefined);
@@ -56,20 +59,24 @@ async function socketOpen(since: number): Promise<void> {
 
 test("control: the server-side log does see a cookie when one is sent", async () => {
   // Without this, "no request carried a Cookie" could be a recorder that never
-  // notices one. The Stage 1 stand-in's method: the main process adds one.
+  // notices one. The system WebViews have no request hook to add a header to
+  // the app's own requests, and a page cannot set a Cookie header itself, so
+  // the request that carries one is sent from Node, as the app would send it:
+  // its origin, its client id and not the harness's user agent. What this
+  // proves is the recorder.
   const since = Date.now();
-  const launched = await launchApp();
-  app = launched.app;
-  await launched.page.waitForURL(/\/login\//);
-  await app.evaluate(({ session }, api) => {
-    session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${api}/*`] }, (details, callback) => {
-      callback({ requestHeaders: { ...details.requestHeaders, Cookie: "control=1" } });
-    });
-  }, API_ORIGIN);
-  await launched.page.evaluate((api) => fetch(`${api}/api/health`).then((r) => r.status), API_ORIGIN);
+  const response = await fetch(`${API_ORIGIN}/api/health`, {
+    headers: { origin: APP_ORIGIN, cookie: "control=1", "x-trackyourtime-client": "trackyourtime-desktop" },
+  });
+  expect(response.ok).toBe(true);
   await expect
     .poll(() => appRequests(since).some((r) => r.url === "/api/health" && r.cookie))
     .toBe(true);
+  // And a request without one is recorded as such.
+  await fetch(`${API_ORIGIN}/api/health?control=none`, { headers: { origin: APP_ORIGIN } });
+  await expect
+    .poll(() => appRequests(since).find((r) => r.url === "/api/health?control=none")?.cookie)
+    .toBe(false);
 });
 
 test("signs in through the form; the server sees a bearer token and never a cookie", async () => {
@@ -130,6 +137,10 @@ test("a timer started on the web appears in the app within a second", async () =
 test("quit and relaunch stays signed in, and the token on disk is ciphertext", async () => {
   const { page, userDataDir } = await signedIn();
   const status = await page.evaluate(() => window.electronAPI!.secureStore.status());
+  // Headless runs never touch the OS secret store: a fixed in-process key
+  // stands in for it (desktop/src-tauri/src/secure.rs), so no Keychain item
+  // is created and no prompt can take focus.
+  expect(status.backend).toBe("mock");
   await app!.close();
   app = null;
 
@@ -150,7 +161,7 @@ test("quit and relaunch stays signed in, and the token on disk is ciphertext", a
 
   const relaunched = await launchApp(userDataDir);
   app = relaunched.app;
-  await relaunched.page.waitForURL(/^app:\/\/-\/app\/track\//, { timeout: 20_000 });
+  await relaunched.page.waitForURL(new RegExp(`^${APP_ORIGIN_RE}/app/track/`), { timeout: 20_000 });
   await expect(relaunched.page.getByTestId("tracker-toggle")).toBeVisible();
 });
 
@@ -160,14 +171,10 @@ test("revoked from the web: the socket closes and the app lands on /login with t
   await socketOpen(since);
 
   // One unsent change: the start fails as a network error (the request is
-  // cancelled before it leaves), so the offline queue keeps it. The app sends
-  // it durably, as entries.applyOperation; the legacy path is blocked too.
-  await app!.evaluate(({ session }, api) => {
-    const urls = [`${api}/api/trpc/entries.start*`, `${api}/api/trpc/entries.applyOperation*`];
-    session.defaultSession.webRequest.onBeforeRequest({ urls }, (_details, callback) =>
-      callback({ cancel: true }),
-    );
-  }, API_ORIGIN);
+  // failed before it leaves, e2e_dom.js), so the offline queue keeps it. The
+  // app sends it durably, as entries.applyOperation; the legacy path is
+  // blocked too.
+  await page.blockRequests([`${API_ORIGIN}/api/trpc/entries.start*`, `${API_ORIGIN}/api/trpc/entries.applyOperation*`]);
   await page.getByTestId("tracker-description").fill("Queued, never sent");
   await page.getByTestId("tracker-toggle").click();
   await expect(page.getByTestId("offline-pending")).toBeVisible({ timeout: 15_000 });
@@ -240,6 +247,11 @@ test("OS idle reported by the main process raises the idle prompt", async () => 
   await trpcCall(web, "settings.update", { idle: { enabled: true, thresholdMinutes: 1, behavior: "ask" } }, "mutation");
   await page.reload();
   await expect(page.getByTestId("tracker-toggle")).toBeVisible();
+  // The shell mounts before the account's workspace and private session
+  // finish hydrating. A start made under that temporary identity is not
+  // claimed by this device's idle watcher (as in compact.spec.ts).
+  await expect(page.getByTestId("workspace-switcher")).toHaveAttribute("data-workspace-id", /.+/);
+  await expect(page.getByTestId("sync-status")).toHaveAttribute("data-status", "open", { timeout: 15_000 });
 
   // Started here, so this device owns the timer the idle rule applies to.
   await page.getByTestId("tracker-description").fill("Away from the desk");
@@ -253,28 +265,17 @@ test("OS idle reported by the main process raises the idle prompt", async () => 
   await page.waitForTimeout(62_000);
 
   // The OS idle counter cannot be moved from a test; what it feeds can. This
-  // is the payload idle.ts broadcasts, sent the way it sends it.
-  await app!.evaluate(({ BrowserWindow }) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send("idle:state", { state: "idle", idleSeconds: 61 });
-    }
-  });
+  // is the payload idle.rs pushes, sent through the shell's own push path
+  // (a headless run starts no idle monitor, so nothing else sends one).
+  await app!.push("idle:state", { state: "idle", idleSeconds: 61 });
   await page.waitForTimeout(300);
-  await app!.evaluate(({ BrowserWindow }) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send("idle:state", { state: "active", idleSeconds: 0 });
-    }
-  });
+  await app!.push("idle:state", { state: "active", idleSeconds: 0 });
   await expect(page.getByTestId("idle-prompt")).toBeVisible({ timeout: 10_000 });
 
   // Stage 5: the window is hidden (every harness launch is), so the prompt
   // also went out as a system notification — recorded, never posted, in a
-  // headless run (electron/src/desktop.ts).
-  const notices = await app!.evaluate(
-    () =>
-      (globalThis as { __trackYourTimeDesktop?: { notifications: { kind: string; title: string; body: string }[] } })
-        .__trackYourTimeDesktop?.notifications ?? [],
-  );
+  // headless run (tyt_model::desktop_controller).
+  const notices = await app!.hook<{ kind: string; tag: string; title: string; body: string }[]>("notifications");
   expect(notices).toEqual([
     {
       kind: "idle",

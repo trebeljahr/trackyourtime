@@ -8,6 +8,23 @@ This file records evidence. Every open step has one owner in the project vault's
 
 v0.2.2 is the only published GitHub release. v0.3.0 is built for every channel except the Microsoft Store and runs on the hosted service, but its GitHub release is still a draft. Chrome serves 0.3.0. Apple rejected iOS and macOS 0.3.0 with a Guideline 2.1 information request; both review submissions are still `UNRESOLVED_ISSUES`, and the reply task is open. Firefox 0.3.0 is in review. Android is on Play's internal track only. The download page still says "Not released yet" for every desktop channel.
 
+### Since this audit: the desktop app moved to Tauri (12 November 2026)
+
+Every desktop build named below, v0.3.0 included, is an Electron build. The
+desktop shell is Tauri 2 since 12 November 2026, and the next desktop release
+is the first Tauri build (`docs/desktop-app-plan.md` → "the shell moved to
+Tauri 2"). Three things follow:
+
+- Its draft is also the update that moves every Electron install to Tauri.
+  Installed Desktop QA (`.github/workflows/installed-desktop-qa.yml`) must
+  pass on it, and the macOS update must be checked by hand, before it is
+  published (`docs/deploy.md` → "Electron installs move to Tauri").
+- The Mac App Store submission after 0.3.0 must be a Tauri build.
+  `pnpm desktop:mas-upload` refuses a pkg whose app is an Electron build.
+- The signed mac and win legs refuse to build until the update key exists
+  (`build/updater.pub` and `TAURI_SIGNING_PRIVATE_KEY`, `docs/deploy.md` →
+  "The update key").
+
 ## Releases
 
 | Tag | State | Date |
@@ -73,7 +90,7 @@ Not gates, recorded for completeness: analytics (`1-tracktime-manual-notes.md` �
 
 - Native simulator QA at app source `c435dae6`, plus the iPad XCUITest scenarios of 1 October (`pnpm test:ios:ui`). These are isolated debug builds, not the signed store artifacts. Physical secure storage, radio changes, native sharing and signed-build behaviour remain untested.
 - Linux package QA rules: release CI runs `pnpm test:desktop:packages` on native x64 and ARM64 before the draft job. Package startup tests do not prove login, offline replay, updates, tray behaviour, FUSE mounting or a real Wayland desktop.
-- Automated desktop tests must keep the headless mock keychain enabled.
+- Automated desktop tests must run headless (`TRACKYOURTIME_HEADLESS=1`). In the Tauri build that means a fixed in-process key and no OS keychain access (`desktop/src-tauri/src/secure.rs`); in the Electron build it meant the mock keychain.
 
 ## Method
 

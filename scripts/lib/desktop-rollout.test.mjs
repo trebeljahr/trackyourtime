@@ -1,36 +1,36 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import yaml from "js-yaml";
+
+import { tauriFeedText } from "./desktop-release.mjs";
 import {
   describeStaging,
   feedAssetNames,
   isReleaseTag,
+  offeredTo,
   parseRolloutArgs,
   parseStagingPercentage,
   rewriteFeed,
   setStagingPercentage,
+  setStagingPercentageJson,
+  stagingBucket,
 } from "./desktop-rollout.mjs";
 
-// The parser and the staging check are electron-updater's own, from the
-// version the app ships, so these tests pin the contract with the reader
-// rather than with our idea of it.
+// js-yaml is the parser electron-updater reads its feeds with (it depends on
+// js-yaml ^4.1), so the YAML cases read the feed the way Electron installs do.
+// `offeredTo` is electron-updater 6.8.9's `isStagingMatch`, which the Tauri app
+// ports (tyt_model::updater_model::is_staging_match); the bucket values below
+// are the ones that crate's own tests pin, so the two cannot drift apart.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const updaterRequire = createRequire(join(realpathSync(join(repoRoot, "node_modules/electron-updater")), "package.json"));
-const yaml = updaterRequire("js-yaml");
-const { AppUpdater } = updaterRequire("./out/AppUpdater.js");
+const offered = (feed, updaterId) => offeredTo(feed, updaterId);
 
-/** electron-updater's verdict for one install id against a parsed feed. */
-function offered(feed, updaterId) {
-  const fake = { stagingUserIdPromise: { value: Promise.resolve(updaterId) }, _logger: { info() {}, warn() {} } };
-  return AppUpdater.prototype.isStagingMatch.call(fake, feed);
-}
 /** An install id whose last four bytes are `tail` (what isStagingMatch reads). */
 const idEndingIn = (tail) => `3e0b1e0e-1111-5222-8333-${tail.toString(16).padStart(12, "0")}`;
 
@@ -63,8 +63,8 @@ describe("parseStagingPercentage", () => {
   it("reads 100 as removing the key, because an explicit 100 leaves one id in 2^32 out", async () => {
     assert.equal(parseStagingPercentage("100"), null);
     const last = idEndingIn(0xffffffff);
-    assert.equal(await offered({ stagingPercentage: 100 }, last), false);
-    assert.equal(await offered({}, last), true);
+    assert.equal(offered({ stagingPercentage: 100 }, last), false);
+    assert.equal(offered({}, last), true);
   });
 
   it("refuses anything else", () => {
@@ -128,11 +128,14 @@ describe("rewriteFeed", () => {
   });
 });
 
-describe("what electron-updater does with the written feed", () => {
+describe("what the updaters do with the written feed", () => {
   const ids = [0, 0x1a000000, 0x80000000, 0xe6666666, 0xfffffffe].map(idEndingIn);
   const verdicts = async (percent) => {
     const feed = yaml.load(rewriteFeed({ name: "latest.yml", text: FEED, percent, parse: yaml.load }).text);
-    return Promise.all(ids.map((id) => offered(feed, id)));
+    const json = JSON.parse(rewriteFeed({ name: "latest.json", text: JSON_FEED, percent }).text);
+    const fromYaml = ids.map((id) => offered(feed, id));
+    assert.deepEqual(ids.map((id) => offered(json, id)), fromYaml, "latest.json and the YAML feeds must offer the release to the same installs");
+    return fromYaml;
   };
 
   it("offers 0 to nobody, a percentage to the ids below it, and a full rollout to everybody", async () => {
@@ -148,6 +151,62 @@ describe("what electron-updater does with the written feed", () => {
     at10.forEach((inAt10, index) => {
       if (inAt10) assert.equal(at50[index], true);
     });
+  });
+});
+
+describe("the staging bucket, as electron-updater and the Tauri app compute it", () => {
+  it("reads the last four bytes as a big-endian number", () => {
+    // The vectors of tyt_model::updater_model's hashes_an_id_to_its_last_four_bytes.
+    assert.equal(stagingBucket("00000000-0000-0000-0000-000000000000"), 0);
+    assert.equal(Math.round(stagingBucket("6ba7b812-9dad-51d1-80b4-00c04fd430c8") * 0xffffffff), 0x4fd430c8);
+    assert.equal(stagingBucket("6ba7b812-9dad-51d1-80b4-0000ffffffff"), 1);
+    // UUID.parse looks pairs up in a lower-case table, so "D4" and "C8" are 0.
+    assert.equal(Math.round(stagingBucket("6BA7B812-9DAD-51D1-80B4-00C04FD430C8") * 0xffffffff), 0x00003000);
+  });
+
+  it("offers a feed without a percentage, or with one that does not parse, to everybody", () => {
+    assert.equal(offered({}, idEndingIn(0xfffffffe)), true);
+    assert.equal(offered({ stagingPercentage: "soon" }, idEndingIn(0xfffffffe)), true);
+    assert.equal(offered({ stagingPercentage: 0 }, idEndingIn(0)), false);
+  });
+});
+
+// As tauriFeedText writes latest.json for a release.
+const JSON_FEED = tauriFeedText({
+  version: "0.4.0",
+  notes: "Track Your Time 0.4.0.",
+  pubDate: "2026-11-12T10:00:00.000Z",
+  platforms: {
+    "darwin-aarch64-app": { url: "https://github.com/trebeljahr/trackyourtime/releases/download/v0.4.0/TrackYourTime-0.4.0-mac-arm64.app.tar.gz", signature: "c2ln" },
+    "darwin-aarch64": { url: "https://github.com/trebeljahr/trackyourtime/releases/download/v0.4.0/TrackYourTime-0.4.0-mac-arm64.app.tar.gz", signature: "c2ln" },
+  },
+});
+
+describe("latest.json", () => {
+  it("adds, changes and removes the percentage as one line, and keeps every other byte", () => {
+    const at10 = setStagingPercentageJson(JSON_FEED, 10);
+    const added = at10.split("\n").filter((line) => !JSON_FEED.split("\n").includes(line));
+    assert.deepEqual(added, ['  "stagingPercentage": 10,']);
+    assert.equal(setStagingPercentageJson(at10, null), JSON_FEED);
+    assert.equal(setStagingPercentageJson(at10, 50), at10.replace("10,", "50,"));
+  });
+
+  it("is rewritten by rewriteFeed by its name, and read back by the updater's rule", () => {
+    const result = rewriteFeed({ name: "latest.json", text: JSON_FEED, percent: 25, parse: () => assert.fail("not YAML") });
+    assert.deepEqual([result.before, result.after], [null, 25]);
+    const feed = JSON.parse(result.text);
+    assert.deepEqual(feed.platforms, JSON.parse(JSON_FEED).platforms);
+    assert.equal(offered(feed, idEndingIn(0x1a000000)), true);
+    assert.equal(offered(feed, idEndingIn(0x80000000)), false);
+  });
+
+  it("refuses a feed that is not JSON, not a Tauri feed, or not written the way tauriFeedText writes it", () => {
+    const bad = (text) => () => rewriteFeed({ name: "latest.json", text, percent: 10 });
+    assert.throws(bad("{"), /does not parse as JSON/);
+    assert.throws(bad('{"version":"0.4.0","platforms":{}}'), /not an update feed/);
+    assert.throws(bad(`${JSON_FEED.replace('"version"', '"stagingPercentage": "x",\n  "version"')}`), /not a number/);
+    // Minified: a rewrite would change every line, so it refuses instead.
+    assert.throws(bad(JSON.stringify(JSON.parse(JSON_FEED))), /changed more than/);
   });
 });
 
@@ -175,8 +234,8 @@ describe("rollout arguments", () => {
 
   it("picks the feeds out of a release's assets", () => {
     assert.deepEqual(
-      feedAssetNames(["TrackYourTime-0.4.0-mac-arm64.zip", "latest.yml", "SHA256SUMS.txt", "latest-mac.yml", "latest-linux-arm64.yml"]),
-      ["latest-linux-arm64.yml", "latest-mac.yml", "latest.yml"],
+      feedAssetNames(["TrackYourTime-0.4.0-mac-arm64.zip", "latest.yml", "latest.json", "SHA256SUMS.txt", "latest-mac.yml", "latest-linux-arm64.yml", "updater-mac.json"]),
+      ["latest-linux-arm64.yml", "latest-mac.yml", "latest.json", "latest.yml"],
     );
     assert.equal(isReleaseTag("v0.4.0"), true);
     assert.equal(isReleaseTag("v0.4"), false);
@@ -192,21 +251,31 @@ describe("rollout arguments", () => {
 describe("desktop-release-draft.mjs --staging-percentage", () => {
   const script = join(repoRoot, "scripts/desktop-release-draft.mjs");
 
+  // The draft is built for the checkout's own version, as on a tag run.
+  const v = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
   function fixture() {
     const dir = mkdtempSync(join(tmpdir(), "draft-staging-"));
     const leg = join(dir, "artifacts", "desktop-mac-signed");
     mkdirSync(leg, { recursive: true });
     const zip = Buffer.from("not really a zip");
-    writeFileSync(join(leg, "TrackYourTime-0.4.0-mac-arm64.zip"), zip);
+    writeFileSync(join(leg, `TrackYourTime-${v}-mac-arm64.zip`), zip);
+    writeFileSync(join(leg, `TrackYourTime-${v}-mac-arm64.app.tar.gz`), Buffer.from("not really a tarball"));
     const sha512 = createHash("sha512").update(zip).digest("base64");
     writeFileSync(
       join(leg, "latest-mac.yml"),
-      `version: 0.4.0\nfiles:\n  - url: TrackYourTime-0.4.0-mac-arm64.zip\n    sha512: ${sha512}\n    size: ${zip.length}\npath: TrackYourTime-0.4.0-mac-arm64.zip\nsha512: ${sha512}\nreleaseDate: '2026-09-22T10:00:00.000Z'\n`,
+      `version: ${v}\nfiles:\n  - url: TrackYourTime-${v}-mac-arm64.zip\n    sha512: ${sha512}\n    size: ${zip.length}\npath: TrackYourTime-${v}-mac-arm64.zip\nsha512: ${sha512}\nreleaseDate: '2026-09-22T10:00:00.000Z'\n`,
+    );
+    const file = `TrackYourTime-${v}-mac-arm64.app.tar.gz`;
+    writeFileSync(
+      join(leg, "updater-mac.json"),
+      JSON.stringify({ version: v, platforms: { "darwin-aarch64-app": { file, signature: "c2ln" }, "darwin-aarch64": { file, signature: "c2ln" } } }),
     );
     return dir;
   }
   const run = (dir, extra) =>
-    spawnSync(process.execPath, [script, "--artifacts", join(dir, "artifacts"), "--out", join(dir, "out"), ...extra], { encoding: "utf8" });
+    spawnSync(process.execPath, [script, "--artifacts", join(dir, "artifacts"), "--out", join(dir, "out"), "--repo", "trebeljahr/trackyourtime", ...extra], {
+      encoding: "utf8",
+    });
 
   it("writes the percentage into the attached feed and keeps its checks", () => {
     const dir = fixture();
@@ -216,6 +285,13 @@ describe("desktop-release-draft.mjs --staging-percentage", () => {
       assert.match(result.stdout, /10 % of installs/);
       const original = readFileSync(join(dir, "artifacts/desktop-mac-signed/latest-mac.yml"), "utf8");
       assert.equal(readFileSync(join(dir, "out/latest-mac.yml"), "utf8"), `${original}stagingPercentage: 10\n`);
+      const tauri = JSON.parse(readFileSync(join(dir, "out/latest.json"), "utf8"));
+      assert.equal(tauri.stagingPercentage, 10);
+      assert.equal(tauri.version, v);
+      assert.equal(
+        tauri.platforms["darwin-aarch64-app"].url,
+        `https://github.com/trebeljahr/trackyourtime/releases/download/v${v}/TrackYourTime-${v}-mac-arm64.app.tar.gz`,
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -230,6 +306,7 @@ describe("desktop-release-draft.mjs --staging-percentage", () => {
         readFileSync(join(dir, "out/latest-mac.yml"), "utf8"),
         readFileSync(join(dir, "artifacts/desktop-mac-signed/latest-mac.yml"), "utf8"),
       );
+      assert.equal(JSON.parse(readFileSync(join(dir, "out/latest.json"), "utf8")).stagingPercentage, undefined);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -314,7 +391,7 @@ if (args[0] === "release" && args[1] === "view") {
 } else if (args[0] === "release" && args[1] === "download") {
   args.forEach((a, i) => { if (a === "--pattern") fs.copyFileSync(path.join(root, "assets", args[i + 1]), path.join(opt("--dir"), args[i + 1])); });
 } else if (args[0] === "release" && args[1] === "upload") {
-  args.slice(3).filter((a) => a.endsWith(".yml")).forEach((f) => fs.copyFileSync(f, path.join(root, "assets", path.basename(f))));
+  args.slice(3).filter((a) => a.endsWith(".yml") || a.endsWith(".json")).forEach((f) => fs.copyFileSync(f, path.join(root, "assets", path.basename(f))));
 } else if (args[0] === "api") {
   process.stdout.write("v0.4.0\\n");
 } else { process.exit(2); }
@@ -335,13 +412,14 @@ if (args[0] === "release" && args[1] === "view") {
     return { dir, run, read, calls };
   }
 
-  it("rewrites every feed and uploads them with --clobber", () => {
-    const gh = fakeGh({ feeds: { "latest-mac.yml": FEED, "latest.yml": FEED } });
+  it("rewrites every feed, Tauri's and Electron's, and uploads them with --clobber", () => {
+    const gh = fakeGh({ feeds: { "latest-mac.yml": FEED, "latest.yml": FEED, "latest.json": JSON_FEED } });
     try {
       const result = gh.run("v0.4.0", "10");
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(gh.read("latest-mac.yml"), `${FEED}stagingPercentage: 10\n`);
       assert.equal(gh.read("latest.yml"), `${FEED}stagingPercentage: 10\n`);
+      assert.equal(gh.read("latest.json"), setStagingPercentageJson(JSON_FEED, 10));
       const upload = gh.calls().find((args) => args[1] === "upload");
       assert.ok(upload.includes("--clobber"));
 
@@ -412,7 +490,7 @@ if (args[0] === "release" && args[1] === "view") {
     try {
       const result = gh.run("v0.4.0", "10");
       assert.equal(result.status, 1);
-      assert.match(result.stderr, /no latest\*\.yml feeds/);
+      assert.match(result.stderr, /no update feeds/);
     } finally {
       rmSync(gh.dir, { recursive: true, force: true });
     }

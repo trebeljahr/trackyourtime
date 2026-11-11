@@ -19,24 +19,31 @@ cask "track-your-time" do
   end
 
   # The cask installs the same Developer ID build as the download page, and
-  # that build updates itself from GitHub Releases (electron/src/updater.ts).
+  # that build updates itself from GitHub Releases (the Tauri updater and
+  # latest.json, docs/deploy.md → "Tags, the draft release and updates").
   # `auto_updates true` tells brew so: `brew upgrade` leaves it alone unless
   # run with --greedy, instead of replacing an app that already moved on. The
   # tap still gets each new version (desktop-manifests.yml), so a fresh
   # `brew install` gets the current release.
   auto_updates true
-  # Electron 42 needs macOS 12.
+  # bundle.macOS.minimumSystemVersion in desktop/src-tauri/tauri.conf.json.
   depends_on macos: :monterey
 
   app "Track Your Time.app"
 
+  # The profile (kept in place from the Electron builds), the system WebView's
+  # data, and what the Electron builds left behind on a machine they updated.
   zap trash: [
     "~/Library/Application Support/trackyourtime",
+    "~/Library/Application Support/com.ricoslabs.trackyourtime",
     "~/Library/Caches/com.ricoslabs.trackyourtime",
     "~/Library/Caches/com.ricoslabs.trackyourtime.ShipIt",
     "~/Library/Caches/trackyourtime-updater",
+    "~/Library/HTTPStorages/com.ricoslabs.trackyourtime",
     "~/Library/Logs/Track Your Time",
+    "~/Library/Logs/com.ricoslabs.trackyourtime",
     "~/Library/Preferences/com.ricoslabs.trackyourtime.plist",
     "~/Library/Saved Application State/com.ricoslabs.trackyourtime.savedState",
+    "~/Library/WebKit/com.ricoslabs.trackyourtime",
   ]
 end

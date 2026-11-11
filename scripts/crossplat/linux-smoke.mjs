@@ -1,16 +1,22 @@
 #!/usr/bin/env node
 /*
- * Linux smoke test for an unpacked Electron build, in Docker, headless.
+ * Linux smoke test for an unpacked desktop build, in Docker, headless.
  * Project-agnostic: see README.md in this folder.
  *
  *   node scripts/crossplat/linux-smoke.mjs \
  *     --app-dir release/linux-arm64-unpacked --exec myapp \
+ *     [--mode cdp|report] [--report-env MYAPP_SMOKE_REPORT] \
  *     [--expect-url-prefix app://-] [--env KEY=VALUE]... [--arg --flag]... \
  *     [--settle-ms 5000] [--timeout-ms 60000] [--out <dir>]
  *
- * Passes when the app opens a CDP endpoint, shows a page with the expected URL
- * prefix, throws no uncaught page error and is still running after the settle
- * time. Leaves result.json, screenshot.png and app.log in --out.
+ * `--mode cdp` (the default, for an app with its own Chromium such as
+ * Electron) passes when the app opens a CDP endpoint, shows a page with the
+ * expected URL prefix, throws no uncaught page error and is still running
+ * after the settle time. `--mode report` (for an app on the system WebView,
+ * such as Tauri, which has no CDP) passes when the app, given a file path in
+ * the variable `--report-env` names, writes a report saying ok for a page
+ * with the expected URL prefix and exits 0 (linux-smoke/probe.mjs). Both leave
+ * result.json, screenshot.png and app.log in --out.
  *
  * Needs a `docker` CLI talking to a daemon of the same architecture as the
  * build (colima, OrbStack or Docker Desktop). Safe for agents and CI: nothing
@@ -30,7 +36,7 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const opts = { env: [], arg: [], expectUrlPrefix: "", settleMs: "5000", timeoutMs: "60000", out: null };
+  const opts = { env: [], arg: [], expectUrlPrefix: "", settleMs: "5000", timeoutMs: "60000", out: null, mode: "cdp", reportEnv: "" };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -60,6 +66,8 @@ function docker(args, options = {}) {
 
 const opts = parseArgs(process.argv.slice(2));
 if (!opts.appDir || !opts.exec) fail("--app-dir and --exec are required");
+if (opts.mode !== "cdp" && opts.mode !== "report") fail("--mode is cdp or report");
+if (opts.mode === "report" && !opts.reportEnv) fail("--mode report needs --report-env, the app's report variable");
 const appDir = resolve(opts.appDir);
 const execPath = join(appDir, opts.exec);
 if (!existsSync(execPath)) fail(`${execPath} does not exist; build the unpacked Linux app first`);
@@ -95,6 +103,8 @@ const run = docker(
     "-e", `SMOKE_EXPECT_URL_PREFIX=${opts.expectUrlPrefix}`,
     "-e", `SMOKE_SETTLE_MS=${opts.settleMs}`,
     "-e", `SMOKE_TIMEOUT_MS=${opts.timeoutMs}`,
+    "-e", `SMOKE_MODE=${opts.mode}`,
+    "-e", `SMOKE_REPORT_ENV=${opts.reportEnv}`,
     ...envFlags,
     "-v", `${appDir}:/app:ro`,
     "-v", `${here}/linux-smoke:/crossplat:ro`,

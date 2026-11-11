@@ -241,6 +241,15 @@ of them still works by hand.
    it. Publishing is the desktop release: installed apps update from the
    next published release they see.
 
+   **The first Tauri release** (the first after 0.3.0, the last Electron
+   build) is also the update that moves every Electron install to Tauri.
+   Before publishing it, run Actions → **Installed Desktop QA** with `to` set
+   to the new version and `source_run` set to its Desktop Release run. It
+   installs 0.3.0 on Windows and Linux runners, lets it update itself from
+   the draft and checks the result. Check the macOS update by hand: install
+   0.3.0, update it from the draft and confirm the new app starts with the
+   same data (docs/deploy.md → "Electron installs move to Tauri").
+
    ```bash
    gh release edit v0.1.0 --title "v0.1.0" --notes-file docs/release-notes/v0.1.0.md
    gh release edit v0.1.0 --draft=false

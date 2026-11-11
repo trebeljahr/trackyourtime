@@ -13,21 +13,21 @@
  * The iPhone and iPad sets are the web app at the device's CSS viewport and
  * pixel ratio with touch emulation — the same bundle the Capacitor shell
  * loads, and the same phone layout (styles/mobile.css). The Mac set is the
- * real Electron shell (electron/dist/main.js, unpackaged, pointed at
- * <web-origin> through ELECTRON_DEV_URL), headless as every agent run must be
- * (TRACKYOURTIME_HEADLESS=1), so it carries the desktop window chrome. Build
- * electron/dist first: `pnpm build:desktop --electron-only`.
+ * same bundle in the desktop app's mode: Chromium at the Mac slot's size with
+ * an in-memory stand-in for the desktop bridge (`DESKTOP_BRIDGE_STUB` below),
+ * so the page draws the desktop chrome (`html.electron[data-platform=darwin]`:
+ * the sidebar title bar, the traffic-light inset). The system WebView has no
+ * protocol to screenshot it with, and a screenshot of the Electron window was
+ * only its page too — never the OS title bar.
  *
  * Sizes are App Store Connect's (Screenshot specifications, checked
  * 2026-10-08). Every file is flattened to opaque RGB: App Store Connect
  * refuses an alpha channel.
  */
-import { mkdir, mkdtemp } from "node:fs/promises";
-import { readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { _electron, chromium } from "@playwright/test";
+import { chromium } from "@playwright/test";
 import sharp from "sharp";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -120,7 +120,7 @@ async function shoot(page, set) {
     // `next dev` draws its own badge into the page; a store image must not.
     await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
     // Activity capture is refused in a Mac App Store build (the sandbox;
-    // electron/src/distribution.ts), which hides its nav item. This unpackaged
+    // desktop/crates/activity → activity_capture_support), which hides its nav item. This
     // run is not one, so the store image hides it the same way.
     if (set.electron) await page.addStyleTag({ content: 'a[href^="/app/activity"] { display: none !important; }' });
     // A pointer left over a chart opens a tooltip in the capture.
@@ -151,37 +151,44 @@ if (browserSets.length) {
   await browser.close();
 }
 
-for (const set of sets.filter((s) => s.electron)) {
-  console.log(`${set.name} (${set.ascType}, Electron)`);
-  const electronDir = join(repoRoot, "node_modules", "electron");
-  const executable = join(electronDir, "dist", readFileSync(join(electronDir, "path.txt"), "utf8").trim());
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  const app = await _electron.launch({
-    executablePath: executable,
-    args: [join(repoRoot, "electron/dist/main.js")],
-    env: {
-      ...env,
-      ELECTRON_DEV_URL: origin.replace(/\/$/, ""),
-      // Never shown or focused, no Dock icon (electron/src/headless.ts).
-      TRACKYOURTIME_HEADLESS: "1",
-      TRACKYOURTIME_USER_DATA_DIR: await mkdtemp(join(tmpdir(), "tyt-store-capture-")),
+/**
+ * What the desktop shell would install as `window.electronAPI`, enough for
+ * the screens above to render in desktop mode: the token lives in memory,
+ * every command and subscription is a no-op, and there is no activity
+ * capture (a Mac App Store build has none either).
+ */
+const DESKTOP_BRIDGE_STUB = `(() => {
+  let token = null;
+  const off = () => () => {};
+  const none = () => Promise.resolve(null);
+  window.electronAPI = Object.freeze({
+    isDesktop: true,
+    platform: "darwin",
+    quit: none,
+    openExternal: () => Promise.resolve(false),
+    getIdleState: () => Promise.resolve({ state: "active", idleSeconds: 0 }),
+    onIdleState: off,
+    secureStore: {
+      getToken: () => Promise.resolve(token),
+      setToken: (value) => { token = value; return Promise.resolve({ persistent: false, backend: "memory" }); },
+      deleteToken: () => { token = null; return Promise.resolve(); },
+      status: () => Promise.resolve({ persistent: false, backend: "memory" }),
+    },
+    desktop: {
+      window: { getState: () => Promise.resolve({ mode: "full", alwaysOnTop: false }), setMode: none, setAlwaysOnTop: none, onChanged: off },
+      publishTimerState: none, onCommand: off, getSettings: none, updateSettings: none, onSettingsChanged: off,
+      suspendShortcuts: none, showWindow: none, notify: () => Promise.resolve(false),
     },
   });
-  // An unpackaged run opens DevTools beside the app window; take the window
-  // that shows the app.
-  const appOrigin = new URL(origin).origin;
-  await app.firstWindow();
-  let page;
-  for (const deadline = Date.now() + 120_000; !page && Date.now() < deadline; ) {
-    page = app.windows().find((w) => w.url().startsWith(appOrigin));
-    if (!page) await new Promise((done) => setTimeout(done, 500));
-  }
-  if (!page) throw new Error(`No Electron window loaded ${appOrigin}.`);
-  await app.evaluate(({ BrowserWindow }, size) => {
-    BrowserWindow.getAllWindows().find((w) => !w.webContents.getURL().startsWith("devtools:"))?.setContentSize(size.width, size.height);
-  }, set.viewport);
+})();`;
+
+for (const set of sets.filter((s) => s.electron)) {
+  console.log(`${set.name} (${set.ascType}, desktop mode)`);
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: set.viewport, deviceScaleFactor: set.scale, colorScheme: theme });
+  await context.addInitScript(DESKTOP_BRIDGE_STUB);
+  const page = await context.newPage();
   await signIn(page);
   await shoot(page, set);
-  await app.close();
+  await browser.close();
 }

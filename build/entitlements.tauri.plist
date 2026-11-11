@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened runtime exceptions for the Developer ID build: none. The Electron
+  build needed JIT and unsigned executable memory for V8 in its own process;
+  the system WebView runs its JavaScript in Apple's own WebContent process, so
+  the app itself is plain native code. No camera, microphone, location or
+  Apple Events either.
+-->
+<plist version="1.0">
+  <dict/>
+</plist>

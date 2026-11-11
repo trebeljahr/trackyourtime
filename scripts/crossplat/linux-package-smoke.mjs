@@ -8,6 +8,7 @@
  *
  *   node scripts/crossplat/linux-package-smoke.mjs \
  *     --package release/myapp_1.2.3_arm64.deb \
+ *     [--mode cdp|report] [--report-env MYAPP_SMOKE_REPORT] \
  *     [--expect-url-prefix app://-] [--exec /opt/My App/myapp] \
  *     [--appimage-mode extract|fuse] [--with-recommends] \
  *     [--env KEY=VALUE]... [--arg --flag]... \
@@ -24,9 +25,10 @@
  *           fuse` tests the mounting path instead and adds the device for it.
  *
  * It then reads the installed desktop entry, checks its Exec and Icon resolve,
- * and hands the program to ../linux-smoke/probe.mjs — the same CDP attach,
- * settle, screenshot and still-running check the unpacked smoke uses. Leaves
- * install.json, result.json, screenshot.png and app.log in --out.
+ * and hands the program to ../linux-smoke/probe.mjs — the same probe the
+ * unpacked smoke uses, in the same `--mode` (cdp for an app with its own
+ * Chromium, report for one on the system WebView). Leaves install.json,
+ * result.json, screenshot.png and app.log in --out.
  *
  * Needs a `docker` CLI talking to a daemon of the same architecture as the
  * package, and the package must sit under a path that daemon shares with the
@@ -71,6 +73,8 @@ export function parsePackageSmokeArgs(argv) {
     exec: "",
     out: null,
     package: null,
+    mode: "cdp",
+    reportEnv: "",
   };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
@@ -91,6 +95,8 @@ export function parsePackageSmokeArgs(argv) {
   if (!APPIMAGE_MODES.includes(opts.appimageMode)) {
     return { error: `--appimage-mode must be one of ${APPIMAGE_MODES.join(", ")}` };
   }
+  if (opts.mode !== "cdp" && opts.mode !== "report") return { error: "--mode must be cdp or report" };
+  if (opts.mode === "report" && !opts.reportEnv) return { error: "--mode report needs --report-env" };
   return { opts };
 }
 
@@ -176,6 +182,8 @@ function main(argv) {
       "-e", `SMOKE_EXPECT_URL_PREFIX=${opts.expectUrlPrefix}`,
       "-e", `SMOKE_SETTLE_MS=${opts.settleMs}`,
       "-e", `SMOKE_TIMEOUT_MS=${opts.timeoutMs}`,
+      "-e", `SMOKE_MODE=${opts.mode}`,
+      "-e", `SMOKE_REPORT_ENV=${opts.reportEnv}`,
       ...envFlags,
       ...(kind === "appimage" ? appimageDockerFlags(opts.appimageMode) : []),
       "-v", `${dirname(pkgPath)}:/pkg:ro`,

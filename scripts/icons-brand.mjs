@@ -95,8 +95,8 @@ const TARGETS = [
   ["packages/extension/public/icons/32.png", 32],
   ["packages/extension/public/icons/48.png", 48],
   ["packages/extension/public/icons/128.png", 128],
-  // electron-builder reads this directly for Linux, and `icons:desktop`
-  // derives icon.icns / icon.ico from it.
+  // `icons:desktop` derives the Tauri icon set (desktop/src-tauri/icons:
+  // icns, ico and the PNG sizes the Linux packages install) from it.
   ["build/icon.png", 512],
   // Raycast's store listing and every command's icon.
   ["packages/raycast/assets/icon.png", 512],
@@ -216,8 +216,8 @@ await emit(
 );
 
 /*
- * The desktop app's tray icons (electron/assets/tray, copied beside the main
- * bundle by scripts/build-desktop.mjs), idle and running.
+ * The desktop app's tray icons (desktop/src-tauri/icons/tray, compiled into
+ * the binary by desktop/src-tauri/src/platform.rs), idle and running.
  *
  * macOS uses the same indigo tile as Raycast at 16 and 32 pixels. Legacy
  * template assets are still generated for older consumers. `@2x` supplies
@@ -250,7 +250,7 @@ const overlayRunning = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" view
   <circle cx="32" cy="32" r="26" fill="${RUNNING_RED}" stroke="#FFFFFF" stroke-width="8"/>
 </svg>`);
 
-const trayDir = "electron/assets/tray";
+const trayDir = "desktop/src-tauri/icons/tray";
 // Same indigo tile as Raycast, at native macOS menu-bar sizes.
 await emit(`${trayDir}/tray-mac.png`, await render(tile, 16));
 await emit(`${trayDir}/tray-mac@2x.png`, await render(tile, 32));
@@ -275,9 +275,9 @@ for (const [name, svg] of [
 await emit(`${trayDir}/overlay-running.png`, await render(overlayRunning, 16));
 
 /*
- * The Microsoft Store package's tiles (electron-builder's `appx` target reads
- * build/appx/). Without them electron-builder silently ships its own sample
- * tiles — a grey placeholder square on the Start menu of every Store install.
+ * The Microsoft Store package's tiles (the MSIX packaging reads build/appx/).
+ * Without them the package would ship placeholder tiles — a grey square on
+ * the Start menu of every Store install.
  * Names and sizes are the ones AppxTarget maps; the wide tile is the mark
  * centred on the brand ground, which is also the manifest's backgroundColor.
  */
@@ -299,8 +299,8 @@ await emit(
 /*
  * The macOS app icon, as an Icon Composer document (build/AppIcon.icon).
  *
- * electron-builder compiles a `.icon` with Xcode 26's actool into the bundle's
- * Assets.car (CFBundleIconName) plus a fallback icns. That is what macOS 26
+ * The desktop build compiles a `.icon` with Xcode 26's actool into the
+ * bundle's Assets.car (CFBundleIconName) plus a fallback icns. That is what macOS 26
  * draws with its own glass and shape, and what App Store Connect reads the Mac
  * listing's icon from. A plain icns from build/icon.png is drawn inside a grey
  * squircle on macOS 26 and tops out at the 512px it was rendered at.

@@ -109,7 +109,7 @@ Everything is scoped to a workspace. A person can belong to several, and a works
 | **Browser extension** (Chrome and Firefox MV3) | Working. A popup: timer, badge, catalog, favorites, idle, the offline queue, a server picker, and optional activity-based entry suggestions. The only content script is the Firefox build's sign-in relay on trackyourtime.dev. English and German. Chrome version 0.3.0 is in the [Chrome Web Store](https://chromewebstore.google.com/detail/track-your-time/opibnndhibnigcfgfbgbipakadhnbjfi). Firefox 0.3.0 is public on [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/track-your-time/). |
 | **Raycast extension** (macOS) | Working. 5 commands — menu bar timer, Start / Stop Timer (hotkey-able, no window), a live timer view, Show All Time and Open Dashboard — with catalog CRUD through pushed forms and an offline queue (`packages/raycast/src/lib/offline.ts`). Not in the Raycast Store. |
 | **iOS and Android** (Capacitor) | Working from source. `ios/` and `android/` are committed, the bundle id is `com.ricoslabs.trackyourtime`, and `pnpm build:mobile` builds and syncs both. Keychain/Keystore session token, offline queue and running timer that survive an OS kill, safe areas, a bottom tab bar, a server picker on the login screen, and "Sign in with your browser" for two-factor and Google accounts. Signed 0.3.0 builds are on TestFlight and Google Play's internal track. Neither app is in a public store yet. See [`docs/mobile-app-plan.md`](docs/mobile-app-plan.md). |
-| **Desktop** (Electron: macOS, Windows, Linux) | Released. Serves the export from `app://-` and signs in with a bearer token encrypted by `safeStorage`, by password or through the browser for two-factor and Google accounts. A menu bar or tray timer, four rebindable global shortcuts, open at login, notifications for idle and runaway prompts while the window is hidden, the offline queue and a server picker. The dmg, the Windows installer and the AppImage update themselves from GitHub Releases, installing on quit or on "Restart to update". Store and package-manager builds leave updates to their manager. `desktop-release.yml` builds every channel, signs when its secrets are set, and on a tag uploads to a draft release that a person publishes. Version 0.3.0 is published on [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest): a signed and notarized dmg and zip for macOS (Apple silicon and Intel), a signed Windows installer, and AppImage, deb, rpm and tar.gz files for Linux x64 and ARM64. No store lists the app yet; see [release readiness](docs/release-readiness.md). See [`docs-site/docs/desktop.md`](docs-site/docs/desktop.md) and [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md). |
+| **Desktop** (Tauri 2: macOS, Windows, Linux) | Released. One Rust executable on the system WebView (WKWebView, WebView2, WebKitGTK), with the web app's export built into it and served from `app://-` (`http://app.localhost` on Windows). It signs in with a bearer token, encrypted under a key the OS keychain holds, by password or through the browser for two-factor and Google accounts. A menu bar or tray timer, four rebindable global shortcuts, open at login, notifications for idle and runaway prompts while the window is hidden, the offline queue and a server picker. The dmg, the Windows installer and the AppImage update themselves from GitHub Releases, installing on quit or on "Restart to update". Store and package-manager builds leave updates to their manager. `desktop-release.yml` builds every channel, signs when its secrets are set, and on a tag uploads to a draft release that a person publishes. Version 0.3.0 is published on [GitHub Releases](https://github.com/trebeljahr/trackyourtime/releases/latest): a signed and notarized dmg and zip for macOS (Apple silicon and Intel), a signed Windows installer, and AppImage, deb, rpm and tar.gz files for Linux x64 and ARM64. 0.3.0 and earlier are Electron builds; the shell moved to Tauri on 12 November 2026, and the next release is the first Tauri build. It updates Electron installs in place and keeps their data. No store lists the app yet; see [release readiness](docs/release-readiness.md). See [`docs-site/docs/desktop.md`](docs-site/docs/desktop.md) and [`docs/desktop-app-plan.md`](docs/desktop-app-plan.md). |
 | **CLI** | No end-user CLI. `trackyourtime-cli` appears only as an allowlisted device-flow client id. The server image does ship an admin CLI for self-hosters (`node dist/cli/admin.js`). |
 | **MCP server** (`packages/mcp`) | Published as [`trackyourtime-mcp`](https://www.npmjs.com/package/trackyourtime-mcp) on npm and `io.github.trebeljahr/trackyourtime` in the official MCP Registry. Lets MCP clients manage timers, entries and catalog, and run reports through the REST API. stdio only. See [MCP server](#mcp-server). |
 
@@ -161,7 +161,7 @@ better-auth validates the `Origin` header on sign-in whenever the request carrie
 
 - `chrome-extension://<id>` — a browser extension you built yourself (`pnpm run extension:id prod` prints it)
 - `capacitor://localhost,https://localhost` — the iOS and Android apps
-- `app://-` — the desktop app, which serves its bundle from that privileged scheme (`file://` would send `Origin: null`, which cannot be trusted with credentials)
+- `app://-,http://app.localhost` — the desktop app, which serves its bundle from its own `app` scheme: `app://-` on macOS and Linux, `http://app.localhost` on Windows (`file://` would send `Origin: null`, which cannot be trusted with credentials)
 
 Or set `TRUST_STORE_APPS=true`, which trusts the iOS and Android apps, the desktop app and the Chrome Web Store extension (its id is pinned in `packages/shared/src/store-clients.ts`) in one switch. `docker-compose.selfhost.yml` defaults it to `true`, so the store builds can sign in to a self-hosted server with nothing to configure. The extension's site access covers only the hosted API, so every request it sends to your server is a cross-origin request: without this trust it cannot sign in, sync or send an entry.
 
@@ -228,25 +228,27 @@ pnpm run build:extension:firefox # Firefox MV3 build
 pnpm run extension:id [dev|prod]  # the chrome-extension:// origin to trust
 
 pnpm run dev:raycast         # ray develop
-pnpm run dev:desktop         # Next dev + an Electron window (UI only; see the note below)
-NEXT_PUBLIC_API_URL=http://localhost:5159 pnpm run electron:preview  # packaged app over app://-
+pnpm run dev:desktop         # Next dev + the debug desktop app loading it (UI iteration only; needs Rust)
+NEXT_PUBLIC_API_URL=http://localhost:5159 pnpm run build:desktop  # the release app over app://-, unpacked in release/
 ```
 
 ## Testing
 
 ```bash
-pnpm run test:unit      # core, server (node:test), MCP and extension suites — no services needed
+pnpm run test:unit      # core, Raycast, server (node:test), MCP, extension and desktop (cargo test) suites — no services needed
 pnpm run test:client    # Vitest suites in the client — jsdom, no services needed
 pnpm run test:e2e       # Playwright specs — REQUIRES DOCKER
 pnpm run test:mcp:integration  # MCP server over a real API — starts its own mongod
-pnpm run test:e2e:desktop      # the Electron app over app://- — starts its own mongod and API
+pnpm run test:e2e:desktop      # the desktop app over app://-, through its e2e control channel — starts its own mongod and API
 pnpm test               # all three in sequence
 
-pnpm run typecheck      # builds shared + core, then tsc --noEmit everywhere else
+pnpm run typecheck      # builds shared + core, then tsc --noEmit everywhere else, then cargo check of desktop/
 pnpm run build          # shared -> core -> server -> client
 ```
 
 The E2E suite starts its own Mongo, Redis and S3 containers on separate ports and runs against the **static export**, not the dev server, so the first run includes a full client build. It needs Docker and a one-off `npx playwright install chromium`. [CONTRIBUTING.md](CONTRIBUTING.md#tests-and-checks) has the details, including the port and database variables you must set if another checkout is running the suite at the same time.
+
+The desktop checks in `test:unit` and `typecheck` compile the Rust app, so they need Rust, the WebKitGTK packages on Linux, and a desktop export built once ([CONTRIBUTING.md](CONTRIBUTING.md#development-setup) has the commands).
 
 ## Project
 

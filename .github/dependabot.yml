@@ -91,3 +91,34 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # The desktop app's Cargo workspace (desktop/Cargo.toml: the Tauri shell and
+  # its crates). Grouped like npm, majors left to a person. Tauri's crates move
+  # together (tauri, tauri-build, tauri-plugin-*, wry, tao): a PR that bumps
+  # one alone can fail to resolve, so they share a group. Not auto-landed by
+  # dependency-updates.yml, which runs the npm group; a person merges these
+  # after the desktop job passes.
+  - package-ecosystem: cargo
+    directory: /desktop
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 3
+    groups:
+      tauri:
+        patterns:
+          - "tauri*"
+          - "wry"
+          - "tao"
+        update-types: ["minor", "patch"]
+      cargo-minor-and-patch:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "deps(desktop)"

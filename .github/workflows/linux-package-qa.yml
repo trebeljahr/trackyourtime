@@ -30,6 +30,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://api.trackyourtime.dev' }}
+      CI: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -37,13 +38,19 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop -> target
       - run: pnpm install --frozen-lockfile
-      - name: Install RPM packaging tools
+      - name: Install the Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y rpm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf file rpm
+      # No update key here, so no update feed: the packages are what a person
+      # installs, minus the updater configuration (resolveUpdater).
       - name: Build native packages
-        run: node scripts/build-desktop.mjs --channel linux --package --linux AppImage deb rpm --${{ matrix.arch }}
+        run: node scripts/build-desktop.mjs --channel linux --package --bundles appimage,deb,rpm
       - name: Install and launch every package
         env:
           APPIMAGE_ARCH: ${{ matrix.appimage-arch }}
@@ -69,7 +76,7 @@ jobs:
           name: linux-package-qa-${{ matrix.arch }}
           path: |
             test-results/linux-packages/
-            release/builder-effective-config.yaml
+            desktop/src-tauri/.generated/tauri.release.json
           if-no-files-found: warn
       - name: Upload tested packages
         uses: actions/upload-artifact@v7

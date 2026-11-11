@@ -34,8 +34,10 @@ be recut. So every step below that names a file or a URL of a release is marked
 ## What is already built
 
 `desktop-release.yml`'s `linux-x64` and `linux-arm64` legs each build a
-`.snap` (`electron-builder.config.mjs` → `linux.target`), named
-`trackyourtime_<version>_{amd64,arm64}.snap`. The snap is a CI artifact and is
+`.snap`, named `trackyourtime_<version>_{amd64,arm64}.snap`. `buildSnap` in
+`scripts/build-desktop.mjs` renders `packaging/snap/snapcraft.yaml.template`
+and packs it with `snapcraft pack --destructive-mode`, from the deb the same
+leg built, on the Ubuntu 24.04 runner itself. The snap is a CI artifact and is
 **never attached to the GitHub release** — `releasePlan`'s `STORE_ONLY` pattern
 excludes `.snap`, and a unit test pins that.
 
@@ -46,18 +48,24 @@ What the snap declares:
 | Name | `trackyourtime` |
 | Confinement | `strict` |
 | Grade | `stable` |
-| Plugs | the electron-builder defaults, plus `password-manager-service` |
-| Open at login | works — snapd reads `$SNAP_USER_DATA/.config/autostart` (`snap.autoStart`, `loginItemMechanism`) |
-| In-app updater | off. `selfUpdates` refuses the `snap` channel; the Store updates the app |
-| Activity capture | **off, and cannot be turned on.** `activityCaptureSupport` answers `{ unsupported, "linux-sandbox" }` for `snap`, main forces `enabled` and `storeTitles` off, and the nav item is hidden. The listing must not offer it |
+| Base | `core24`, with the GNOME extension |
+| Plugs | `network` and `password-manager-service`, plus the ones the GNOME extension adds |
+| Open at login | works — the app writes an autostart entry under `$SNAP_USER_DATA/.config/autostart` that names `/snap/bin/trackyourtime`, and the template's `autostart: trackyourtime.desktop` tells snapd to read it (`login_item_mechanism` in `tyt_model::distribution`) |
+| In-app updater | off. `self_updates` refuses the `snap` channel; the Store updates the app |
+| Activity capture | **off, and cannot be turned on.** `activity_capture_support` (`tyt_activity::distribution`) answers unsupported, `linux-sandbox`, for `snap`; the shell forces `enabled` and `storeTitles` off, and the nav item is hidden. The listing must not offer it |
 
-**The base is still `core20`.** `electron-builder.config.mjs` sets no
-`snap.base`, so app-builder-lib (26.17.0 as of writing) takes its legacy
-strategy and its bundled `templates/snap/snapcraft.yaml`, whose first line is
-`base: core20`; the `core24` strategy is only reached by naming that base. A
-separate task owns the `core20`-not-supported failure on arm64 — **this file
-does not change the base**, and the publish step below works whatever base that
-task settles on.
+**WebKitGTK comes from the GNOME extension.** Its content snap
+(`gnome-46-2404`) carries WebKitGTK 4.1 and GTK. The template stages only what
+the deb needs beyond them: the Ayatana AppIndicator for the tray and libXss for
+the idle time, both of which the app dlopens. Destructive mode packs on the
+runner itself, and Ubuntu 24.04 is the release `core24` is made from, so the
+staged libraries and the base agree.
+
+**This path has not run in CI yet.** The snap came from electron-builder until
+the move to Tauri on 2026-11-12. If the first tag run fails at the snap, remove
+`snap` from the Linux legs' `--bundles` in `desktop-release.yml`, and they build
+everything else (`docs/deploy.md` → "Linux: AppImage, deb, rpm, Snap Store,
+Flathub").
 
 ## What Rico must click, once
 
@@ -81,7 +89,7 @@ task settles on.
    `snap info trackyourtime` or <https://snapcraft.io/trackyourtime>. A
    registered name is held for you and is **permanent in practice** — snapd
    keys `/snap/trackyourtime`, `$SNAP_USER_DATA` and `/snap/bin/trackyourtime`
-   on it, and `loginItemMechanism` writes `/snap/bin/trackyourtime` into the
+   on it, and `login_item_mechanism` writes `/snap/bin/trackyourtime` into the
    autostart entry. Renaming it would orphan every install's session and
    offline queue, exactly as with the other identifiers CLAUDE.md lists.
 
@@ -144,16 +152,16 @@ the same rule as the staged rollout.
 
 The Store's listing page (<https://snapcraft.io/trackyourtime/listing>) is
 filled from the snap's own metadata on first upload and can be overridden
-there. Two fields come from the build and should not be retyped:
+there. One field comes from the build and should not be retyped:
 
-- **Title** `Track Your Time` (`snap.title`, from `productName`)
-- **Summary** `Free, open-source time tracking` (`snap.summary`)
+- **Summary** `Free, open-source time tracking` (`summary` in
+  `packaging/snap/snapcraft.yaml.template`)
 
-The snap's `description` is deliberately one line
+The template sets no `title`, so type the title `Track Your Time` on the
+listing page. The snap's `description` is deliberately one line
 (`Free, open-source time tracking for people who bill by the hour.`), because
-electron-builder writes the description into the desktop entry's `Comment=` as
-well, where a newline becomes a literal `\n` — a paragraph there reads as one
-run-on tooltip. So paste the full description into the listing page by hand.
+the store also shows it as the short description. So paste the full
+description into the listing page by hand.
 This is the text — every claim in it is true of this snap today:
 
 ```markdown
@@ -197,9 +205,9 @@ The rest of the listing page:
 auto-connected, so every user runs `snap connect` by hand. The way out is a
 request on the Snapcraft forum (<https://forum.snapcraft.io/>, category *store
 requests*) asking for auto-connect on `trackyourtime`, with the reason: the
-app's session token is kept in the desktop keyring through Electron's
-`safeStorage` (`electron/src/secure-store.ts`), and without the Secret Service
-it is held in memory and the person is signed out on every restart. Until it is
+app encrypts its session token with a key it keeps in the Secret Service
+(`desktop/src-tauri/src/secure.rs`), and without the Secret Service the token
+is held in memory and the person is signed out on every restart. Until it is
 granted, keep the `snap connect` line in the listing.
 
 ---
@@ -241,16 +249,18 @@ renders, from `packaging/flatpak/`:
 
 | File | What it is |
 | --- | --- |
-| `com.ricoslabs.trackyourtime.yml` | the Flathub manifest: the two release tarballs per architecture, the zypak launcher, the icon and the licence, each with a real sha256 |
+| `com.ricoslabs.trackyourtime.yml` | the Flathub manifest: the release tarball for each architecture, whose `trackyourtime` executable it installs, plus `build/icon.png` and `LICENSE` from the tag, each with a real sha256. It builds on the GNOME runtime and adds Flathub's shared module for the Ayatana AppIndicator (the tray) |
 | `com.ricoslabs.trackyourtime.metainfo.xml` | the AppStream metadata: name, summary, description, four screenshots, URLs, branding, content rating, the release entry |
-| `com.ricoslabs.trackyourtime.desktop` | the desktop entry, with `StartupWMClass=Track Your Time` — what electron-builder writes for the deb, rpm, AppImage and snap |
+| `com.ricoslabs.trackyourtime.desktop` | the desktop entry, copied unchanged, with `StartupWMClass=trackyourtime` — the executable's name, as in the deb, rpm and AppImage entries (`build/linux/trackyourtime.desktop.hbs`) |
 
 Three things in there are load-bearing:
 
 - **The metainfo promises nothing the Flatpak refuses.** No in-app updater, no
-  "open at login", no activity capture — `selfUpdates`, `loginItemMechanism`
-  and `activityCaptureSupport` in `electron/src/distribution.ts` all refuse the
-  `flatpak` channel. A unit test greps the template for that wording.
+  "open at login", no activity capture — `self_updates` and
+  `login_item_mechanism` in `tyt_model::distribution` and
+  `activity_capture_support` in `tyt_activity::distribution` all refuse the
+  `flatpak` channel. A unit test greps the template for that wording, and
+  another refuses a manifest that still names Electron or zypak.
 - **The screenshots are unversioned URLs** on `https://trackyourtime.dev/marketing/`,
   the committed captures the site serves (`docs/marketing/README.md`). Flathub
   downloads them when it builds, and its update bot rewrites the manifest's
@@ -275,8 +285,9 @@ Flathub today unpacking its own release `.deb` per architecture, with the same
 `x-checker-data` shape used here.
 
 A reviewer may still ask for a source build. That build needs every npm
-dependency vendored with `flatpak-node-generator`, which this repo has not run,
-and it would also have to reproduce the Next.js static export offline. If it is
+dependency vendored with `flatpak-node-generator` and every crate with
+`flatpak-cargo-generator`, which this repo has not run, and it would also have
+to reproduce the Next.js static export and the cargo build offline. If it is
 asked for, it is a separate task, not a change to make pre-emptively.
 
 ## Submitting, step by step
@@ -314,7 +325,7 @@ asked for, it is a separate task, not a change to make pre-emptively.
 
 | Step | Why it is not automated |
 | --- | --- |
-| Publishing the draft GitHub release | it is the release decision; electron-updater reads only published releases |
+| Publishing the draft GitHub release | it is the release decision; the app's updater reads only published releases, and so does electron-updater in an Electron install |
 | `snapcraft release … stable` | the same decision, for the Snap Store |
 | The Snap Store listing text and screenshots | one-time, and an agent must not accept the Store terms that gate the page |
 | The Snapcraft forum request for `password-manager-service` | a human request in a public forum thread |

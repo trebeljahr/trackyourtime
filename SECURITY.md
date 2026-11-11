@@ -36,7 +36,8 @@ routes in `SUPPORT.md`, `CONTRIBUTING.md` and
 The more of this you can give, the faster it gets triaged:
 
 - **Affected component** — server, web client, browser extension, Raycast
-  extension, Electron shell, or the deployment configuration.
+  extension, desktop app (the Tauri shell; 0.3.0 and earlier were Electron),
+  or the deployment configuration.
 - **Version or commit** — the commit SHA you tested against, or the host if you
   found it on the hosted app.
 - **Reproduction** — concrete steps, requests, or a minimal proof of concept.

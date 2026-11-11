@@ -1,8 +1,11 @@
-# Linux smoke image for Electron apps (scripts/crossplat/README.md).
+# Linux smoke image for desktop apps (scripts/crossplat/README.md).
 #
-# What an unpacked electron-builder Linux build needs to start and paint under
-# a virtual display, plus playwright-core to drive it over CDP. No browser is
-# downloaded: the probe connects to the app's own Chromium.
+# What an unpacked Linux build needs to start and paint under a virtual
+# display: the Chromium libraries an Electron app links, and WebKitGTK 4.1 with
+# the Ayatana AppIndicator for an app on the system WebView (Tauri). Plus
+# playwright-core, which the probe's cdp mode drives an Electron app with; no
+# browser is downloaded, the probe connects to the app's own Chromium. The
+# report mode needs nothing beyond Xvfb.
 #
 # Project-agnostic on purpose: nothing here names an app. Build it for the
 # Docker host's architecture; the runner refuses an app built for another one.
@@ -13,6 +16,7 @@ RUN apt-get update \
     xvfb xauth dbus dbus-x11 \
     libgtk-3-0 libnss3 libasound2 libgbm1 libdrm2 libxkbcommon0 libxss1 libxtst6 \
     libatk-bridge2.0-0 libatspi2.0-0 libcups2 libsecret-1-0 libnotify4 libuuid1 \
+    libwebkit2gtk-4.1-0 libayatana-appindicator3-1 x11-utils \
     fonts-liberation fonts-noto-core fonts-noto-color-emoji \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*

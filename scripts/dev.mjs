@@ -343,12 +343,12 @@ const capacitorOrigins = [
   "https://localhost",
   "http://10.0.2.2:51740",
 ];
-// The desktop app's document origin: a packaged or `electron:preview` build
-// serves its export from the privileged app://- scheme
-// (electron/src/protocol.ts), cross-site to the API for the same reasons as
-// the phone shells. `dev:desktop` loads the Next dev server instead, whose
+// The desktop app's document origin: a packaged or e2e build serves its
+// export from the app://- scheme, http://app.localhost on Windows
+// (desktop/src-tauri/src/protocol.rs), cross-site to the API for the same
+// reasons as the phone shells. `dev:desktop` loads the Next dev server instead, whose
 // origin is FRONTEND_URL's and needs nothing here.
-const desktopOrigins = ["app://-"];
+const desktopOrigins = ["app://-", "http://app.localhost"];
 
 const trustedOrigins = [
   ...(process.env.TRUSTED_ORIGINS ?? "")

@@ -1,15 +1,16 @@
 /**
- * The contract between the Electron shell and the web app it hosts.
+ * The contract between the desktop shell and the web app it hosts.
  *
- * `electron/src/preload.ts` builds a `DesktopBridge` and exposes it as
- * `window.electronAPI`; `packages/client/src/types/electron.d.ts` declares the
- * same type on `Window`. Both import it from here, so the object the preload
- * hands over and the object the renderer calls cannot drift apart without a
- * type error on one side.
+ * The shell (Tauri 2, `desktop/src-tauri`) installs a `DesktopBridge` as
+ * `window.electronAPI` from `desktop/src-tauri/src/bridge.js` before any page
+ * script runs; `packages/client/src/types/electron.d.ts` declares the same
+ * type on `Window`. The native side mirrors every type here in
+ * `desktop/crates/wire` (serde), whose tests fail when a channel is added on
+ * one side only. The global keeps its Electron-era name, which is the
+ * contract the renderer compiles against.
  *
- * Types and string constants only: the preload is bundled into a sandboxed
- * script, and the renderer loads this through `@starter/shared`, so nothing in
- * this file may touch Node, Electron or the DOM.
+ * Types and string constants only: the renderer loads this through
+ * `@starter/shared`, so nothing in this file may touch Node or the DOM.
  */
 
 import type { DesktopShortcutAction, DesktopShortcutBindings } from "./desktop-shortcuts.js";
@@ -703,3 +704,15 @@ export type DesktopIpcChannel = (typeof DESKTOP_IPC)[keyof typeof DESKTOP_IPC];
 export const DESKTOP_APP_SCHEME = "app";
 export const DESKTOP_APP_HOST = "-";
 export const DESKTOP_APP_ORIGIN = `${DESKTOP_APP_SCHEME}://${DESKTOP_APP_HOST}` as const;
+
+/**
+ * The same document origin on Windows. WebView2 cannot serve a custom scheme
+ * with a host of its own, so the shell's `app` protocol answers there as
+ * `http://app.localhost` (desktop/src-tauri/src/protocol.rs). The Electron
+ * build used `app://-` on Windows too; desktop/src-tauri/src/migrate.rs
+ * carries its localStorage over on the first launch.
+ */
+export const DESKTOP_APP_ORIGIN_WINDOWS = "http://app.localhost" as const;
+
+/** Every origin a desktop build's documents can carry, for trust lists. */
+export const DESKTOP_APP_ORIGINS: readonly string[] = [DESKTOP_APP_ORIGIN, DESKTOP_APP_ORIGIN_WINDOWS];

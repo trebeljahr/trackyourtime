@@ -10,6 +10,7 @@ import {
   planPackageRuns,
 } from "../desktop-packages-smoke.mjs";
 import { buildArgsFor, parsePackageSmokeArgs } from "../crossplat/linux-package-smoke.mjs";
+import { LINUX_PACKAGE_DEPENDENCIES } from "./desktop-tauri.mjs";
 import {
   APPIMAGE_MODES,
   appimageDockerFlags,
@@ -25,10 +26,11 @@ import {
 } from "../crossplat/linux-package-smoke/package-lib.mjs";
 
 // The packaged Linux smoke test (pnpm test:desktop:packages) installs a real
-// .AppImage, .deb or .rpm in Docker and drives it over CDP. None of that can
-// run here, so these tests pin the rules that decide WHAT it does: which image
-// a package goes to, how it is installed, and where the program and icon are
-// found once it is. Each was written against a real v0.1.2 artifact.
+// .AppImage, .deb or .rpm in Docker and starts it in the app's smoke mode.
+// None of that can run here, so these tests pin the rules that decide WHAT it
+// does: which image a package goes to, how it is installed, and where the
+// program and icon are found once it is. Each was written against a real
+// v0.1.2 artifact; the Tauri packages keep those names.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 describe("packageKind", () => {
@@ -103,10 +105,11 @@ describe("imageTagFor / dockerfileFor", () => {
     }
   });
 
-  it("builds the bare images from a base that carries no Electron runtime library", () => {
-    // The test is only honest while these images stay bare: a GTK or NSS
-    // package added here would satisfy a dependency the artifact forgot.
-    const forbidden = /\b(libgtk-3-0|gtk3|libnss3|nss|libgbm1|mesa-libgbm|libasound2|alsa-lib)\b/;
+  it("builds the bare images from a base that carries no desktop runtime library", () => {
+    // The test is only honest while these images stay bare: a GTK, WebKitGTK
+    // or NSS package added here would satisfy a dependency the artifact forgot.
+    const forbidden =
+      /\b(libgtk-3-0|gtk3|libnss3|nss|libgbm1|mesa-libgbm|libasound2|alsa-lib|libwebkit2gtk[\w.-]*|webkit2gtk[\w.-]*|libayatana[\w-]*|libxss1|libXScrnSaver|dbus-libs)\b/;
     for (const name of ["Dockerfile.deb", "Dockerfile.rpm"]) {
       // The comments name these libraries to explain why they are absent, so
       // only the directives are read.
@@ -114,7 +117,7 @@ describe("imageTagFor / dockerfileFor", () => {
         .split("\n")
         .filter((line) => !line.trim().startsWith("#"))
         .join("\n");
-      assert.ok(!forbidden.test(directives), `${name} installs an Electron runtime library, which hides a missing dependency`);
+      assert.ok(!forbidden.test(directives), `${name} installs a desktop runtime library, which hides a missing dependency`);
     }
   });
 });
@@ -371,21 +374,30 @@ describe("the crossplat folder stays project-agnostic", () => {
 });
 
 describe("the packaging declares what the app links against", () => {
-  // v0.1.2 shipped a .deb that died on `libgbm.so.1: cannot open shared object
-  // file` and an .rpm that died on `libasound.so.2`, both found by this smoke
-  // test. electron-builder's `depends` REPLACES its defaults, so the config has
-  // to repeat them; dropping one is silent until an install fails.
-  const config = readFileSync(join(repoRoot, "electron-builder.config.mjs"), "utf8");
-
+  // The Electron packages shipped a .deb that died on `libgbm.so.1` and an
+  // .rpm that died on `libasound.so.2`, both found by this smoke test. The
+  // Tauri app's tray and idle time are dlopened (libappindicator-sys,
+  // x11-dl), so `ldd` never names them and only these lists do.
   it("keeps the .deb's Depends complete", () => {
-    for (const name of ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0", "libgbm1", "libasound2"]) {
-      assert.ok(config.includes(`"${name}"`), `deb depends is missing ${name}`);
+    for (const name of ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "libdbus-1-3", "libxss1"]) {
+      assert.ok(LINUX_PACKAGE_DEPENDENCIES.deb.depends.includes(name), `deb depends is missing ${name}`);
     }
   });
 
   it("keeps the .rpm's Requires complete", () => {
-    for (const name of ["gtk3", "libnotify", "nss", "libXScrnSaver", "xdg-utils", "at-spi2-core", "alsa-lib", "mesa-libgbm", "libsecret"]) {
-      assert.ok(config.includes(`"${name}"`), `rpm depends is missing ${name}`);
+    for (const name of ["webkit2gtk4.1", "gtk3", "libayatana-appindicator-gtk3", "dbus-libs", "libXScrnSaver"]) {
+      assert.ok(LINUX_PACKAGE_DEPENDENCIES.rpm.depends.includes(name), `rpm depends is missing ${name}`);
     }
+  });
+});
+
+describe("the probe's two modes", () => {
+  it("passes the report mode and its variable through, and refuses the mode without it", () => {
+    const { opts } = parsePackageSmokeArgs(["--package", "x.deb", "--mode", "report", "--report-env", "APP_SMOKE"]);
+    assert.equal(opts.mode, "report");
+    assert.equal(opts.reportEnv, "APP_SMOKE");
+    assert.equal(parsePackageSmokeArgs(["--package", "x.deb"]).opts.mode, "cdp");
+    assert.match(parsePackageSmokeArgs(["--package", "x.deb", "--mode", "report"]).error, /--report-env/);
+    assert.match(parsePackageSmokeArgs(["--package", "x.deb", "--mode", "webdriver"]).error, /cdp or report/);
   });
 });

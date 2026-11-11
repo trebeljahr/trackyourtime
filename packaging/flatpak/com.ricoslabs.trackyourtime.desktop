@@ -6,9 +6,8 @@ Exec=trackyourtime %U
 Icon=com.ricoslabs.trackyourtime
 Categories=Office;ProjectManagement;
 Keywords=time;tracking;timesheet;billable;invoice;timer;freelance;
-# Electron sets WM_CLASS from the product name, which is what electron-builder
-# writes into the deb, rpm, AppImage and snap entries as well
-# (LinuxTargetHelper.computeDesktopEntry). Without it a running window is not
+# The executable's name, as in the deb, rpm and AppImage entries
+# (build/linux/trackyourtime.desktop.hbs). Without it a running window is not
 # matched to this entry, and the shell shows a generic icon.
-StartupWMClass=Track Your Time
+StartupWMClass=trackyourtime
 Terminal=false

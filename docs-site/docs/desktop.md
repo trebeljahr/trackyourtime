@@ -69,6 +69,21 @@ it with the environment variable `TRACKYOURTIME_DISABLE_UPDATES=1`.
 
 A build you make yourself has no update feed, so it never updates itself.
 
+### Updating from version 0.3.0 or earlier
+
+Version 0.3.0 and earlier were built on Electron. The versions after it are
+built on Tauri, which uses your system's web view. A copy that updates itself
+moves to the new version the usual way. For a deb or rpm, install the new
+package, and it replaces the old one.
+
+- Your settings, unsent changes and activity history are kept.
+- On Linux, sign in once more after the update. If your activity history is
+  encrypted with your private data key, enter that key once more too.
+- On Windows the app moves to `%LOCALAPPDATA%\Track Your Time`. A taskbar pin
+  of the old version stops working, so pin the app again.
+- A Windows PC with an Arm processor gets the x64 version, which Windows runs
+  through emulation.
+
 ## Sign in
 
 - **With your password**, on the sign-in screen.
@@ -76,20 +91,22 @@ A build you make yourself has no update feed, so it never updates itself.
   Google. The app shows a code, your browser opens, and you approve the code
   there while you are signed in.
 
-The app keeps its session in the operating system's credential store: the
-Keychain on macOS, DPAPI on Windows, and GNOME Keyring or KWallet on Linux. On
-Linux without a keyring, the app keeps the session in memory only and asks you
-to sign in again after a restart. Settings → Devices says when that happens.
+The app keeps its session encrypted, with the key in the operating system's
+credential store: the Keychain on macOS, the Credential Manager on Windows, and
+the Secret Service (GNOME Keyring or KWallet) on Linux. On Linux without a
+keyring, the app keeps the session in memory only and asks you to sign in again
+after a restart. Settings → Devices says when that happens.
 
 ### Your own server
 
 On the sign-in screen, choose **Change server** and enter your server's
 address. The app checks that the server answers before it saves your choice.
 
-Your server must trust the desktop app's origin, `app://-`. Either set
+Your server must trust the desktop app's origin: `app://-` on macOS and
+Linux, and `http://app.localhost` on Windows. Either set
 `TRUST_STORE_APPS=true`, which the self-hosting compose file sets by default,
-or add `app://-` to `TRUSTED_ORIGINS`. Without it, sign-in fails and the app
-names the setting to change.
+or add both to `TRUSTED_ORIGINS`. Without it, sign-in fails and the app names
+the setting to change.
 
 ## Settings → Desktop
 
@@ -187,21 +204,35 @@ How each system reads the app in front:
 
 ## Build it from source
 
-You need Node.js 24 and pnpm. Node 26 is known to leave Electron's download
-incomplete.
+You need Node.js 24, pnpm and Rust 1.90 or later, which
+[rustup](https://rustup.rs) installs. On a Mac, both build commands on this
+page also need Xcode 26, which compiles the app icon. On Linux, install the
+WebKitGTK development packages first. On Ubuntu or Debian:
+
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf
+```
+
+Then build:
 
 ```bash
 git clone https://github.com/trebeljahr/trackyourtime.git
 cd trackyourtime
 pnpm install
-NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm electron:build
+NEXT_PUBLIC_API_URL=https://api.trackyourtime.dev pnpm desktop:package
 ```
 
 `NEXT_PUBLIC_API_URL` is the server the app connects to first. You can pick
 another one on the sign-in screen later. The build writes the installers for
 the system you build on into `release/`: a dmg and a zip on macOS, an installer
-on Windows, and an AppImage, deb, rpm, tar.gz and snap on Linux. The rpm
-needs `rpmbuild` and the snap needs `snapcraft`.
+on Windows, and an AppImage, deb, rpm, tar.gz and snap on Linux. The snap needs
+`snapcraft`. To build the Linux files without it, run
+`node scripts/build-desktop.mjs --package --bundles appimage,deb,rpm,targz`
+with the same variable.
+
+To try the app without an installer, run `pnpm build:desktop` with the same
+variable. It writes the app itself into `release/`, for example
+`release/mac-arm64/Track Your Time.app` on a Mac with Apple silicon.
 
 A build you make yourself is not signed, and on macOS and Windows its file
 names end in `-unsigned`. It does not update itself.
@@ -216,5 +247,10 @@ names end in `-unsigned`. It does not update itself.
   tooltip. The icon changes while a timer runs.
 - Activity capture does not work on Wayland, in the store versions, or in the
   Snap and Flatpak versions. The Activity page is hidden there.
-- The Mac app does not record window titles, because macOS gives them only to
-  apps with the Screen Recording permission.
+- On a Mac, window titles need the Screen Recording permission. The app asks
+  for it when you turn on **Include window titles**, and records no titles
+  until you grant it.
+- On macOS 12 and 13, the system pauses the app's page a few minutes after its
+  window is hidden. The menu bar clock keeps running, but Autopilot and live
+  sync wait until you open the window again. macOS 14 and later keep the page
+  running.

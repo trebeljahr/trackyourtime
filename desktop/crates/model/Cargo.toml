@@ -1,0 +1,27 @@
+[package]
+name = "tyt-model"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Pure decision logic of the Track Your Time desktop shell (no Tauri): tray, updates, settings, shortcuts, windows, trust."
+
+[dependencies]
+tyt-wire = { path = "../wire" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+percent-encoding = "2"
+
+[dev-dependencies]
+tempfile = "3"
+# Runs the accelerator mapping through the parser tauri-plugin-global-shortcut
+# uses (accelerator.rs), so a key the plugin would refuse fails here.
+global-hotkey = "0.8"
+
+# A new staging id for `.updaterId` (updater_model.rs).
+[dependencies.getrandom]
+version = "0.4"
+
+# `kill(pid, 0)`: whether Raycast's host still runs (raycast_menu.rs).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

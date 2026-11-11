@@ -7,8 +7,8 @@
 
   - **Every claim here must be true of the FLATPAK.** The Flatpak has no
     in-app updater, no "open at login" and no desktop activity capture
-    (`selfUpdates`, `loginItemMechanism` and `activityCaptureSupport` in
-    electron/src/distribution.ts all refuse the `flatpak` channel), so none of
+    (tyt_model::distribution and tyt_activity's distribution rules all refuse
+    the `flatpak` channel), so none of
     the three is named below. A unit test greps for the activity wording.
   - **The screenshot URLs are not versioned.** Flathub downloads them when it
     builds, and its update bot rewrites the manifest's source URLs, never

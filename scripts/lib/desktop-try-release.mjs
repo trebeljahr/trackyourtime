@@ -4,11 +4,11 @@
  *
  * The CLI is `scripts/desktop-try-release.mjs` (`pnpm desktop:try-release`);
  * everything decidable without `gh` or a filesystem lives here, so it can be
- * tested. Asset names are never written out: they come from
- * `artifactPatterns()` in `desktop-release.mjs`, the same patterns
- * electron-builder packs with, so a rename reaches this command for free.
+ * tested. Asset names are never written out: they come from `artifactName()`
+ * in `desktop-release.mjs`, the names build-desktop.mjs renames every bundle
+ * to, so a rename reaches this command for free.
  */
-import { artifactPatterns, expandArtifactName } from "./desktop-release.mjs";
+import { artifactName, LAST_ELECTRON_RELEASE } from "./desktop-release.mjs";
 import { isReleaseTag } from "./desktop-rollout.mjs";
 
 /** The `--project` slug of every drop this repo makes (crossplat is shared). */
@@ -27,12 +27,13 @@ export const DEFAULT_TRY_PLATFORM = "linux-arm64";
 
 export const TRY_RELEASE_USAGE = `Usage: pnpm desktop:try-release <version> [${TRY_PLATFORMS.join("|")}] [--repo owner/name] [--note "…"] [--start-vm "<UTM VM>"]`;
 
-/**
- * electron-builder names an AppImage with the machine's own architecture
- * string, not its own: x64 is written `x86_64`. Measured against the assets of
- * v0.1.2, and pinned in the test.
- */
-const APPIMAGE_ARCH = Object.freeze({ x64: "x86_64", arm64: "arm64" });
+/** Whether `a` is a release older than or equal to `b` (x.y.z, prerelease ignored). */
+function atOrBefore(a, b) {
+  const parts = (v) => String(v).split("-")[0].split(".").map((n) => Number.parseInt(n, 10) || 0);
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+  return true;
+}
 
 /** `0.1.2`, `v0.1.2` and `v1.2.0-rc.1` all mean the tag the workflow built. */
 export function normalizeReleaseTag(input) {
@@ -44,32 +45,32 @@ export function normalizeReleaseTag(input) {
 
 /**
  * The one asset of that release a guest on that platform can double-click.
- * One NSIS installer carries both Windows architectures, so both ask for the
- * same file.
+ * The Tauri releases build one NSIS installer per Windows architecture; the
+ * Electron ones (up to LAST_ELECTRON_RELEASE) had one installer carrying both,
+ * so both architectures ask for that file there.
  */
 export function releaseAssetFor({ platform, version }) {
   if (!TRY_PLATFORMS.includes(platform)) throw new Error(`"${platform}" is not one of ${TRY_PLATFORMS.join(", ")}.`);
-  // Never the -unsigned patterns: an -unsigned file is never attached to a release.
-  const names = artifactPatterns({ unsigned: false });
+  // Never an -unsigned name: an -unsigned file is never attached to a release.
   const [os, arch] = platform.split("-");
-  if (os === "linux") return expandArtifactName(names.linux, { version, arch: APPIMAGE_ARCH[arch], ext: "AppImage" });
-  return expandArtifactName(names.nsis, { version, ext: "exe" });
+  if (os === "linux") return artifactName("appimage", { version, arch });
+  return artifactName("nsis", { version, arch: atOrBefore(version, LAST_ELECTRON_RELEASE) ? "x64" : arch });
 }
 
 /**
  * Why that asset is not on the release, in the words the person needs.
  *
  * Windows is the case worth naming: the desktop workflow builds Windows
- * unsigned while no certificate is configured, and never attaches an
+ * unsigned whenever no certificate is configured, and never attaches an
  * `-unsigned` file to the draft release — so a release with every other
- * platform on it has no Windows download at all, and will keep having none
- * until signing lands. Saying so beats "no such asset".
+ * platform on it can have no Windows download at all. Saying so beats "no
+ * such asset".
  */
 export function missingAssetMessage({ platform, asset, tag, assets = [] }) {
   if (platform.startsWith("windows")) {
     return [
       `${tag} publishes no Windows asset (${asset} is not there), so there is nothing a Windows VM can install.`,
-      "Windows signing is not set up: with no certificate (WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD, or Azure Trusted Signing) the",
+      "That leg was built unsigned: with no certificate (WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD, or Azure Trusted Signing) the",
       "workflow builds Windows as -unsigned, and it never attaches an -unsigned file to a release.",
       "Use `pnpm prod:win` instead — it cross-builds the Windows arm64 app on this Mac and drops it for the same VM.",
       "docs/cross-platform-testing.md, and docs/deploy.md → Desktop release.",

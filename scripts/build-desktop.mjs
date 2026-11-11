@@ -1,23 +1,28 @@
 #!/usr/bin/env node
 /*
- * Build the Electron app: the desktop static export, the bundled main and
- * preload, and — with --package — the electron-builder output. One script, so
- * no half of it can be run against the wrong other half.
+ * Build the desktop app (Tauri 2, desktop/src-tauri): the desktop static
+ * export, then the Rust build that embeds it, then — with --package — the
+ * channel's installers, renamed to the names the Electron releases used. One
+ * script, so no half of it can be run against the wrong other half.
  *
- *   NEXT_PUBLIC_API_URL=http://localhost:51590 node scripts/build-desktop.mjs
- *   node scripts/build-desktop.mjs --electron-only        # bundle main/preload only
- *   node scripts/build-desktop.mjs --package --dir        # + unpacked app (electron:preview)
- *   node scripts/build-desktop.mjs --package --mac zip    # + anything electron-builder takes
- *   node scripts/build-desktop.mjs --channel mac --package --mac dmg zip --arm64 --x64
- *   node scripts/build-desktop.mjs --reuse-export --channel mas --package --mac mas --universal
- *   node scripts/build-desktop.mjs --open --package --dir  # + launch it (pnpm prod:desktop; for people, never agents)
+ *   NEXT_PUBLIC_API_URL=… node scripts/build-desktop.mjs --export-only
+ *   NEXT_PUBLIC_API_URL=… node scripts/build-desktop.mjs --e2e          # the harness's global setup
+ *   NEXT_PUBLIC_API_URL=… node scripts/build-desktop.mjs --package --dir  # export + unpacked app (pnpm build:desktop)
+ *   NEXT_PUBLIC_API_URL=… node scripts/build-desktop.mjs --package        # + this host's installers, unsigned
+ *   node scripts/build-desktop.mjs --channel mac --package --arch arm64 --arch x64
+ *   node scripts/build-desktop.mjs --channel mas --package --arch universal
+ *   node scripts/build-desktop.mjs --channel win --package --arch x64 --arch arm64
+ *   node scripts/build-desktop.mjs --channel win-store --package --arch x64 --arch arm64
+ *   node scripts/build-desktop.mjs --channel linux --package --bundles appimage,deb,rpm,targz,snap
+ *   node scripts/build-desktop.mjs --reuse-export --package …       # package the export already in out-desktop
+ *   node scripts/build-desktop.mjs --package --dir --target aarch64-pc-windows-msvc   # pnpm prod:win, from a Mac (cargo-xwin)
+ *   node scripts/build-desktop.mjs --open --package --dir           # pnpm prod:desktop; for people, never agents
  *
  * `--channel <mac|mas|win|win-store|linux>` is how a release is built (the
- * workflow always passes it): the signing secrets for that channel are
- * checked first, and a partial set refuses (scripts/lib/desktop-release.mjs).
- * Without --channel every package is unsigned and named -unsigned.
- * `--reuse-export` packages the export already in out-desktop instead of
- * building it again (its target API is printed from .build-target.json).
+ * workflow always passes it): the signing secrets for that channel are checked
+ * first, a partial set refuses, and no secrets builds files named -unsigned
+ * (scripts/lib/desktop-release.mjs → resolveSigning, resolveUpdater). Without
+ * --channel every package is unsigned, has no update feed and says -unsigned.
  *
  * Why each check exists:
  *
@@ -25,69 +30,98 @@
  *      written by the web build and by Playwright, which bakes a throwaway
  *      127.0.0.1 API port — packaging whatever sits there ships an app bound
  *      to a dead port. The mobile build learned this first (`out-mobile`).
+ *      The Rust build embeds this directory (tauri.conf.json → frontendDist,
+ *      and desktop/src-tauri/build.rs refuses to build without it).
  *
  *   2. `NEXT_PUBLIC_API_URL` is required and searched for in the emitted
  *      chunks. It is baked in at build time; unset, every request resolves
- *      against `app://-` and the build stays green.
+ *      against the app's own origin and the build stays green.
  *
  *   3. No emitted HTML may reference "./_next". The app is served from the
- *      privileged app:// scheme, which has a root; a relative asset prefix
- *      breaks every route but `/` (it did, under file://, in the Stage 0 spike).
+ *      app:// scheme, which has a root; a relative asset prefix breaks every
+ *      route but `/`.
  *
  *   4. A dev server of this checkout owns `packages/client/.next`, which a
  *      production export also builds in (with `output: "export"` a custom
  *      distDir only moves the export). Building beside it corrupts one of them.
  *
- *   5. After packaging, the asar is listed and must contain only the bundle,
- *      the export and package.json — in particular no `@capacitor/*`, which
- *      the root `dependencies` would otherwise pull in.
+ *   5. After packaging, the version inside every package (Info.plist, the
+ *      deb's and rpm's own fields) must be the root package.json's, and on a
+ *      tag run the tag must be v<that version>. A release named 0.4.0 that
+ *      reports 0.3.0 would be offered its own update forever.
  *
- *   6. After packaging, the version inside every asar (and every .app's
- *      Info.plist on macOS) must be the root package.json's, and on a tag run
- *      the tag must be v<that version>. A release named 0.2.0 that reports
- *      0.1.0 would never be offered its own update.
+ *   6. Every update payload's minisign signature is checked against the
+ *      committed public key (build/updater.pub) right where it is made. A
+ *      payload signed with another key is rejected by every installed app,
+ *      and nothing before that moment would say so.
+ *
+ *   7. On macOS the bundle must carry the compiled Icon Composer icon
+ *      (Assets.car + CFBundleIconName) and icon.icns, which needs Xcode 26's
+ *      actool on the packaging Mac; and a signed build is notarized and
+ *      stapled before any archive is made of it, so the zip electron-updater
+ *      installs and the tar.gz the Tauri updater installs both carry the
+ *      ticket.
  */
-import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build as esbuild } from "esbuild";
+import yaml from "js-yaml";
 
-import { ensureElectron } from "./ensure-electron.mjs";
-import { builderEnvFor, masEntitlementsPlist, resolveSigning, tagMismatch, targetChannelProblem } from "./lib/desktop-release.mjs";
 import { describeChildFailure } from "./lib/child-failure.mjs";
+import { appleSigning, createNotarizer } from "./lib/desktop-apple.mjs";
+import {
+  artifactName,
+  CHANNEL_BUNDLES,
+  feedDigest,
+  hostChannel,
+  legacyFeedNames,
+  LEGACY_FEED_FILES,
+  masEntitlementsPlist,
+  resolveSigning,
+  resolveUpdater,
+  tagMismatch,
+  targetChannelProblem,
+  tauriEnvFor,
+  UPDATER_PUBKEY_FILE,
+  updaterFragmentName,
+  updaterTargets,
+  legacyFeedText,
+} from "./lib/desktop-release.mjs";
+import {
+  APP_ID,
+  archOfTarget,
+  BUNDLER_OUTPUTS,
+  bundlerTargets,
+  CARGO_MANIFEST,
+  infoPlistFor,
+  LINUX_NAME,
+  mainBinaryFor,
+  msixVersion,
+  platformOfTarget,
+  PRODUCT_NAME,
+  RUST_TARGETS,
+  TAURI_DIR,
+  tauriBuildArgs,
+  tauriConfigFor,
+  unpackedDirName,
+  updaterFragment,
+  verifyMinisign,
+} from "./lib/desktop-tauri.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..");
-const require = createRequire(join(repoRoot, "package.json"));
 
 export const DESKTOP_OUT_DIR = "out-desktop";
 const outPath = resolve(repoRoot, "packages/client", DESKTOP_OUT_DIR);
-const electronDist = resolve(repoRoot, "electron/dist");
-
-const args = process.argv.slice(2);
-const packageIndex = args.indexOf("--package");
-const shouldPackage = packageIndex !== -1;
-const ownArgs = shouldPackage ? args.slice(0, packageIndex) : args;
-const builderArgs = shouldPackage ? args.slice(packageIndex + 1) : [];
-const electronOnly = ownArgs.includes("--electron-only");
-const reuseExport = ownArgs.includes("--reuse-export");
-// Launch the unpacked app this run built. For a person trying a build by
-// hand: it shows and focuses a real window, so tests and agents never pass it.
-const openAfter = ownArgs.includes("--open");
-if (openAfter && !builderArgs.includes("--dir")) {
-  console.error("\n  build:desktop — --open launches the unpacked app, so it needs --package --dir.\n");
-  process.exit(1);
-}
-const channelIndex = ownArgs.indexOf("--channel");
-const channel = channelIndex === -1 ? null : ownArgs[channelIndex + 1];
-if (channelIndex !== -1 && (!channel || channel.startsWith("--"))) {
-  // Checked before anything is built: a typo here must not cost an export.
-  console.error("\n  build:desktop — --channel needs a value: mac, mas, win, win-store or linux.\n");
-  process.exit(1);
-}
+const tauriDir = resolve(repoRoot, TAURI_DIR);
+const generatedDir = join(tauriDir, ".generated");
+const releaseDir = resolve(repoRoot, "release");
+/** Where the e2e harness reads which binary to launch (e2e/desktop/support.ts). */
+const E2E_BINARY_INFO = resolve(repoRoot, "desktop/target/e2e-binary.json");
+const targetDir = resolve(repoRoot, process.env.CARGO_TARGET_DIR || "desktop/target");
 const rootVersion = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
 
 function fail(message) {
@@ -99,16 +133,51 @@ function step(message) {
   console.log(`\n  ${message}`);
 }
 
-function run(command, cmdArgs, env = {}, baseEnv = process.env) {
+// ── Arguments ────────────────────────────────────────────────────────
+
+function parseArgs(argv) {
+  const opts = { exportOnly: false, reuseExport: false, e2e: false, package: false, dir: false, open: false, channel: null, archs: [], target: null, bundles: null };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const value = () => {
+      const next = argv[++i];
+      // Checked before anything is built: a typo here must not cost an export.
+      if (!next || next.startsWith("--")) fail(`${arg} needs a value.`);
+      return next;
+    };
+    if (arg === "--export-only") opts.exportOnly = true;
+    else if (arg === "--reuse-export") opts.reuseExport = true;
+    else if (arg === "--e2e") opts.e2e = true;
+    else if (arg === "--package") opts.package = true;
+    else if (arg === "--dir") opts.dir = true;
+    else if (arg === "--open") opts.open = true;
+    else if (arg === "--channel") opts.channel = value();
+    else if (arg === "--arch") opts.archs.push(...value().split(","));
+    else if (arg === "--target") opts.target = value();
+    else if (arg === "--bundles") opts.bundles = value().split(",").map((b) => b.trim().toLowerCase()).filter(Boolean);
+    else fail(`unknown argument ${arg}. See the header of scripts/build-desktop.mjs.`);
+  }
+  if ([opts.exportOnly, opts.e2e, opts.package].filter(Boolean).length > 1) fail("--export-only, --e2e and --package are separate modes; pass one.");
+  if (opts.open && !(opts.package && opts.dir)) fail("--open launches the unpacked app, so it needs --package --dir.");
+  if (opts.dir && opts.channel) fail("--dir builds an unsigned local app; drop --channel (a channel builds its installers).");
+  if (opts.dir && opts.bundles) fail("--dir builds the unpacked app only; drop --bundles.");
+  if (opts.target && opts.archs.length) fail("--target names one Rust target; drop --arch.");
+  if (opts.e2e && opts.reuseExport) fail("--e2e reuses an export built for the same API by itself (DESKTOP_E2E_REBUILD=1 rebuilds it).");
+  return opts;
+}
+
+const opts = parseArgs(process.argv.slice(2));
+
+function run(command, cmdArgs, { env = process.env, cwd = repoRoot, quiet = false } = {}) {
   const result = spawnSync(command, cmdArgs, {
-    cwd: repoRoot,
-    stdio: ["inherit", "inherit", "pipe"],
+    cwd,
+    stdio: ["inherit", quiet ? "pipe" : "inherit", "pipe"],
     encoding: "utf8",
-    env: { ...baseEnv, ...env },
-    shell: process.platform === "win32",
+    env,
+    shell: process.platform === "win32" && !/\.(exe)$/i.test(command) && !["powershell", "pwsh"].includes(command),
   });
   const stderr = result.stderr ?? "";
-  if (stderr !== "") process.stderr.write(stderr);
+  if (stderr !== "" && !quiet) process.stderr.write(stderr);
   if (result.error || result.status !== 0) {
     fail(
       describeChildFailure({
@@ -120,6 +189,7 @@ function run(command, cmdArgs, env = {}, baseEnv = process.env) {
       }),
     );
   }
+  return result.stdout ?? "";
 }
 
 function walk(dir, predicate, hits = []) {
@@ -131,44 +201,81 @@ function walk(dir, predicate, hits = []) {
   return hits;
 }
 
-// ── 0. Release preflight ─────────────────────────────────────────────
+// ── 0. What this run builds ──────────────────────────────────────────
 
-let signing = null;
-if (shouldPackage) {
+const targetPlatform = opts.target ? platformOfTarget(opts.target) : process.platform;
+let targets = [];
+let bundles = [];
+let signing = { mode: "unsigned" };
+let updater = { feed: false, reason: "no --channel" };
+let pubkey = null;
+const effectiveChannel = opts.channel ?? hostChannel(targetPlatform);
+
+if (opts.package) {
   const mismatch = tagMismatch({ refType: process.env.GITHUB_REF_TYPE, refName: process.env.GITHUB_REF_NAME, version: rootVersion });
   if (mismatch) fail(mismatch);
-  const targetProblem = targetChannelProblem(channel, builderArgs);
-  if (targetProblem) fail(targetProblem);
-  if (channel) {
+  if (targetPlatform !== process.platform) {
+    // The one cross build: an unpacked Windows app from a Mac, for a person's
+    // VM (pnpm prod:win). Installers are only ever made on their own OS.
+    if (!(process.platform === "darwin" && targetPlatform === "win32" && opts.dir)) {
+      fail(`A ${targetPlatform} package is built on ${targetPlatform}. From a Mac only the unpacked Windows app cross-builds (--dir --target …-windows-msvc).`);
+    }
+  }
+  const knownTargets = RUST_TARGETS[targetPlatform];
+  if (!knownTargets) fail(`No desktop build for ${targetPlatform}.`);
+  if (opts.target) {
+    if (!Object.values(knownTargets).includes(opts.target)) fail(`Unknown target ${opts.target}. Known: ${Object.values(knownTargets).join(", ")}.`);
+    targets = [opts.target];
+  } else {
+    const defaultArch = effectiveChannel === "mas" ? "universal" : process.arch === "arm64" ? "arm64" : "x64";
+    const archs = opts.archs.length ? opts.archs : [defaultArch];
+    for (const arch of archs) {
+      if (!knownTargets[arch]) fail(`No ${arch} build on ${targetPlatform}. Known: ${Object.keys(knownTargets).join(", ")}.`);
+      if (effectiveChannel === "mas" && arch !== "universal") fail("The Mac App Store takes one universal binary per build (--arch universal).");
+      if (effectiveChannel === "mac" && arch === "universal") fail("The Developer ID downloads are split per architecture (--arch arm64 --arch x64).");
+    }
+    targets = archs.map((arch) => knownTargets[arch]);
+  }
+
+  if (!opts.dir) {
+    bundles = opts.bundles ?? [...(CHANNEL_BUNDLES[effectiveChannel] ?? [])];
+    const problem = targetChannelProblem(opts.channel, bundles, targetPlatform);
+    if (problem) fail(problem);
+  }
+
+  if (opts.channel) {
     try {
-      signing = resolveSigning(channel, process.env);
+      signing = resolveSigning(opts.channel, process.env);
+      pubkey = existsSync(resolve(repoRoot, UPDATER_PUBKEY_FILE)) ? readFileSync(resolve(repoRoot, UPDATER_PUBKEY_FILE), "utf8").trim() : null;
+      updater = resolveUpdater({ channel: opts.channel, signing, env: process.env, pubkey });
     } catch (err) {
       fail(err instanceof Error ? err.message : String(err));
     }
-    step(`Channel ${channel}: ${signing.mode}${signing.set ? ` (${signing.set.join(", ")})` : ""}`);
-  } else {
-    signing = { mode: "unsigned" };
   }
+  // A Mac App Store pkg needs the installer identity; unsigned there is no pkg
+  // at all, and the run checks the config by building the .app alone.
+  if (effectiveChannel === "mas" && signing.mode !== "signed") bundles = bundles.filter((b) => b !== "pkg");
+  step(
+    `Channel ${opts.channel ?? `${effectiveChannel} (local)`}: ${signing.mode}${signing.set ? ` (${signing.set.join(", ")})` : ""}; ` +
+      `update feed ${updater.feed ? "on" : `off — ${updater.reason}`}; ${targets.join(", ")}${opts.dir ? ", unpacked" : `, ${bundles.join(" ") || "app only"}`}`,
+  );
 }
 
 // ── 1. Export ────────────────────────────────────────────────────────
 
-if (reuseExport && !electronOnly) {
-  const target = join(outPath, ".build-target.json");
-  if (!existsSync(target)) fail(`--reuse-export: no earlier export in ${outPath} (no .build-target.json).`);
-  step(`Reusing the export in ${relative(repoRoot, outPath)} (built against ${JSON.parse(readFileSync(target, "utf8")).apiUrl})`);
-}
+const buildTargetFile = join(outPath, ".build-target.json");
+const readBuildTarget = () => (existsSync(buildTargetFile) ? JSON.parse(readFileSync(buildTargetFile, "utf8")) : null);
 
-if (!electronOnly && !reuseExport) {
+function requireApiUrl() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (!apiUrl) {
     fail(
       "NEXT_PUBLIC_API_URL is not set.\n" +
         "  It is baked into the bundle at build time — unset, the app resolves every\n" +
-        "  request against app://- and fails with a green build.\n\n" +
+        "  request against its own origin and fails with a green build.\n\n" +
         "  Local, in a worktree (see CLAUDE.md):\n" +
         "    API_PORT=51591 PORT=33921 pnpm run dev\n" +
-        "    NEXT_PUBLIC_API_URL=http://localhost:51591 pnpm electron:preview",
+        "    NEXT_PUBLIC_API_URL=http://localhost:51591 pnpm build:desktop",
     );
   }
   let apiOrigin;
@@ -178,12 +285,12 @@ if (!electronOnly && !reuseExport) {
     fail(`NEXT_PUBLIC_API_URL is not a valid URL: ${apiUrl}`);
   }
   if (apiOrigin.pathname !== "/" || apiOrigin.search || apiOrigin.hash) {
-    fail(
-      `NEXT_PUBLIC_API_URL must be an origin with no path — got ${apiUrl}.\n` +
-        "  The clients append /api/trpc, /api/auth and /api/ws themselves.",
-    );
+    fail(`NEXT_PUBLIC_API_URL must be an origin with no path — got ${apiUrl}.\n  The clients append /api/trpc, /api/auth and /api/ws themselves.`);
   }
+  return apiUrl;
+}
 
+function buildExport(apiUrl) {
   step("Preflight");
   const devLock = resolve(repoRoot, "packages/client/.next/dev/lock");
   if (existsSync(devLock)) {
@@ -214,20 +321,21 @@ if (!electronOnly && !reuseExport) {
   console.log("    no dev server owns packages/client/.next");
 
   step(`Building the desktop export against ${apiUrl}`);
-  // Stale files from an earlier export would survive into the package.
+  // Stale files from an earlier export would be embedded into the binary.
   rmSync(outPath, { recursive: true, force: true });
   run("pnpm", ["build:client"], {
-    // Set, never inherited: scripts/dev.mjs exports a per-worktree
-    // NEXT_DIST_DIR, which would put this export somewhere else entirely.
-    NEXT_DIST_DIR: DESKTOP_OUT_DIR,
-    NEXT_PUBLIC_API_URL: apiUrl,
+    env: {
+      ...process.env,
+      // Set, never inherited: scripts/dev.mjs exports a per-worktree
+      // NEXT_DIST_DIR, which would put this export somewhere else entirely.
+      NEXT_DIST_DIR: DESKTOP_OUT_DIR,
+      NEXT_PUBLIC_API_URL: apiUrl,
+    },
   });
 
   step("Verifying the export");
   for (const required of ["index.html", "404.html", "app/track/index.html"]) {
-    if (!existsSync(join(outPath, required))) {
-      fail(`No ${required} in ${outPath} — the export did not land where expected.`);
-    }
+    if (!existsSync(join(outPath, required))) fail(`No ${required} in ${outPath} — the export did not land where expected.`);
   }
   const htmlFiles = walk(outPath, (f) => f.endsWith(".html"));
   const relativeRefs = htmlFiles.filter((f) => readFileSync(f, "utf8").includes('"./_next'));
@@ -246,187 +354,434 @@ if (!electronOnly && !reuseExport) {
   const chunkDir = join(outPath, "_next/static/chunks");
   const chunks = existsSync(chunkDir) ? walk(chunkDir, (f) => f.endsWith(".js")) : [];
   if (!chunks.some((f) => readFileSync(f, "utf8").includes(apiUrl))) {
-    fail(
-      `The literal ${apiUrl} does not appear in any emitted chunk.\n` +
-        "  NEXT_PUBLIC_API_URL did not reach the client bundle.",
-    );
+    fail(`The literal ${apiUrl} does not appear in any emitted chunk.\n  NEXT_PUBLIC_API_URL did not reach the client bundle.`);
   }
   console.log(`    ${apiUrl} is baked into the bundle`);
-
-  writeFileSync(
-    join(outPath, ".build-target.json"),
-    `${JSON.stringify({ apiUrl, builtAt: new Date().toISOString() }, null, 2)}\n`,
-  );
+  // Read by the e2e reuse check below, by --reuse-export, and by build.rs as
+  // its rerun trigger, so a new export always reaches the next cargo build.
+  writeFileSync(buildTargetFile, `${JSON.stringify({ apiUrl, builtAt: new Date().toISOString() }, null, 2)}\n`);
 }
 
-// ── 2. Main and preload ──────────────────────────────────────────────
+if (opts.reuseExport) {
+  const target = readBuildTarget();
+  if (!target || !existsSync(join(outPath, "index.html"))) fail(`--reuse-export: no earlier export in ${outPath} (no .build-target.json).`);
+  step(`Reusing the export in ${relative(repoRoot, outPath)} (built against ${target.apiUrl})`);
+} else if (opts.e2e) {
+  const apiUrl = requireApiUrl();
+  const target = readBuildTarget();
+  if (process.env.DESKTOP_E2E_REBUILD !== "1" && target?.apiUrl === apiUrl && existsSync(join(outPath, "index.html"))) {
+    step(`Reusing the export in ${relative(repoRoot, outPath)} (built against ${apiUrl}; DESKTOP_E2E_REBUILD=1 rebuilds it)`);
+  } else {
+    buildExport(apiUrl);
+  }
+} else {
+  buildExport(requireApiUrl());
+}
 
-step("Bundling electron/src → electron/dist");
-rmSync(electronDist, { recursive: true, force: true });
-const electronVersion = JSON.parse(readFileSync(require.resolve("electron/package.json"), "utf8")).version;
-const common = {
-  bundle: true,
-  platform: "node",
-  format: "cjs",
-  // Electron 42 ships Node 24.
-  target: "node24",
-  external: ["electron"],
-  sourcemap: false,
-  logLevel: "warning",
-  absWorkingDir: repoRoot,
+if (opts.exportOnly) {
+  console.log("\n  Desktop export ready.\n");
+  process.exit(0);
+}
+
+// ── 2. The e2e build ─────────────────────────────────────────────────
+
+if (opts.e2e) {
+  step(`cargo build --features e2e (debug) → ${relative(repoRoot, targetDir)}`);
+  run("cargo", ["build", "--manifest-path", resolve(repoRoot, CARGO_MANIFEST), "--features", "e2e"], {
+    env: { ...process.env, CARGO_TARGET_DIR: targetDir },
+  });
+  const binary = join(targetDir, "debug", process.platform === "win32" ? "trackyourtime-desktop.exe" : "trackyourtime-desktop");
+  if (!existsSync(binary)) fail(`cargo wrote no ${binary}.`);
+  mkdirSync(dirname(E2E_BINARY_INFO), { recursive: true });
+  writeFileSync(E2E_BINARY_INFO, `${JSON.stringify({ path: binary, apiUrl: readBuildTarget()?.apiUrl ?? null }, null, 2)}\n`);
+  console.log(`    ${relative(repoRoot, binary)} (written to ${relative(repoRoot, E2E_BINARY_INFO)})`);
+  console.log("\n  Desktop e2e build ready.\n");
+  process.exit(0);
+}
+
+if (!opts.package) {
+  console.log("\n  Nothing to package: pass --package (with --dir for the unpacked app), --e2e or --export-only.\n");
+  process.exit(0);
+}
+
+// ── 3. Generated inputs ──────────────────────────────────────────────
+
+mkdirSync(generatedDir, { recursive: true });
+mkdirSync(releaseDir, { recursive: true });
+
+const icons = ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.icns", "icons/icon.ico"];
+if (icons.some((icon) => !existsSync(join(tauriDir, icon)))) {
+  step("Generating desktop icons (build/icon.png → desktop/src-tauri/icons)");
+  run("pnpm", ["icons:desktop"]);
+}
+
+let assetCatalog = null;
+if (targetPlatform === "darwin") {
+  // The macOS icon is an Icon Composer document only Xcode 26's actool
+  // compiles. Said here, rather than as a blank icon after a 10-minute build.
+  if (!existsSync(resolve(repoRoot, "build/AppIcon.icon/icon.json"))) fail("No build/AppIcon.icon. Run: pnpm icons:brand");
+  const actool = spawnSync("xcrun", ["actool", "--version"], { encoding: "utf8" });
+  const actoolVersion = /<key>short-bundle-version<\/key>\s*<string>(\d+)/.exec(actool.stdout ?? "")?.[1];
+  if (!actoolVersion || Number(actoolVersion) < 26) {
+    fail(`The macOS icon needs Xcode 26 or later (actool ${actoolVersion ?? "not found"}). Install it and run xcode-select -s.`);
+  }
+  const icons = join(generatedDir, "icons");
+  rmSync(icons, { recursive: true, force: true });
+  mkdirSync(icons, { recursive: true });
+  // prettier-ignore
+  run("xcrun", [
+    "actool", resolve(repoRoot, "build/AppIcon.icon"), "--compile", icons,
+    "--output-format", "human-readable-text", "--notices", "--warnings",
+    "--output-partial-info-plist", join(icons, "partial.plist"),
+    "--app-icon", "AppIcon", "--include-all-app-icons",
+    "--enable-on-demand-resources", "NO", "--development-region", "en",
+    "--target-device", "mac", "--minimum-deployment-target", "12.0", "--platform", "macosx",
+  ], { quiet: true });
+  assetCatalog = join(icons, "Assets.car");
+  if (!existsSync(assetCatalog)) fail("actool wrote no Assets.car.");
+}
+
+const paths = {
+  macEntitlements: resolve(repoRoot, "build/entitlements.tauri.plist"),
+  masEntitlements: join(generatedDir, "entitlements.mas.plist"),
+  infoPlist: join(generatedDir, "Info.plist"),
+  assetCatalog,
+  provisioningProfile: process.env.MAS_PROVISIONING_PROFILE?.trim() || null,
+  nsisHooks: resolve(repoRoot, "build/windows/installer-hooks.nsh"),
+  signWindows: resolve(repoRoot, "scripts/desktop/sign-windows.ps1"),
+  desktopTemplate: resolve(repoRoot, "build/linux/trackyourtime.desktop.hbs"),
+  preinstall: resolve(repoRoot, "build/linux/preinstall.sh"),
 };
-await esbuild({ ...common, entryPoints: ["electron/src/main.ts"], outfile: "electron/dist/main.js" });
-// The preload runs sandboxed, where `require` knows only Electron's renderer
-// modules — so everything else has to be inlined, and it is.
-await esbuild({ ...common, entryPoints: ["electron/src/preload.ts"], outfile: "electron/dist/preload.js" });
-// The tray icons (scripts/icons-brand.mjs) sit beside the bundle, where
-// electron/src/desktop.ts looks for them in both a packaged and an unpackaged run.
-const trayIcons = resolve(repoRoot, "electron/assets/tray");
-if (!existsSync(join(trayIcons, "tray-mac.png"))) {
-  fail("No tray icons in electron/assets/tray. Run: pnpm icons:brand");
+// The store entitlements name the team, so they are written per build.
+writeFileSync(paths.masEntitlements, masEntitlementsPlist({ teamId: process.env.APPLE_TEAM_ID ?? "", appId: APP_ID }));
+writeFileSync(paths.infoPlist, infoPlistFor({ assetCatalog }));
+
+// ── 4. Build ─────────────────────────────────────────────────────────
+
+const unsigned = signing.mode !== "signed" && effectiveChannel !== "linux" && effectiveChannel !== "win-store";
+const tauriBin = resolve(repoRoot, "node_modules/.bin", process.platform === "win32" ? "tauri.cmd" : "tauri");
+if (!existsSync(tauriBin)) fail("No tauri CLI in node_modules. Run: pnpm install");
+const outputs = []; // { kind, arch, file } written this run
+const fragmentEntries = []; // { targets, file, signature }
+
+/** Remove the release files a previous run wrote under the names this run writes. */
+function claim(file) {
+  rmSync(file, { recursive: true, force: true });
+  return file;
 }
-cpSync(trayIcons, join(electronDist, "tray"), { recursive: true });
-console.log(`    electron/dist/main.js, electron/dist/preload.js, electron/dist/tray/ (Electron ${electronVersion})`);
 
-// ── 3. Package ───────────────────────────────────────────────────────
+function find(dir, match, what) {
+  const hits = existsSync(dir) ? readdirSync(dir).filter(match) : [];
+  if (hits.length !== 1) fail(`Expected one ${what} in ${dir}, found ${hits.length}${hits.length ? `: ${hits.join(", ")}` : ""}.`);
+  return join(dir, hits[0]);
+}
 
-if (shouldPackage) {
-  if (electronOnly) fail("--package needs the export; drop --electron-only.");
+/**
+ * A bundler output, which names itself after the version it was built with
+ * (`Track Your Time_0.4.0_x64-setup.exe`, `trackyourtime_0.4.0_amd64.AppImage`).
+ * The version comes from tauri.conf.json → `../../package.json`; a name that
+ * says otherwise is a package that would be offered its own update forever.
+ */
+function findVersioned(dir, match, what) {
+  const file = find(dir, match, what);
+  const name = file.split(/[\\/]/).pop();
+  if (!name.includes(`_${rootVersion}`) && !name.includes(`-${rootVersion}`)) fail(`${name} does not carry version ${rootVersion} (package.json).`);
+  return file;
+}
 
-  // electron-builder downloads its own Electron zip, but the harness and
-  // dev:desktop run node_modules/electron — make sure it is really there.
-  ensureElectron();
+function signUpdate(file, arch, kind) {
+  // An unset password makes `tauri signer` prompt for one, which a CI run
+  // would wait on forever; an empty one is a key without a password.
+  const env = { ...process.env, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ?? "" };
+  run(tauriBin, ["signer", "sign", file], { env, quiet: true });
+  const signature = readFileSync(`${file}.sig`, "utf8").trim();
+  const verdict = verifyMinisign({ publicKey: pubkey, signature, data: readFileSync(file) });
+  if (!verdict.ok) fail(`${relative(repoRoot, file)}: ${verdict.reason} Installed apps would reject this update; check TAURI_SIGNING_PRIVATE_KEY against ${UPDATER_PUBKEY_FILE}.`);
+  fragmentEntries.push({ targets: updaterTargets(kind, arch), file: file.split(/[\\/]/).pop(), signature });
+  console.log(`    ${relative(repoRoot, file)}: update signature verified against ${UPDATER_PUBKEY_FILE}`);
+}
 
-  const icons = process.platform === "win32" ? ["build/icon.ico"] : process.platform === "darwin" ? ["build/icon.icns"] : [];
-  if (icons.some((icon) => !existsSync(resolve(repoRoot, icon)))) {
-    step("Generating desktop icons (build/icon.png → icns/ico)");
-    run("pnpm", ["icons:desktop"]);
+function plistValue(appPath, key) {
+  const out = spawnSync("plutil", ["-extract", key, "raw", join(appPath, "Contents/Info.plist")], { encoding: "utf8" });
+  return out.status === 0 ? out.stdout.trim() : null;
+}
+
+function verifyMacApp(appPath) {
+  const problems = [];
+  const version = plistValue(appPath, "CFBundleShortVersionString");
+  if (version !== rootVersion) problems.push(`CFBundleShortVersionString is "${version}"; package.json says ${rootVersion}`);
+  if (plistValue(appPath, "CFBundleIdentifier") !== APP_ID) problems.push(`CFBundleIdentifier is not ${APP_ID}`);
+  if (plistValue(appPath, "CFBundleExecutable") !== PRODUCT_NAME) problems.push(`CFBundleExecutable is not "${PRODUCT_NAME}"`);
+  if (plistValue(appPath, "ITSAppUsesNonExemptEncryption") !== "false") problems.push("ITSAppUsesNonExemptEncryption is not false");
+  const resources = join(appPath, "Contents/Resources");
+  const iconName = plistValue(appPath, "CFBundleIconName");
+  const iconFile = plistValue(appPath, "CFBundleIconFile");
+  if (!iconName || !existsSync(join(resources, "Assets.car"))) problems.push(`no compiled app icon (CFBundleIconName ${iconName}, Assets.car missing?)`);
+  else {
+    const catalog = spawnSync("xcrun", ["assetutil", "--info", join(resources, "Assets.car")], { encoding: "utf8" });
+    if (!(catalog.stdout ?? "").includes(`"Name" : "${iconName}"`)) problems.push(`Assets.car holds no image set named ${iconName}`);
   }
-  // The macOS icon is an Icon Composer document that only Xcode 26's actool
-  // compiles (electron-builder.config.mjs, mac.icon). Say so here, rather than
-  // in electron-builder's error after the export has been packed.
-  if (process.platform === "darwin") {
-    if (!existsSync(resolve(repoRoot, "build/AppIcon.icon/icon.json"))) {
-      fail("No build/AppIcon.icon. Run: pnpm icons:brand");
-    }
-    const actool = spawnSync("xcrun", ["actool", "--version"], { encoding: "utf8" });
-    const actoolVersion = /<key>short-bundle-version<\/key>\s*<string>(\d+)/.exec(actool.stdout ?? "")?.[1];
-    if (!actoolVersion || Number(actoolVersion) < 26) {
-      fail(`The macOS icon needs Xcode 26 or later (actool ${actoolVersion ?? "not found"}). Install it and run xcode-select -s.`);
-    }
-  }
+  if (!iconFile || !existsSync(join(resources, iconFile.endsWith(".icns") ? iconFile : `${iconFile}.icns`))) problems.push(`CFBundleIconFile ${iconFile} is not in Contents/Resources`);
+  if (problems.length) fail(`${relative(repoRoot, appPath)}:\n    ${problems.join("\n    ")}`);
+  console.log(`    ${relative(repoRoot, appPath)}: ${APP_ID} ${version} (${plistValue(appPath, "CFBundleVersion")}), icon ${iconName} (Assets.car + ${iconFile})`);
+}
 
-  // The Mac App Store entitlements name the team, so they are written per
-  // build. Written for every package (electron-builder reads them only for
-  // mas), so the config never points at a file that is not there.
-  const generated = resolve(repoRoot, "build/generated");
-  mkdirSync(generated, { recursive: true });
-  writeFileSync(
-    join(generated, "entitlements.mas.plist"),
-    masEntitlementsPlist({ teamId: process.env.APPLE_TEAM_ID ?? "", appId: "com.ricoslabs.trackyourtime" }),
-  );
-
-  step(`electron-builder ${builderArgs.join(" ")}`.trim());
-  // Without a channel, and for any unsigned channel, keychain identity
-  // discovery is off: otherwise electron-builder finds a local "Developer ID
-  // Application" identity on its own and signs even a --dir build, which is
-  // slow and differs per machine. Signing only ever comes from a channel's
-  // complete secret set.
-  const builderEnv = builderEnvFor(channel ?? "local", process.env, signing);
-  // release/ keeps whatever earlier runs left (another channel's unpacked
-  // app, an old dmg). Only what this run wrote is checked: a stale folder
-  // must neither pass for this build nor fail it.
-  const packagedSince = Date.now() - 2000;
-  run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.config.mjs", "--publish", "never", ...builderArgs], {}, builderEnv);
-
-  step("Verifying the asar");
-  const releaseDir = resolve(repoRoot, "release");
-  const fresh = (file) => statSync(file).mtimeMs >= packagedSince;
-  const asars = existsSync(releaseDir) ? walk(releaseDir, (f) => f.endsWith(`${sep}app.asar`) && fresh(f)) : [];
-  if (!asars.length) fail(`No app.asar written under ${releaseDir} by this run.`);
-  const asarLib = createRequire(require.resolve("app-builder-lib/package.json", { paths: [require.resolve("electron-builder/package.json")] }))(
-    "@electron/asar",
-  );
-  const allowed = ["/package.json", "/electron/dist/", "/packages/client/out-desktop/"];
-  for (const asar of asars) {
-    const entries = asarLib.listPackage(asar, { isPack: false }).map((e) => e.split(sep).join("/"));
-    const files = entries.filter((e) => !allowed.some((a) => e === a.replace(/\/$/, "") || e.startsWith(a) || a.startsWith(`${e}/`)));
-    const capacitor = entries.filter((e) => e.includes("@capacitor") || e.includes("capacitor-secure-storage"));
-    if (capacitor.length) fail(`${relative(repoRoot, asar)} contains Capacitor:\n    ${capacitor.slice(0, 5).join("\n    ")}`);
-    if (files.length) fail(`${relative(repoRoot, asar)} contains unexpected entries:\n    ${files.slice(0, 10).join("\n    ")}`);
-    const bytes = statSync(asar).size;
-    const packedVersion = JSON.parse(asarLib.extractFile(asar, "package.json").toString("utf8")).version;
-    if (packedVersion !== rootVersion) {
-      fail(`${relative(repoRoot, asar)} reports version ${packedVersion}; package.json says ${rootVersion}.`);
-    }
-    console.log(`    ${relative(repoRoot, asar)}: ${entries.length} entries, ${(bytes / 1e6).toFixed(1)} MB, no node_modules, version ${packedVersion}`);
+const notarize = signing.mode === "signed" && effectiveChannel === "mac" ? createNotarizer({ env: process.env }) : null;
+let apple = null;
+try {
+  if (targetPlatform === "darwin" && signing.mode === "signed") {
+    step("Importing the signing certificate into a throwaway keychain");
+    apple = appleSigning(process.env, { mas: effectiveChannel === "mas" });
+    console.log(`    ${apple.identity}${apple.installerIdentity ? `; installer: ${apple.installerIdentity}` : ""}`);
   }
 
-  if (process.platform === "darwin") {
-    const apps = readdirSync(releaseDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .flatMap((d) => readdirSync(join(releaseDir, d.name)).filter((n) => n.endsWith(".app")).map((n) => join(releaseDir, d.name, n)))
-      .filter((appPath) => fresh(join(appPath, "Contents/Resources/app.asar")));
-    const plistValue = (appPath, key) => {
-      const out = spawnSync("plutil", ["-extract", key, "raw", join(appPath, "Contents/Info.plist")], { encoding: "utf8" });
-      return out.status === 0 ? out.stdout.trim() : null;
-    };
-    for (const appPath of apps) {
-      const bundleVersion = plistValue(appPath, "CFBundleShortVersionString");
-      if (bundleVersion !== rootVersion) {
-        fail(`${relative(repoRoot, appPath)} has CFBundleShortVersionString "${bundleVersion}"; package.json says ${rootVersion}.`);
+  const config = tauriConfigFor({
+    channel: opts.channel,
+    platform: targetPlatform,
+    signing,
+    updater,
+    pubkey,
+    identity: apple?.identity ?? null,
+    buildNumber: effectiveChannel === "mas" ? process.env.DESKTOP_BUILD_NUMBER?.trim() || null : null,
+    paths,
+  });
+  const configPath = join(generatedDir, "tauri.release.json");
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  const tauriEnv = { ...tauriEnvFor({ env: process.env, signing, updater }), CARGO_TARGET_DIR: targetDir };
+  // As in signUpdate: the bundler signs the update payloads with the same key.
+  if (updater.feed) tauriEnv.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= "";
+
+  for (const target of targets) {
+    const arch = archOfTarget(target);
+    const tauriBundles = bundlerTargets({ channel: effectiveChannel, platform: targetPlatform, bundles, dir: opts.dir });
+    const features = effectiveChannel === "mas" ? ["mas"] : [];
+    const runner = targetPlatform === "win32" && process.platform !== "win32" ? "cargo-xwin" : null;
+    const releaseOut = join(targetDir, target, "release");
+    rmSync(join(releaseOut, "bundle"), { recursive: true, force: true });
+    step(`tauri build --target ${target}${tauriBundles.length ? ` --bundles ${tauriBundles.join(",")}` : " --no-bundle"}${features.length ? ` --features ${features.join(",")}` : ""}`);
+    run(tauriBin, tauriBuildArgs({ configPath, target, bundles: tauriBundles, features, runner, locked: Boolean(process.env.CI) }), { env: tauriEnv, cwd: tauriDir });
+    const bundleDir = join(releaseOut, "bundle");
+    const unpacked = claim(join(releaseDir, unpackedDirName({ platform: targetPlatform, arch, channel: effectiveChannel })));
+    mkdirSync(unpacked, { recursive: true });
+
+    if (targetPlatform === "darwin") {
+      const app = join(unpacked, `${PRODUCT_NAME}.app`);
+      cpSync(find(join(bundleDir, BUNDLER_OUTPUTS.app.dir), BUNDLER_OUTPUTS.app.match, `${PRODUCT_NAME}.app`), app, { recursive: true, verbatimSymlinks: true });
+      step(`Verifying ${relative(repoRoot, app)}`);
+      verifyMacApp(app);
+      if (effectiveChannel === "mas") {
+        if (signing.mode === "signed") {
+          if (!existsSync(join(app, "Contents/embedded.provisionprofile"))) fail(`${relative(repoRoot, app)} has no embedded.provisionprofile.`);
+          const pkg = claim(join(releaseDir, artifactName("mas", { version: rootVersion, arch, unsigned: false })));
+          step(`productbuild → ${relative(repoRoot, pkg)}`);
+          run("productbuild", ["--component", app, "/Applications", "--sign", apple.installerIdentity, pkg]);
+          outputs.push({ kind: "mas", arch, file: pkg });
+        }
+        continue;
       }
-      // A Mac App Store build: the keys electron-builder only takes from
-      // mac.extendInfo (electron-builder.config.mjs) must have arrived.
-      if (/[\\/]mas(-dev)?(-[a-z0-9]+)?$/.test(dirname(appPath))) {
-        const encryption = plistValue(appPath, "ITSAppUsesNonExemptEncryption");
-        if (encryption !== "false") fail(`${relative(repoRoot, appPath)} lacks ITSAppUsesNonExemptEncryption=false.`);
-        const team = process.env.APPLE_TEAM_ID?.trim();
-        if (signing?.mode === "signed" && plistValue(appPath, "ElectronTeamID") !== team) {
-          fail(`${relative(repoRoot, appPath)} has no ElectronTeamID ${team}; the sandboxed app could not open its IPC channels.`);
+      if (notarize) {
+        step(`Notarizing ${PRODUCT_NAME}.app (${arch})`);
+        await notarize(app, { app: true });
+      }
+      if (opts.dir) continue;
+      if (bundles.includes("zip")) {
+        // electron-updater installs this zip on every Electron install it
+        // migrates (MacUpdater → Squirrel.Mac, which checks the new app's
+        // signature against the running app's designated requirement: same
+        // team, same identifier). ditto keeps the signature's extended
+        // attributes; a plain `zip` would break it.
+        const zip = claim(join(releaseDir, artifactName("zip", { version: rootVersion, arch, unsigned })));
+        run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, zip]);
+        outputs.push({ kind: "zip", arch, file: zip });
+      }
+      if (bundles.includes("dmg")) {
+        const dmg = claim(join(releaseDir, artifactName("dmg", { version: rootVersion, arch, unsigned })));
+        const stage = mkdtempSync(join(tmpdir(), "trackyourtime-dmg-"));
+        try {
+          run("ditto", [app, join(stage, `${PRODUCT_NAME}.app`)]);
+          symlinkSync("/Applications", join(stage, "Applications"));
+          run("hdiutil", ["create", "-volname", PRODUCT_NAME, "-srcfolder", stage, "-ov", "-format", "UDZO", dmg], { quiet: true });
+        } finally {
+          rmSync(stage, { recursive: true, force: true });
+        }
+        if (signing.mode === "signed") {
+          run("codesign", ["--force", "--sign", apple.identity, "--timestamp", dmg]);
+          step(`Notarizing ${relative(repoRoot, dmg)}`);
+          await notarize(dmg);
+        }
+        outputs.push({ kind: "dmg", arch, file: dmg });
+      }
+      if (updater.feed) {
+        // Made from the stapled app, never the bundler's own archive, which
+        // predates notarization.
+        const archive = claim(join(releaseDir, artifactName("macUpdater", { version: rootVersion, arch })));
+        rmSync(`${archive}.sig`, { force: true });
+        run("tar", ["-czf", archive, "-C", unpacked, `${PRODUCT_NAME}.app`], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+        signUpdate(archive, arch, "macUpdater");
+        outputs.push({ kind: "macUpdater", arch, file: archive });
+      }
+    }
+
+    if (targetPlatform === "win32") {
+      const exe = join(unpacked, mainBinaryFor("win32"));
+      cpSync(join(releaseOut, mainBinaryFor("win32")), exe);
+      if (effectiveChannel === "win-store") {
+        const appx = claim(join(releaseDir, artifactName("appx", { version: rootVersion, arch })));
+        step(`MSIX → ${relative(repoRoot, appx)}`);
+        // prettier-ignore
+        run("pwsh", ["-NoProfile", "-NonInteractive", "-File", resolve(repoRoot, "scripts/desktop/msix.ps1"),
+          "-Source", unpacked, "-Output", appx, "-Version", msixVersion(rootVersion), "-Arch", arch, "-Assets", resolve(repoRoot, "build/appx")]);
+        outputs.push({ kind: "appx", arch, file: appx });
+        continue;
+      }
+      if (opts.dir) continue;
+      const installer = claim(join(releaseDir, artifactName("nsis", { version: rootVersion, arch, unsigned })));
+      const built = findVersioned(join(bundleDir, BUNDLER_OUTPUTS.nsis.dir), BUNDLER_OUTPUTS.nsis.match, "NSIS installer");
+      cpSync(built, installer);
+      outputs.push({ kind: "nsis", arch, file: installer });
+      if (updater.feed) {
+        // The bundler signed it with the update key already; the signature
+        // covers the bytes, so it holds for the renamed copy.
+        cpSync(`${built}.sig`, `${installer}.sig`);
+        const signature = readFileSync(`${installer}.sig`, "utf8").trim();
+        const verdict = verifyMinisign({ publicKey: pubkey, signature, data: readFileSync(installer) });
+        if (!verdict.ok) fail(`${relative(repoRoot, installer)}: ${verdict.reason}`);
+        fragmentEntries.push({ targets: updaterTargets("nsis", arch), file: installer.split(/[\\/]/).pop(), signature });
+        console.log(`    ${relative(repoRoot, installer)}: update signature verified against ${UPDATER_PUBKEY_FILE}`);
+      }
+    }
+
+    if (targetPlatform === "linux") {
+      const binary = join(unpacked, LINUX_NAME);
+      cpSync(join(releaseOut, LINUX_NAME), binary);
+      if (opts.dir) continue;
+      const wants = (b) => bundles.includes(b);
+      if (wants("deb") || wants("snap")) {
+        const deb = claim(join(releaseDir, artifactName("deb", { version: rootVersion, arch })));
+        cpSync(findVersioned(join(bundleDir, BUNDLER_OUTPUTS.deb.dir), BUNDLER_OUTPUTS.deb.match, ".deb"), deb);
+        const fields = spawnSync("dpkg-deb", ["-f", deb, "Package", "Version"], { encoding: "utf8" });
+        if (fields.status === 0) {
+          const [pkg, version] = fields.stdout.trim().split("\n").map((line) => line.split(": ")[1]);
+          if (pkg !== LINUX_NAME || version !== rootVersion) fail(`${relative(repoRoot, deb)} is package ${pkg} ${version}; expected ${LINUX_NAME} ${rootVersion}.`);
+        }
+        if (wants("deb")) outputs.push({ kind: "deb", arch, file: deb });
+        if (wants("snap")) buildSnap({ deb, arch });
+        if (!wants("deb")) rmSync(deb, { force: true });
+      }
+      if (wants("rpm")) {
+        const rpm = claim(join(releaseDir, artifactName("rpm", { version: rootVersion, arch })));
+        cpSync(findVersioned(join(bundleDir, BUNDLER_OUTPUTS.rpm.dir), BUNDLER_OUTPUTS.rpm.match, ".rpm"), rpm);
+        const fields = spawnSync("rpm", ["-qp", "--nosignature", "--qf", "%{NAME} %{VERSION}", rpm], { encoding: "utf8" });
+        if (fields.status === 0 && fields.stdout.trim() !== `${LINUX_NAME} ${rootVersion}`) {
+          fail(`${relative(repoRoot, rpm)} is ${fields.stdout.trim()}; expected ${LINUX_NAME} ${rootVersion}.`);
+        }
+        outputs.push({ kind: "rpm", arch, file: rpm });
+      }
+      if (wants("appimage")) {
+        const image = claim(join(releaseDir, artifactName("appimage", { version: rootVersion, arch })));
+        const built = findVersioned(join(bundleDir, BUNDLER_OUTPUTS.appimage.dir), BUNDLER_OUTPUTS.appimage.match, ".AppImage");
+        cpSync(built, image);
+        outputs.push({ kind: "appimage", arch, file: image });
+        if (updater.feed) {
+          cpSync(`${built}.sig`, `${image}.sig`);
+          const signature = readFileSync(`${image}.sig`, "utf8").trim();
+          const verdict = verifyMinisign({ publicKey: pubkey, signature, data: readFileSync(image) });
+          if (!verdict.ok) fail(`${relative(repoRoot, image)}: ${verdict.reason}`);
+          fragmentEntries.push({ targets: updaterTargets("appimage", arch), file: image.split("/").pop(), signature });
+          console.log(`    ${relative(repoRoot, image)}: update signature verified against ${UPDATER_PUBKEY_FILE}`);
         }
       }
-      // The compiled icon: macOS 26 and App Store Connect read the asset
-      // catalog, older macOS the icns beside it. Both must be in the bundle.
-      const iconName = plistValue(appPath, "CFBundleIconName");
-      const iconFile = plistValue(appPath, "CFBundleIconFile");
-      const resources = join(appPath, "Contents/Resources");
-      if (!iconName || !existsSync(join(resources, "Assets.car"))) {
-        fail(`${relative(repoRoot, appPath)} has no compiled app icon (CFBundleIconName ${iconName}, Assets.car missing?).`);
+      if (wants("targz")) {
+        // The portable archive, and what the Flathub manifest repackages
+        // (packaging/flatpak/): the executable, its desktop entry, its icon
+        // and the licence, under one top-level folder.
+        const archive = claim(join(releaseDir, artifactName("targz", { version: rootVersion, arch })));
+        const top = artifactName("targz", { version: rootVersion, arch }).replace(/\.tar\.gz$/, "");
+        const stage = mkdtempSync(join(tmpdir(), "trackyourtime-targz-"));
+        try {
+          mkdirSync(join(stage, top));
+          cpSync(join(releaseOut, LINUX_NAME), join(stage, top, LINUX_NAME));
+          cpSync(join(tauriDir, "icons/icon.png"), join(stage, top, "icon.png"));
+          cpSync(resolve(repoRoot, "LICENSE"), join(stage, top, "LICENSE"));
+          writeFileSync(
+            join(stage, top, `${LINUX_NAME}.desktop`),
+            readFileSync(paths.desktopTemplate, "utf8")
+              .replace(/\{\{exec\}\}/g, LINUX_NAME)
+              .replace(/\{\{icon\}\}/g, LINUX_NAME)
+              .replace(/\{\{comment\}\}/g, "Free, open-source time tracking"),
+          );
+          run("tar", ["-czf", archive, "-C", stage, top]);
+        } finally {
+          rmSync(stage, { recursive: true, force: true });
+        }
+        outputs.push({ kind: "targz", arch, file: archive });
       }
-      const catalog = spawnSync("xcrun", ["assetutil", "--info", join(resources, "Assets.car")], { encoding: "utf8" });
-      if (!(catalog.stdout ?? "").includes(`"Name" : "${iconName}"`)) {
-        fail(`${relative(repoRoot, appPath)}: Assets.car holds no image set named ${iconName}.`);
-      }
-      if (!iconFile || !existsSync(join(resources, iconFile.endsWith(".icns") ? iconFile : `${iconFile}.icns`))) {
-        fail(`${relative(repoRoot, appPath)} names CFBundleIconFile ${iconFile}, which is not in Contents/Resources.`);
-      }
-      const build = plistValue(appPath, "CFBundleVersion");
-      console.log(`    ${relative(repoRoot, appPath)}: CFBundleShortVersionString ${bundleVersion}, CFBundleVersion ${build}, icon ${iconName} (Assets.car + ${iconFile})`);
     }
   }
+} finally {
+  apple?.close();
 }
 
-console.log("\n  Desktop build ready.\n");
-
-if (openAfter) {
-  const releaseDir = resolve(repoRoot, "release");
-  // electron-builder's unpacked folders: mac(-arm64|-universal)/, win-unpacked/, linux-unpacked/.
-  const target = readdirSync(releaseDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && !/^mas/.test(d.name))
-    .flatMap((d) => {
-      const dir = join(releaseDir, d.name);
-      if (process.platform === "darwin") return readdirSync(dir).filter((n) => n.endsWith(".app")).map((n) => join(dir, n));
-      if (process.platform === "win32") return readdirSync(dir).filter((n) => n.endsWith(".exe")).map((n) => join(dir, n));
-      return d.name === "linux-unpacked" ? [join(dir, "trackyourtime")] : [];
-    })
-    .filter((path) => existsSync(path))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
-  if (!target) fail(`No unpacked app for ${process.platform} under ${releaseDir}.`);
-  console.log(`  Opening ${relative(repoRoot, target)}\n`);
-  if (process.platform === "darwin") {
-    spawnSync("open", [target], { stdio: "inherit" });
-  } else {
-    spawn(target, [], { detached: true, stdio: "ignore" }).unref();
+/**
+ * The snap, packed by snapcraft from the deb this run built
+ * (packaging/snap/snapcraft.yaml.template): core24 with the GNOME extension,
+ * whose content snap carries WebKitGTK 4.1. Packed in destructive mode on the
+ * runner itself, which is an Ubuntu 24.04 (the base core24 is built from), so
+ * the staged libraries and the base agree.
+ */
+function buildSnap({ deb, arch }) {
+  const snapArch = { x64: "amd64", arm64: "arm64" }[arch];
+  const snap = claim(join(releaseDir, artifactName("snap", { version: rootVersion, arch })));
+  const project = mkdtempSync(join(tmpdir(), "trackyourtime-snap-"));
+  try {
+    mkdirSync(join(project, "snap"), { recursive: true });
+    cpSync(deb, join(project, "app.deb"));
+    const template = readFileSync(resolve(repoRoot, "packaging/snap/snapcraft.yaml.template"), "utf8");
+    writeFileSync(join(project, "snap/snapcraft.yaml"), template.replace(/\{\{version\}\}/g, rootVersion).replace(/\{\{arch\}\}/g, snapArch));
+    step(`snapcraft pack (${snapArch}) → ${relative(repoRoot, snap)}`);
+    run("snapcraft", ["pack", "--destructive-mode", "--output", snap], { cwd: project });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
+  outputs.push({ kind: "snap", arch, file: snap });
+}
+
+// ── 5. Update feeds ──────────────────────────────────────────────────
+
+if (updater.feed && !opts.dir) {
+  const leg = effectiveChannel === "linux" ? `linux-${archOfTarget(targets[0])}` : effectiveChannel;
+  if (effectiveChannel === "linux" && targets.length !== 1) fail("A Linux leg builds one architecture.");
+  const archs = targets.map(archOfTarget);
+  const feedName = LEGACY_FEED_FILES[leg];
+  const names = legacyFeedNames({ leg, version: rootVersion, archs });
+  const files = names.map((name) => {
+    const file = join(releaseDir, name);
+    if (!existsSync(file)) fail(`${feedName} would name ${name}, which this run did not write.`);
+    return { url: name, ...feedDigest(readFileSync(file)) };
+  });
+  const feedFile = claim(join(releaseDir, feedName));
+  writeFileSync(feedFile, legacyFeedText({ version: rootVersion, files, releaseDate: new Date().toISOString(), dump: yaml.dump }));
+  const fragmentFile = claim(join(releaseDir, updaterFragmentName(leg)));
+  writeFileSync(fragmentFile, `${JSON.stringify(updaterFragment({ version: rootVersion, entries: fragmentEntries }), null, 2)}\n`);
+  step(`Update feeds: ${feedName} (${names.join(", ")}) and ${updaterFragmentName(leg)} (${Object.keys(updaterFragment({ version: rootVersion, entries: fragmentEntries }).platforms).join(", ")})`);
+}
+
+console.log("\n  Desktop build ready:");
+for (const { file } of outputs) console.log(`    ${relative(repoRoot, file)} (${(statSync(file).size / 1e6).toFixed(1)} MB)`);
+if (opts.dir || outputs.length === 0) {
+  for (const target of targets) {
+    console.log(`    ${relative(repoRoot, join(releaseDir, unpackedDirName({ platform: targetPlatform, arch: archOfTarget(target), channel: effectiveChannel })))}/`);
+  }
+}
+console.log("");
+
+if (opts.open) {
+  // For a person trying a build by hand: it shows and focuses a real window,
+  // so tests and agents never pass it.
+  const dir = join(releaseDir, unpackedDirName({ platform: targetPlatform, arch: archOfTarget(targets[0]), channel: effectiveChannel }));
+  const launch = targetPlatform === "darwin" ? join(dir, `${PRODUCT_NAME}.app`) : join(dir, mainBinaryFor(targetPlatform));
+  if (!existsSync(launch)) fail(`No unpacked app at ${launch}.`);
+  console.log(`  Opening ${relative(repoRoot, launch)}\n`);
+  if (process.platform === "darwin") execFileSync("open", [launch], { stdio: "inherit" });
+  else spawn(launch, [], { detached: true, stdio: "ignore" }).unref();
 }

@@ -99,7 +99,7 @@ export function masInfoProblems(info, { version, hasAssetCatalog }) {
     );
   }
   if (info.ITSAppUsesNonExemptEncryption !== false) problems.push("ITSAppUsesNonExemptEncryption is not false.");
-  if (!info.ElectronTeamID) problems.push("ElectronTeamID is missing: the sandboxed app could not open its IPC channels.");
+  if (info.ElectronTeamID) problems.push("ElectronTeamID is set: this is an Electron build, and the desktop app is Tauri since 0.4.0.");
   if (!info.CFBundleIconName || !hasAssetCatalog) {
     problems.push("No compiled app icon (CFBundleIconName + Assets.car): App Store Connect would show a placeholder.");
   }

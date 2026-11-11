@@ -1,6 +1,6 @@
-import { expect, test, type ElectronApplication } from "@playwright/test";
+import { test } from "@playwright/test";
 
-import { createAccount, launchApp, signInThroughForm, trpcCall, webSession } from "./support";
+import { APP_ORIGIN, createAccount, expect, launchApp, signInThroughForm, trpcCall, webSession, type DesktopApp } from "./support";
 
 /*
  * Autopilot on top of desktop activity capture: fake capture of a filed app
@@ -9,9 +9,11 @@ import { createAccount, launchApp, signInThroughForm, trpcCall, webSession } fro
  * pauses Autopilot for an hour → Undo deletes it.
  *
  * Headless as every desktop spec (support.ts): the fake frontmost source,
- * driven through `globalThis.__trackYourTimeDesktop.activity`, and nothing
- * spawned; no tray either, whose menu and title are read from the same hook. The capture clock is pinned a few minutes behind the real one, so
- * the renderer's "now" and main's agree on what is in the past.
+ * driven through the activity test hook (`app.hook("activity.…")`), and
+ * nothing spawned; no tray either, whose menu and title are read from the
+ * desktop controller's test hook. The capture clock is pinned a few minutes
+ * behind the real one, so the renderer's "now" and the shell's agree on what
+ * is in the past.
  */
 
 type Entry = { id: string; description: string; source: string; start: string; end: string | null; projectId: string | null };
@@ -34,41 +36,28 @@ type RendererWindow = {
   };
 };
 
-let app: ElectronApplication | null = null;
+let app: DesktopApp | null = null;
 
 test.afterEach(async () => {
   await app?.close().catch(() => undefined);
   app = null;
 });
 
-const hook = <T>(fn: string, arg?: unknown): Promise<T> =>
-  app!.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    async (_electron, [body, value]) =>
-      new Function("hook", "arg", body)(
-        (globalThis as Record<string, { activity?: unknown }>).__trackYourTimeDesktop?.activity,
-        value,
-      ),
-    [fn, arg] as const,
-  ) as Promise<T>;
+/** The activity test hook, by method name (desktop/crates/activity/src/test_hook.rs). */
+const hook = <T>(method: string, arg?: unknown): Promise<T> => app!.hook<T>(`activity.${method}`, arg) as Promise<T>;
 
-/** The tray, drawn from `globalThis.__trackYourTimeDesktop` (desktop.ts). */
-const desktop = <T>(fn: string, arg?: unknown): Promise<T> =>
-  app!.evaluate(
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    (_electron, [body, value]) => new Function("hook", "arg", body)((globalThis as Record<string, unknown>).__trackYourTimeDesktop, value),
-    [fn, arg] as const,
-  ) as Promise<T>;
+/** The tray, drawn by the desktop controller's test hook (tyt_model::desktop_controller). */
+const desktop = <T>(method: string, arg?: unknown): Promise<T> => app!.hook<T>(method, arg) as Promise<T>;
 
 const trayIds = async (): Promise<string[]> =>
-  (await desktop<TrayItem[]>("return hook.trayMenu()")).flatMap((item) => (item.type === "item" ? [item.id] : []));
+  ((await desktop<TrayItem[] | null>("trayMenu")) ?? []).flatMap((item) => (item.type === "item" ? [item.id] : []));
 
 /** `target` in front from `from` for `minutes`, one detection a minute at the pinned clock. */
 async function frontFor(target: { key: string; name: string }, from: number, minutes: number): Promise<void> {
-  await hook("hook.setFrontmost(arg)", target);
+  await hook("setFrontmost", target);
   for (let minute = 0; minute <= minutes; minute += 1) {
-    await hook("hook.setNow(arg)", from + minute * MIN);
-    await hook("return hook.tick()");
+    await hook("setNow", from + minute * MIN);
+    await hook("tick");
   }
 }
 
@@ -81,7 +70,7 @@ test("Autopilot starts a filed app's timer from when the work began, and Undo ta
   app = launched.app;
   const { page } = launched;
   await signInThroughForm(page, account);
-  expect(await hook<string | null>("return hook.sourceKind()")).toBe("fake");
+  expect(await hook<string | null>("sourceKind")).toBe("fake");
 
   // Capture on, for this account, and a rule for the editor.
   await page.evaluate(() => (window as unknown as RendererWindow).electronAPI?.activity?.updateSettings({ enabled: true }));
@@ -144,24 +133,24 @@ test("Autopilot starts a filed app's timer from when the work began, and Undo ta
   await expect(strip).toHaveAttribute("data-kind", "owned");
 
   // The tray marks Autopilot's timer, and offers to pause Autopilot.
-  await expect.poll(() => desktop<string>("return hook.trayTooltip()")).toMatch(/^✦ Website redesign — (<1m|\d+m|\d+h \d{2}m)$/);
-  if (process.platform === "darwin") expect(await desktop<string>("return hook.trayTitle()")).toMatch(/^✦ (<1m|\d+m|\d+h \d{2}m)$/);
+  await expect.poll(() => desktop<string>("trayTooltip")).toMatch(/^✦ Website redesign — (<1m|\d+m|\d+h \d{2}m)$/);
+  if (process.platform === "darwin") expect(await desktop<string>("trayTitle")).toMatch(/^✦ (<1m|\d+m|\d+h \d{2}m)$/);
   await expect.poll(trayIds).toContain("autopilot-pause");
 
-  // Paused from the tray: main holds back for an hour (of its pinned clock,
+  // Paused from the tray: the shell holds back for an hour (of its pinned clock,
   // a minute behind the real one), and the tray and the strip say so. Its own
   // timer keeps running and stays its own.
   const pausedUntil = (): Promise<number | null> =>
     page.evaluate(
       async () => (await (window as unknown as RendererWindow).electronAPI?.activity?.snapshot())?.autopilot?.pausedUntil ?? null,
     );
-  await desktop("hook.clickTray(arg)", "autopilot-pause");
+  await desktop("clickTray", "autopilot-pause");
   await expect.poll(pausedUntil).toBeGreaterThan(Date.now() + 50 * MIN);
   await expect.poll(trayIds).toContain("autopilot-resume");
   expect(await trayIds()).not.toContain("autopilot-pause");
   await expect(page.getByTestId("autopilot-strip-paused")).toBeVisible();
   await expect(strip).toHaveAttribute("data-kind", "owned");
-  expect(await desktop<string>("return hook.trayTooltip()")).toMatch(/^✦ /);
+  expect(await desktop<string>("trayTooltip")).toMatch(/^✦ /);
 
   // Resumed from the strip.
   await page.getByTestId("autopilot-strip-resume").click();
@@ -182,7 +171,7 @@ test("Autopilot starts a filed app's timer from when the work began, and Undo ta
     .toBeNull();
 
   // The activity screen lists what Autopilot did, undone.
-  await page.goto("app://-/app/activity/");
+  await page.goto(`${APP_ORIGIN}/app/activity/`);
   await expect(page.getByTestId("autopilot-panel")).toHaveAttribute("data-state", "on");
   const logged = page.getByTestId("autopilot-log-entry");
   await expect(logged).toHaveCount(1);
@@ -197,5 +186,5 @@ test("Autopilot starts a filed app's timer from when the work began, and Undo ta
   await expect(page.getByTestId("autopilot-paused")).toHaveCount(0);
   await expect.poll(pausedUntil).toBeNull();
 
-  expect(await hook<string[]>("return hook.spawns()")).toEqual([]);
+  expect(await hook<string[]>("spawns")).toEqual([]);
 });

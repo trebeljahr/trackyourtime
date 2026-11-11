@@ -2,8 +2,8 @@
 #
 # The sibling of Dockerfile.deb, and for the same reason: it carries only the
 # harness — a virtual display, a session bus, Node and playwright-core — so
-# `dnf install ./app.rpm` has to resolve gtk3, nss and the rest from the
-# package's own Requires. A dependency the package forgot fails the install.
+# `dnf install ./app.rpm` has to resolve gtk3, webkit2gtk4.1 and the rest from
+# the package's own Requires. A dependency the package forgot fails the install.
 #
 # Project-agnostic on purpose: nothing here names an app. Build it for the
 # Docker host's architecture; the installer refuses a package built for another.

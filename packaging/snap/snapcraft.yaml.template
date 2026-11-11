@@ -1,0 +1,51 @@
+# The Snap Store package. Rendered and packed by scripts/build-desktop.mjs
+# (`--bundles snap`, the Linux legs of desktop-release.yml) from the deb the
+# same run built: `snapcraft pack --destructive-mode` on the runner, which is an
+# Ubuntu 24.04, the release core24 is made from.
+#
+# WebKitGTK 4.1 and GTK come from the GNOME extension's content snap
+# (gnome-46-2404), not from this snap; only what the deb's Depends name beyond
+# them is staged. The rules the app keeps under snap confinement are its own
+# (tyt_model::distribution): no in-app updater (the store updates it), no
+# activity capture, and open at login through $SNAP_USER_DATA/.config/autostart,
+# which `autostart` below names.
+name: trackyourtime
+base: core24
+version: '{{version}}'
+summary: Free, open-source time tracking
+# One line: it is also what the store shows as the short description, and the
+# listing text is pasted by hand (docs/linux-stores.md → "The listing").
+description: Free, open-source time tracking for people who bill by the hour.
+grade: stable
+confinement: strict
+platforms:
+  {{arch}}:
+
+apps:
+  trackyourtime:
+    command: usr/bin/trackyourtime
+    desktop: usr/share/applications/trackyourtime.desktop
+    autostart: trackyourtime.desktop
+    extensions: [gnome]
+    plugs:
+      - network
+      # The Secret Service, where the session token is kept. Not
+      # auto-connected: without it the app keeps the token in memory only and
+      # says so in Settings → Devices.
+      - password-manager-service
+
+parts:
+  trackyourtime:
+    plugin: dump
+    source: app.deb
+    source-type: deb
+    stage-packages:
+      # The tray (dlopened) and the idle time (libXss, dlopened).
+      - libayatana-appindicator3-1
+      - libxss1
+    override-prime: |
+      craftctl default
+      # The desktop entry names the icon by theme name; a snap's entry must
+      # name a file inside the snap.
+      sed -i 's|^Icon=.*|Icon=${SNAP}/usr/share/icons/hicolor/128x128/apps/trackyourtime.png|' \
+        usr/share/applications/trackyourtime.desktop

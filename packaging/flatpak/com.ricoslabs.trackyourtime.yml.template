@@ -3,18 +3,21 @@
 # where Flathub builds from — never built by this repo's CI.
 #
 # It repackages the release's linux tar.gz rather than building from source:
-# the app is a static export plus Electron, and rebuilding the Next.js export
-# offline inside flatpak-builder would need every npm dependency vendored as a
-# source. Flathub's own requirements page says source-available submissions are
-# built from source, and its moderators say a manifest may repackage the
-# upstream binary instead
+# the app is a static export embedded into one Rust executable, and rebuilding
+# the Next.js export and the cargo build offline inside flatpak-builder would
+# need every npm and crates.io dependency vendored as a source. Flathub's own
+# requirements page says source-available submissions are built from source,
+# and its moderators say a manifest may repackage the upstream binary instead
 # (https://discourse.flathub.org/t/best-way-to-submit-new-app-sources-or-binary/8668).
 # What the rule forbids is a binary committed INTO the pull request, which this
-# manifest has none of. com.vscodium.codium — open source, Electron — is on
-# Flathub repackaging its own release .deb per architecture, which is the
-# precedent this follows. A reviewer may still ask for a source build; that
-# build needs flatpak-node-generator, which this repo has not run
-# (docs/linux-stores.md).
+# manifest has none of. A reviewer may still ask for a source build; that build
+# needs flatpak-node-generator and flatpak-cargo-generator, which this repo has
+# not run (docs/linux-stores.md).
+#
+# The executable links WebKitGTK 4.1 and GTK 3, which the GNOME runtime
+# carries; the tray's Ayatana AppIndicator is not in it and comes from Flathub's
+# shared-modules, which the Flathub repository adds as a git submodule.
+# Check the runtime version against Flathub's supported list at submission.
 #
 # Every `x-checker-data` block lets Flathub's flatpak-external-data-checker
 # raise the version by itself after the first submission. It reads
@@ -23,11 +26,9 @@
 # rewrites these URLs and checksums; it does not touch the metainfo's
 # screenshots.
 app-id: com.ricoslabs.trackyourtime
-runtime: org.freedesktop.Platform
-runtime-version: "25.08"
-sdk: org.freedesktop.Sdk
-base: org.electronjs.Electron2.BaseApp
-base-version: "25.08"
+runtime: org.gnome.Platform
+runtime-version: "49"
+sdk: org.gnome.Sdk
 command: trackyourtime
 separate-locales: false
 finish-args:
@@ -36,24 +37,26 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
-  # System notifications for the idle and runaway prompts (Stage 5).
+  # System notifications for the idle and runaway prompts.
   - --talk-name=org.freedesktop.Notifications
   # The tray icon (StatusNotifierItem).
   - --talk-name=org.kde.StatusNotifierWatcher
-  # safeStorage keeps the session token in the Secret Service; without it the
-  # app keeps the token in memory only and says so in Settings → Devices.
+  # The session token is kept in the Secret Service; without it the app keeps
+  # the token in memory only and says so in Settings → Devices.
   - --talk-name=org.freedesktop.secrets
 modules:
+  # The tray: Flathub's own shared module for libayatana-appindicator (the
+  # flathub/shared-modules submodule of the app's Flathub repository). The app
+  # dlopens it, so without it there is no tray icon rather than a crash.
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
   - name: trackyourtime
     buildsystem: simple
     build-commands:
-      - cp -a app /app/trackyourtime
-      - install -Dm755 trackyourtime.sh /app/bin/trackyourtime
+      - install -Dm755 app/trackyourtime /app/bin/trackyourtime
       - install -Dm644 com.ricoslabs.trackyourtime.desktop /app/share/applications/com.ricoslabs.trackyourtime.desktop
       - install -Dm644 com.ricoslabs.trackyourtime.metainfo.xml /app/share/metainfo/com.ricoslabs.trackyourtime.metainfo.xml
       - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/com.ricoslabs.trackyourtime.png
-      # Flathub requires the licence in the build, and the tar.gz carries only
-      # Electron's and Chromium's.
+      # Flathub requires the licence in the build.
       - install -Dm644 LICENSE /app/share/licenses/com.ricoslabs.trackyourtime/LICENSE
     sources:
       - type: archive
@@ -82,12 +85,6 @@ modules:
           version-query: .tag_name | sub("^v"; "")
           timestamp-query: .published_at
           url-query: .assets[] | select(.name|test("-linux-arm64\\.tar\\.gz$")).browser_download_url
-      - type: script
-        dest-filename: trackyourtime.sh
-        commands:
-          - export TMPDIR="$XDG_RUNTIME_DIR/app/$FLATPAK_ID"
-          # zypak gives Chromium's sandbox a way to work inside Flatpak's.
-          - exec zypak-wrapper /app/trackyourtime/trackyourtime "$@"
       - type: file
         path: com.ricoslabs.trackyourtime.desktop
       - type: file

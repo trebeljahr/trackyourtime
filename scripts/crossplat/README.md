@@ -9,7 +9,7 @@ generates can use the same flow. Keep it self-contained until then.
 | Tool | What it does | Who runs it |
 |---|---|---|
 | `vm-drop.mjs` | Copies a build into one shared drop folder, `~/VMShare`, next to a double-click launcher. A Windows or Linux VM opens that folder. | People |
-| `linux-smoke.mjs` | Starts an unpacked Electron Linux build in Docker under Xvfb, drives it over CDP and saves a screenshot. Passes or fails. | Agents, CI, people |
+| `linux-smoke.mjs` | Starts an unpacked Linux build in Docker under Xvfb, judges it over CDP (Electron) or by the app's own smoke report (Tauri), and saves a screenshot. Passes or fails. | Agents, CI, people |
 | `linux-package-smoke.mjs` | Installs ONE packaged artifact — `.AppImage`, `.deb` or `.rpm` — in Docker under Xvfb, then drives it with the same probe. Passes or fails. | Agents, CI, people |
 
 Requires Node 20 or later. Uses no npm dependencies on the host.
@@ -59,11 +59,15 @@ node scripts/crossplat/vm-drop.mjs \
 ```bash
 node scripts/crossplat/linux-smoke.mjs \
   --app-dir release/linux-arm64-unpacked --exec <binary> \
+  [--mode cdp|report] [--report-env MYAPP_SMOKE_REPORT] \
   [--expect-url-prefix app://-] [--env KEY=VALUE]... [--arg --flag]... \
   [--settle-ms 5000] [--timeout-ms 60000] [--out test-results/linux-smoke]
 ```
 
-The test passes when all of these are true:
+Two modes, because two kinds of app:
+
+**`--mode cdp`** (the default) is for an app with its own Chromium, such as
+Electron. It passes when all of these are true:
 
 - the app opens its CDP port;
 - a page with the expected URL prefix appears;
@@ -71,9 +75,21 @@ The test passes when all of these are true:
 - a screenshot succeeds;
 - the process is still running after the settle time.
 
-It writes `result.json`, `screenshot.png` and `app.log` to `--out`. Console
-errors are reported but do not fail the run, because an app with no server
-behind it logs refused requests.
+Console errors are reported but do not fail the run, because an app with no
+server behind it logs refused requests.
+
+**`--mode report`** is for an app on the system WebView, such as Tauri with
+WebKitGTK, which has no CDP endpoint to attach to. The app needs a smoke mode
+of its own: given a file path in the environment variable `--report-env`
+names, it loads, waits for its page, writes a JSON report there and exits, 0
+on success. The report is `{ ok, href, title, problems: [...] }` at least. The
+run passes when the report says `ok`, `href` starts with the expected prefix,
+`problems` is empty, the app exited 0, and Xvfb showed a non-blank frame. The
+screenshot is read from Xvfb's own framebuffer file (`-fbdir`, XWD format,
+converted to PNG in the probe), so the images need no screenshot tool.
+
+Both write `result.json`, `screenshot.png` and `app.log` to `--out`; report
+mode adds the app's own `app-report.json`.
 
 Requirements and rules:
 
@@ -81,12 +97,12 @@ Requirements and rules:
   run `brew install docker colima` and then `colima start`, and build the
   app for arm64. OrbStack and Docker Desktop work too. The runner refuses a
   binary built for the wrong architecture instead of emulating it.
-- **The window must be shown.** On X11, a window that was never shown gives
-  CDP no frames, and the screenshot waits forever. If the app has its own
-  "headless" switch, leave it off here. Xvfb is a virtual display, so nothing
-  reaches a real screen.
-- The app runs as the calling user with `--no-sandbox`, a session D-Bus and
-  `HOME=/tmp`. System D-Bus errors in `app.log` are expected.
+- **The window must be shown.** On X11, a window that was never shown paints
+  nothing: CDP gets no frames and the framebuffer stays blank. If the app has
+  its own "headless" switch, leave it off here. Xvfb is a virtual display, so
+  nothing reaches a real screen.
+- The app runs as the calling user with a session D-Bus and `HOME=/tmp` (and
+  `--no-sandbox` in cdp mode). System D-Bus errors in `app.log` are expected.
 - The image, `crossplat-linux-smoke:1`, is built from `linux-smoke/Dockerfile`
   on the first run and cached after that. Change the tag when the Dockerfile
   changes.
@@ -96,6 +112,7 @@ Requirements and rules:
 ```bash
 node scripts/crossplat/linux-package-smoke.mjs \
   --package release/myapp_1.2.3_arm64.deb \
+  [--mode cdp|report] [--report-env MYAPP_SMOKE_REPORT] \
   [--expect-url-prefix app://-] [--exec "/opt/My App/myapp"] \
   [--appimage-mode extract|fuse] [--with-recommends] \
   [--env KEY=VALUE]... [--arg --flag]... \
@@ -113,10 +130,10 @@ file and installs it the way a person would.
 | `.rpm` | `Dockerfile.rpm` (`fedora:41`) | `dnf install ./file.rpm` |
 | `.AppImage` | the `linux-smoke` image | `chmod +x`, then `--appimage-extract` and run the AppDir |
 
-**The deb and rpm images carry no Electron runtime library on purpose.** They
+**The deb and rpm images carry no desktop runtime library on purpose.** They
 have a virtual display, a session bus, Node and playwright-core, and nothing
-else — so `apt`/`dnf` has to pull GTK, NSS and the rest out of the package's own
-`Depends`/`Requires`. A dependency the package forgot then fails the install
+else — so `apt`/`dnf` has to pull GTK, WebKitGTK, NSS and the rest out of the
+package's own `Depends`/`Requires`. A dependency the package forgot then fails the install
 instead of being satisfied by accident, which is the bug this tool exists to
 find. Do not add a runtime library to either Dockerfile. Weak dependencies
 (deb `Recommends`, rpm `Recommends`) are left out for the same reason;
@@ -138,13 +155,8 @@ After the install it reads the installed `.desktop` file, checks that its `Exec`
 resolves to an executable that exists and that its `Icon` matches a real icon
 file, and starts that program — so the launcher's own path is what gets tested.
 `--exec` overrides it. The program is then handed to `linux-smoke/probe.mjs`,
-reused byte-for-byte, so the pass criteria are the unpacked runner's:
-
-- the app opens its CDP port;
-- a page with the expected URL prefix appears;
-- the page throws no uncaught error;
-- a screenshot succeeds;
-- the process is still running after the settle time.
+reused byte-for-byte in the same `--mode`, so the pass criteria are the
+unpacked runner's.
 
 It writes `install.json` beside the probe's `result.json`, `screenshot.png` and
 `app.log`.
@@ -168,16 +180,17 @@ Requirements and rules, beyond `linux-smoke.mjs`'s:
 | Stack | Windows build on a Mac | Linux smoke |
 |---|---|---|
 | Electron + electron-builder | `electron-builder --win --arm64 --dir` works on macOS with no Wine (checked with electron-builder 26). Drop `win-arm64-unpacked/`. | Build `--linux --arm64 --dir`, then run `linux-smoke.mjs`. |
-| Tauri | Cross-compiling for Windows is not practical. Download the installer from CI (`gh run download <run> -n <artifact>`) and drop that file. | Not covered: Tauri uses WebKitGTK, not Chromium, so there is no CDP endpoint. |
+| Tauri | `tauri build --runner cargo-xwin --target aarch64-pc-windows-msvc --no-bundle` cross-compiles the executable (installers are built on Windows). Or download the installer from CI (`gh run download <run> -n <artifact>`) and drop that file. | `--mode report`, with the app's own smoke-report variable. Build the binary on Linux, or in a Linux container on a Mac. |
 
 ## For each project that adopts this
 
 1. Copy this folder unchanged.
 2. Add a `prod:win` script that builds the app and runs `vm-drop.mjs`.
-3. For Electron apps, add a smoke script that builds for the Docker host's
-   architecture and runs `linux-smoke.mjs`.
-4. For Electron apps that ship Linux packages, add a second smoke script that
-   runs `linux-package-smoke.mjs` over each built package, skipping the
+3. Add a smoke script that builds for the Docker host's architecture and runs
+   `linux-smoke.mjs` (`--mode report --report-env …` for a Tauri app, whose
+   smoke mode the app itself must provide).
+4. For apps that ship Linux packages, add a second smoke script that runs
+   `linux-package-smoke.mjs` over each built package, skipping the
    architectures the local daemon cannot run.
 
 Track Your Time's wiring is in its `package.json` (`prod:win`,

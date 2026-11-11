@@ -27,9 +27,10 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 /**
  * The asset names of the real v0.1.2 draft release, as
  * `gh release view v0.1.2 --json assets` printed them on 2026-09-29. The point
- * of the fixture is that nothing here guesses how electron-builder spells an
- * architecture — if a pattern changes, `releaseAssetFor` must stop matching
- * this list and the test must be updated deliberately.
+ * of the fixture is that nothing here guesses how an architecture is spelled —
+ * the Tauri releases keep the Electron names, and if a pattern changes,
+ * `releaseAssetFor` must stop matching this list and the test must be updated
+ * deliberately.
  */
 const V012_ASSETS = Object.freeze([
   "latest-linux-arm64.yml",
@@ -58,15 +59,17 @@ describe("desktop:try-release — the asset a platform asks for", () => {
     }
   });
 
-  it("spells the AppImage architectures the way electron-builder does", () => {
+  it("spells the AppImage architectures the way the releases always have", () => {
     assert.equal(releaseAssetFor({ platform: "linux-x64", version: "0.1.2" }), "TrackYourTime-0.1.2-linux-x86_64.AppImage");
     assert.equal(releaseAssetFor({ platform: "linux-arm64", version: "0.1.2" }), "TrackYourTime-0.1.2-linux-arm64.AppImage");
   });
 
-  it("asks for the one NSIS installer on both Windows architectures", () => {
-    const x64 = releaseAssetFor({ platform: "windows-x64", version: "1.2.0-rc.1" });
-    assert.equal(x64, "TrackYourTime-Setup-1.2.0-rc.1.exe");
-    assert.equal(releaseAssetFor({ platform: "windows-arm64", version: "1.2.0-rc.1" }), x64);
+  it("asks for each architecture's NSIS installer, and for the Electron releases' one installer", () => {
+    assert.equal(releaseAssetFor({ platform: "windows-x64", version: "1.2.0-rc.1" }), "TrackYourTime-Setup-1.2.0-rc.1.exe");
+    assert.equal(releaseAssetFor({ platform: "windows-arm64", version: "1.2.0-rc.1" }), "TrackYourTime-Setup-1.2.0-rc.1-arm64.exe");
+    // Up to 0.3.0 one installer carried both architectures.
+    assert.equal(releaseAssetFor({ platform: "windows-arm64", version: "0.3.0" }), "TrackYourTime-Setup-0.3.0.exe");
+    assert.equal(releaseAssetFor({ platform: "windows-arm64", version: "0.2.2" }), "TrackYourTime-Setup-0.2.2.exe");
   });
 
   it("never asks for an -unsigned file, which a release never carries", () => {
@@ -124,7 +127,7 @@ describe("desktop:try-release — the refusals and the hand-off", () => {
   it("explains a missing Windows asset rather than listing files", () => {
     const message = missingAssetMessage({ platform: "windows-arm64", asset: "TrackYourTime-Setup-0.1.2.exe", tag: "v0.1.2", assets: V012_ASSETS });
     assert.match(message, /publishes no Windows asset/);
-    assert.match(message, /signing is not set up/);
+    assert.match(message, /built unsigned/);
     assert.match(message, /-unsigned/);
     assert.match(message, /pnpm prod:win/);
     // Its whole point is not to be the generic "here is what is on the release".

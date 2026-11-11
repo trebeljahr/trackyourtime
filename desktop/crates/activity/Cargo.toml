@@ -1,0 +1,22 @@
+[package]
+name = "tyt-activity"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Desktop activity capture and Autopilot for Track Your Time (no Tauri)."
+
+[dependencies]
+tyt-wire = { path = "../wire" }
+serde = { version = "1", features = ["derive"] }
+# `float_roundtrip`: the default parser can land one ULP off, and a number
+# read from the renderer or a fixture must be the f64 JavaScript wrote.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+# The activity codec: AES-256-GCM boxes byte-compatible with Node's
+# `crypto.createCipheriv("aes-256-gcm")` output (protection.ts).
+aes-gcm = "0.10"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

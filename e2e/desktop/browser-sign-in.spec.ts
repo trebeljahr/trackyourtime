@@ -1,16 +1,20 @@
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { test } from "@playwright/test";
 import { MongoClient, ObjectId } from "mongodb";
 
 import {
+  APP_ORIGIN_RE,
   appRequests,
   answerDeviceCode,
   createAccount,
   enableTwoFactor,
+  expect,
   launchApp,
   openedExternally,
   trpcCall,
   webSession,
   type Account,
+  type DesktopApp,
+  type Page,
 } from "./support";
 
 /*
@@ -18,11 +22,12 @@ import {
  *
  * The approving browser is the harness's web session for the same account
  * (support.ts): it claims and approves the code exactly as /app/device does.
- * A headless launch never opens the real browser (electron/src/external.ts);
- * it records the URL, which the specs read.
+ * A headless launch never opens the real browser
+ * (desktop/src-tauri/src/external.rs); it records the URL, which the specs
+ * read through the control channel.
  */
 
-let app: ElectronApplication | null = null;
+let app: DesktopApp | null = null;
 
 test.afterEach(async () => {
   await app?.close().catch(() => undefined);
@@ -54,7 +59,7 @@ async function signsInThroughBrowser(account: Account, approver: string): Promis
   await expect.poll(opened).toEqual([expect.stringContaining(`user_code=${encodeURIComponent(code)}`)]);
 
   await answerDeviceCode(approver, code, "approve");
-  await page.waitForURL(/^app:\/\/-\/app\/track\//, { timeout: 20_000 });
+  await page.waitForURL(new RegExp(`^${APP_ORIGIN_RE}/app/track/`), { timeout: 20_000 });
   await expect(page.getByTestId("tracker-toggle")).toBeVisible();
 
   const rows = await trpcCall<DeviceRow[]>(approver, "devices.list", undefined, "query");
@@ -124,6 +129,6 @@ test("declining in the browser returns the app to the form with a message", asyn
   await expect(page.getByTestId("browser-sign-in-error")).toContainText("declined in the browser", { timeout: 20_000 });
   await expect(page.getByTestId("browser-sign-in")).toBeEnabled();
   await expect(page.getByTestId("login-email")).toBeVisible();
-  expect(page.url()).toMatch(/\/login\//);
+  expect(await page.url()).toMatch(/\/login\//);
   expect(await page.evaluate(() => window.electronAPI!.secureStore.getToken())).toBeNull();
 });

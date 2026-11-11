@@ -1,59 +1,57 @@
 name: Desktop Release
 
-# Builds every desktop artifact in one matrix, one leg per distribution channel
-# (docs/desktop-app-plan.md, Stage 6; docs/deploy.md → "Desktop release"):
+# Builds every desktop artifact of the Tauri app (desktop/src-tauri) in one
+# matrix, one leg per distribution channel (docs/deploy.md → "Desktop release"):
 #
-#   mac        Developer ID dmg + zip, arm64 and x64, hardened runtime, notarized
-#   mas        Mac App Store pkg, universal, sandboxed
-#   win        NSIS installer, x64 + arm64 in one exe
-#   win-store  AppX for the Microsoft Store (Partner Center signs it)
-#   linux-x64  AppImage, deb, rpm, tar.gz (Flathub's input) and snap
-#   linux-arm64 the same minus the snap, on an arm64 runner
+#   mac         Developer ID dmg + zip, arm64 and x64, hardened runtime, notarized,
+#               plus each architecture's signed update archive (.app.tar.gz)
+#   mas         Mac App Store pkg, universal, sandboxed
+#   win         NSIS installers, one per architecture (x64 keeps the Electron name)
+#   win-store   MSIX (.appx) for the Microsoft Store (Partner Center signs it)
+#   linux-x64   AppImage, deb, rpm, tar.gz (Flathub's input) and snap
+#   linux-arm64 the same, on an arm64 runner
 #
-# The snap is x64 only, and that is a property of electron-builder, not a
-# preference (measured on tag v0.1.0, run 36108136377; docs/desktop-app-plan.md
-# → Stage 6, "snap on linux-arm64"). electron-builder assembles a snap from a
-# prebuilt template — no snapcraft run at all — but that template is published
-# for amd64 and armhf only (the two URLs are hardcoded in app-builder), so
-# `isUseTemplateApp` in app-builder-lib/out/targets/snap.js is true for x64 and
-# armv7l and false for arm64. On arm64 it therefore writes a snapcraft.yaml and
-# shells out to real snapcraft (with --destructive-mode already, so LXD was
-# never the problem), and snapcraft 9 — what `snap install snapcraft` now gives
-# — refuses the template's `base: core20`. The base cannot simply move: it is
-# one static config value shared with the x64 template path, where core20 is
-# what the template's staged libraries and gnome-3-28-1804 content plug
-# actually are. See electron-builder.config.mjs → `snap`.
+# Every package is built natively on its own OS and architecture family; the
+# arm64 Windows installer and the x64 Mac app are cross-compiled by cargo on the
+# same runner, which needs only the Rust target.
 #
-# The arm64 runner stays: rpm, deb and AppImage are built natively here rather
-# than cross-built, which is the same trade the other legs make.
-#
-# On a v* tag the linux-x64 leg also uploads its snap to the Snap Store's
+# On a v* tag each Linux leg also uploads its snap to the Snap Store's
 # `candidate` channel, when SNAPCRAFT_STORE_CREDENTIALS is set; with it unset
-# it prints a notice and stays green. Only that leg, because only that leg
-# builds a snap. Promotion to `stable` and the Flathub
+# it prints a notice and stays green. Promotion to `stable` and the Flathub
 # pull request are manual (docs/linux-stores.md).
 #
 # Signing follows the Android rule: no secrets for a channel builds an artifact
 # whose file name says -unsigned; a complete set signs and the signature is
 # verified; anything in between fails the leg before the export is built
 # (scripts/lib/desktop-release.mjs, resolveSigning). A Mac App Store build
-# without its secrets packages the .app to check the config and uploads
-# nothing, since there is no unsigned pkg to submit; a Microsoft Store build
-# without its Partner Center identity is skipped with a notice.
+# without its secrets builds the .app to check the config and uploads nothing,
+# since there is no unsigned pkg to submit; a Microsoft Store build without its
+# Partner Center identity is skipped with a notice.
+#
+# Updates. A signed mac or win leg, and every Linux leg with the update key,
+# writes two feeds' worth of input (resolveUpdater; docs/deploy.md → "Tags, the
+# draft release and updates"):
+#
+#   - updater-<leg>.json: its minisign-signed update payloads, which the
+#     draft-release job merges into latest.json for the Tauri app's updater.
+#     A signed mac or win leg without TAURI_SIGNING_PRIVATE_KEY refuses to
+#     build: a signed release that cannot update itself strands everyone on it.
+#   - latest-mac.yml / latest.yml / latest-linux*.yml: what every Electron
+#     install (v0.3.0 and earlier) still reads. They point at the Tauri zip,
+#     NSIS installer and AppImage, so those installs move to the Tauri app.
 #
 # A dispatch keeps everything as Actions artifacts. A `v*` tag also runs the
-# `draft-release` job (Stage 7): it attaches the signed downloads and their
-# update feeds (latest-mac.yml, latest.yml, latest-linux*.yml) to a DRAFT
-# GitHub Release. Nothing is published here. Installed apps only see a release
-# once a person publishes the draft, because electron-updater reads the latest
-# PUBLISHED release. Store uploads stay manual.
+# `draft-release` job: it attaches the signed downloads and both feeds to a
+# DRAFT GitHub Release. Nothing is published here. Installed apps only see a
+# release once a person publishes the draft, because both updaters read the
+# latest PUBLISHED release. Store uploads stay manual.
 #
-# Staged rollout: the feeds can carry `stagingPercentage`, so only that share
+# Staged rollout: every feed can carry `stagingPercentage`, so only that share
 # of installs is offered the release (docs/deploy.md → "Staged rollout"). The
 # value is the dispatch input, else the repo variable
-# DESKTOP_STAGING_PERCENTAGE, else nothing — every install, as before. It only
-# matters on a tag (a push, or a dispatch run from the tag), because only then
-# is a draft written. `pnpm desktop:rollout` changes it after publishing.
+# DESKTOP_STAGING_PERCENTAGE, else nothing — every install. It only matters on
+# a tag (a push, or a dispatch run from the tag), because only then is a draft
+# written. `pnpm desktop:rollout` changes it after publishing.
 
 on:
   # build-desktop.mjs refuses a tag that does not match package.json's version.
@@ -80,6 +78,8 @@ env:
   # (packages/client/src/lib/error-reporting/reporter.ts); the "Error
   # reporting" step below says which it was. docs/deploy.md → Error reporting.
   NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+  # cargo build --locked, tauri build --ci (scripts/lib/desktop-tauri.mjs).
+  CI: "true"
 
 jobs:
   # Validates the staging percentage in seconds, before the builds: a typo
@@ -116,39 +116,43 @@ jobs:
           - channel: mac
             signing-channel: mac
             os: macos-latest
-            builder: --mac dmg zip --arm64 --x64
+            args: --arch arm64 --arch x64
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             artifacts: |
               release/*.dmg
               release/*.zip
-              release/*.blockmap
+              release/*.app.tar.gz
               release/latest-mac.yml
+              release/updater-mac.json
           - channel: mas
             signing-channel: mas
             os: macos-latest
-            builder: --mac mas --universal
-            # electron-builder writes the MAS pkg into the target's own output
-            # directory (release/mas-universal/), not release/ — it comes from
-            # createMasInstaller, not from a normal target.
+            args: --arch universal
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             artifacts: |
-              release/mas*/*.pkg
+              release/*.pkg
           - channel: win
             signing-channel: win
             os: windows-latest
-            builder: --win nsis --x64 --arm64
+            args: --arch x64 --arch arm64
+            rust-targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+            # Top-level only: release/win*-unpacked/ holds the bare executables.
             artifacts: |
               release/*.exe
-              release/*.blockmap
               release/latest.yml
+              release/updater-win.json
           - channel: win-store
             signing-channel: win-store
             os: windows-latest
-            builder: --win appx --x64 --arm64
+            args: --arch x64 --arch arm64
+            rust-targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
             artifacts: |
               release/*.appx
           - channel: linux-x64
             signing-channel: linux
             os: ubuntu-24.04
-            builder: --linux AppImage deb rpm tar.gz snap --x64
+            args: --bundles appimage,deb,rpm,targz,snap
+            rust-targets: x86_64-unknown-linux-gnu
             artifacts: |
               release/*.AppImage
               release/*.deb
@@ -156,20 +160,23 @@ jobs:
               release/*.tar.gz
               release/*.snap
               release/latest-linux.yml
+              release/updater-linux-x64.json
           - channel: linux-arm64
             signing-channel: linux
             os: ubuntu-24.04-arm
-            # No snap: electron-builder has no arm64 template and snapcraft 9
-            # refuses the core20 one it falls back to (see the header).
-            builder: --linux AppImage deb rpm tar.gz --arm64
+            args: --bundles appimage,deb,rpm,targz,snap
+            rust-targets: aarch64-unknown-linux-gnu
             artifacts: |
               release/*.AppImage
               release/*.deb
               release/*.rpm
               release/*.tar.gz
+              release/*.snap
               release/latest-linux-arm64.yml
+              release/updater-linux-arm64.json
 
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
 
     # `deployments: write` records the Snap Store upload as a GitHub Deployment.
     permissions:
@@ -177,10 +184,10 @@ jobs:
       deployments: write
 
     # Job-level, so step `if:` guards can read them (a step's own `env:` is not
-    # in scope for its `if:`). Each channel sees only its own certificate:
-    # electron-builder reads CSC_LINK for both Apple channels, and the two are
-    # different certificates. Names on the right are the GitHub secrets
-    # (docs/deploy.md → "Desktop release" → secrets).
+    # in scope for its `if:`). Each channel sees only its own certificate: both
+    # Apple channels read CSC_LINK, and the two are different certificates.
+    # Names on the right are the GitHub secrets (docs/deploy.md → "Desktop
+    # release" → secrets).
     env:
       CSC_LINK: ${{ matrix.channel == 'mac' && secrets.MAC_CSC_LINK || matrix.channel == 'mas' && secrets.MAS_CSC_LINK || '' }}
       CSC_KEY_PASSWORD: ${{ matrix.channel == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.channel == 'mas' && secrets.MAS_CSC_KEY_PASSWORD || '' }}
@@ -200,6 +207,10 @@ jobs:
       AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_ACCOUNT || '' }}
       AZURE_TRUSTED_SIGNING_PROFILE: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_PROFILE || '' }}
       AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ matrix.channel == 'win' && secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME || '' }}
+      # The minisign key every update payload is signed with; its public half
+      # is build/updater.pub. Only the legs that update themselves see it.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ (matrix.channel == 'mac' || matrix.channel == 'win' || matrix.signing-channel == 'linux') && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ (matrix.channel == 'mac' || matrix.channel == 'win' || matrix.signing-channel == 'linux') && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
       # The Snap Store credential, on the Linux legs only. One secret, so
       # "not set" is a repo that does not publish to the Snap Store: the
       # publish step then prints a notice and the leg stays green
@@ -219,34 +230,35 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          umask 077
           if [ -n "$APPLE_API_KEY_BASE64" ]; then
-            printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
-            echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+            printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+            echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8" >> "$GITHUB_ENV"
           fi
           if [ -n "$MAS_PROVISIONING_PROFILE_BASE64" ]; then
             printf '%s' "$MAS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/embedded.provisionprofile"
             echo "MAS_PROVISIONING_PROFILE=$RUNNER_TEMP/embedded.provisionprofile" >> "$GITHUB_ENV"
           fi
 
-      # The Mac App Store pkg's CFBundleVersion (electron-builder.config.mjs,
-      # mas.bundleVersion). App Store Connect refuses a build number it has
-      # seen for a version, so it grows per run and per re-run, the way
-      # mobile-release.yml numbers the iOS build. `pnpm desktop:mas-upload`
-      # sends the result to App Store Connect.
+      # The Mac App Store pkg's CFBundleVersion (bundle.macOS.bundleVersion,
+      # scripts/lib/desktop-tauri.mjs). App Store Connect refuses a build
+      # number it has seen for a version, so it grows per run and per re-run,
+      # the way mobile-release.yml numbers the iOS build. `pnpm
+      # desktop:mas-upload` sends the result to App Store Connect.
       - name: Number the Mac App Store build
         if: matrix.channel == 'mas'
         shell: bash
         run: echo "DESKTOP_BUILD_NUMBER=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))" >> "$GITHUB_ENV"
 
-      # Decides signed / unsigned / store / skip before anything slow runs, with
-      # the same function build-desktop.mjs calls. A partial set fails here.
+      # Decides signed / unsigned / store / skip, and whether the leg has an
+      # update feed, before anything slow runs, with the same functions
+      # build-desktop.mjs calls. A partial set, or a signed leg without the
+      # update key, fails here.
       #
       # It runs before setup-node, on whatever Node the runner ships, so that
       # the pnpm cache below can be gated on its answer. That is safe because
-      # the script reads environment variables and imports one pure module —
-      # `node:fs` and `scripts/lib/desktop-release.mjs`, no dependencies and
-      # nothing version-sensitive. Everything that cares which Node it gets
-      # (the Electron download) runs after setup-node.
+      # the script reads environment variables and imports pure modules with no
+      # dependencies.
       - name: Check the signing secrets
         id: signing
         shell: bash
@@ -257,46 +269,52 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          # Node 26's electron download leaves a truncated binary (CLAUDE.md).
           node-version: 24
           # Only when this leg installs. A skipped leg never runs `pnpm
           # install`, so the pnpm store does not exist, and setup-node's
           # post-job cache SAVE then fails the whole job with "Path Validation
-          # Error: Path(s) specified in the action for caching do(es) not
-          # exist" — which is how win-store failed on tag v0.1.0 even though it
-          # had correctly decided to skip and had built nothing. There is one
-          # rule for skipping and it is the step above, not a copy of its
-          # condition here.
+          # Error" — which is how win-store failed on tag v0.1.0 even though it
+          # had correctly decided to skip.
           cache: ${{ steps.signing.outputs.mode != 'skip' && 'pnpm' || '' }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.signing.outputs.mode != 'skip'
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.signing.outputs.mode != 'skip'
+        with:
+          workspaces: desktop -> target
+          key: ${{ matrix.channel }}
 
       - name: Install deps
         if: steps.signing.outputs.mode != 'skip'
         run: pnpm install --frozen-lockfile
 
-      # rpm builds need rpmbuild, on both Linux legs.
-      - name: Install Linux packaging tools
+      # WebKitGTK, GTK and the tray's AppIndicator to link against; rpm to read
+      # the built package back; Xvfb and dbus for the package smoke test.
+      - name: Install the Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y rpm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev patchelf file rpm xvfb dbus-x11
 
-      # Only the leg that builds a snap, and only as a fallback: electron-builder
-      # assembles the x64 snap from its prebuilt template and never invokes
-      # snapcraft, so this normally goes unused. It stays because the template
-      # path is an electron-builder internal (`isUseTemplateApp`) that a config
-      # change can switch off — adding `snap.buildPackages`, or a
-      # `stagePackages` that differs from the default, drops this leg onto real
-      # snapcraft. Without the tool that is "snapcraft is not installed"; with
-      # it, the core20 refusal the arm64 leg hit, which is the louder failure.
+      # The snap is packed by snapcraft, from the deb, on the runner itself
+      # (packaging/snap/snapcraft.yaml.template): Ubuntu 24.04 is what core24
+      # is made from, so destructive mode stages the right libraries.
       - name: Install snapcraft
-        if: matrix.channel == 'linux-x64'
+        if: runner.os == 'Linux'
         run: sudo snap install snapcraft --classic
 
-      # One script, the same one `pnpm electron:build` runs: export into
-      # out-desktop (API URL asserted in a chunk), bundle electron/src,
-      # icons, electron-builder with --publish never, then the asar listing
-      # (no @capacitor, nothing stray) and the version inside every package
-      # against package.json (and, on a tag, the tag against package.json).
+      # The module electron-builder 26 used for the same account, profile and
+      # endpoint, so the installers carry the certificate v0.3.0 was signed
+      # with (scripts/desktop/sign-windows.ps1).
+      - name: Install the Trusted Signing module
+        if: matrix.channel == 'win' && steps.signing.outputs.mode == 'signed' && env.AZURE_TRUSTED_SIGNING_ENDPOINT != ''
+        shell: pwsh
+        run: Install-Module -Name TrustedSigning -MinimumVersion 0.5.0 -Force -Repository PSGallery -Scope CurrentUser
+
       # Opt-in per build, so a release that reports nothing must say so in
       # its log rather than look like one that does.
       - name: Error reporting
@@ -309,14 +327,20 @@ jobs:
             echo "Error reporting is on: NEXT_PUBLIC_SENTRY_DSN is set."
           fi
 
+      # One script, the same one `pnpm desktop:package` runs: export into
+      # out-desktop (API URL asserted in a chunk), tauri build per target with
+      # the channel's generated config, notarization, the installers under
+      # their release names, the version inside every package against
+      # package.json (and, on a tag, the tag against package.json), every
+      # update signature against build/updater.pub, and both feeds.
       - name: Build and package
         if: steps.signing.outputs.mode != 'skip'
         shell: bash
-        run: node scripts/build-desktop.mjs --channel ${{ matrix.signing-channel }} --package ${{ matrix.builder }}
+        run: node scripts/build-desktop.mjs --channel ${{ matrix.signing-channel }} --package ${{ matrix.args }}
 
-      # Building a package does not prove it starts on a clean machine. Run
-      # each native Linux package in an isolated install before it can enter
-      # the draft release (including its declared dependencies and runtime).
+      # Building a package does not prove it starts on a clean machine. Each
+      # Linux package is installed in a bare container and started in smoke
+      # mode before it can enter the draft release.
       - name: Smoke-test Linux packages
         if: runner.os == 'Linux' && steps.signing.outputs.mode != 'skip'
         run: pnpm test:desktop:packages
@@ -330,15 +354,14 @@ jobs:
           if-no-files-found: ignore
 
       # An unsigned leg must say so in every file a person could download, and a
-      # signed leg must not: the names come from TRACKYOURTIME_UNSIGNED, which
-      # build-desktop.mjs sets from the same decision as above.
+      # signed leg must not.
       - name: Check the artifact names match the signing
         if: steps.signing.outputs.mode == 'signed' || steps.signing.outputs.mode == 'unsigned'
         shell: bash
         run: |
           shopt -s nullglob
-          files=(release/*.dmg release/*.zip release/*.exe release/*.pkg)
           if [ "${{ matrix.signing-channel }}" = "linux" ]; then exit 0; fi
+          files=(release/*.dmg release/*.zip release/*.app.tar.gz release/*.exe release/*.pkg)
           [ ${#files[@]} -gt 0 ] || [ "${{ matrix.channel }}" = "mas" ] || { echo "::error::No installer was written."; exit 1; }
           for f in "${files[@]}"; do
             case "$f" in
@@ -348,35 +371,54 @@ jobs:
           done
 
       # ── Signature verification ─────────────────────────────────────
+      # `codesign --verify` alone reports an ad-hoc signature as valid on disk,
+      # which is how electron-builder once shipped unsigned apps under signed
+      # names; the runtime flag, Gatekeeper's verdict and the stapled ticket
+      # are what say the build really is Developer ID signed and notarized.
       - name: Verify the Developer ID signature and notarization
         if: matrix.channel == 'mac' && steps.signing.outputs.mode == 'signed'
         shell: bash
         run: |
           set -euo pipefail
-          for app in release/mac*/"Track Your Time.app"; do
+          for app in release/mac-*/"Track Your Time.app"; do
             codesign --verify --deep --strict --verbose=2 "$app"
-            codesign -d --entitlements - "$app" | grep -q "com.apple.security.cs.allow-jit"
             codesign -dv "$app" 2>&1 | grep -q "flags=0x10000(runtime)"
             spctl --assess --type execute --verbose=2 "$app"
             xcrun stapler validate "$app"
+            # The reason for the port: WebKit is the system's, and nothing in
+            # the app links CoreLocation, so macOS does not list it under
+            # Location Services.
+            if otool -L "$app/Contents/MacOS/Track Your Time" | grep -qi CoreLocation; then
+              echo "::error::$app links CoreLocation"; exit 1
+            fi
           done
-          # The dmg itself is not signed (electron-builder's dmg.sign defaults
-          # to false); what Gatekeeper checks is the stapled app inside it.
+          # What electron-updater installs on a migrating Electron install:
+          # the app inside the zip must pass the same checks.
+          for zip in release/*.zip; do
+            dir=$(mktemp -d)
+            ditto -x -k "$zip" "$dir"
+            codesign --verify --deep --strict "$dir/Track Your Time.app"
+            xcrun stapler validate "$dir/Track Your Time.app"
+            rm -rf "$dir"
+          done
+          for dmg in release/*.dmg; do
+            codesign --verify --verbose=2 "$dmg"
+            xcrun stapler validate "$dmg"
+          done
 
       - name: Verify the Mac App Store signature
         if: matrix.channel == 'mas' && steps.signing.outputs.mode == 'signed'
         shell: bash
         run: |
           set -euo pipefail
-          for app in release/mas*/"Track Your Time.app"; do
+          for app in release/mas-*/"Track Your Time.app"; do
             codesign --verify --deep --strict --verbose=2 "$app"
             codesign -d --entitlements - "$app" | grep -q "com.apple.security.app-sandbox"
             codesign -d --entitlements - "$app" | grep -q "$APPLE_TEAM_ID.com.ricoslabs.trackyourtime"
             test -f "$app/Contents/embedded.provisionprofile"
           done
-          # Under release/mas*/, not release/ — see the matrix comment.
           shopt -s nullglob
-          pkgs=(release/mas*/*.pkg)
+          pkgs=(release/*.pkg)
           [ ${#pkgs[@]} -gt 0 ] || { echo "::error::No MAS pkg was written. A signed mas build must produce one."; exit 1; }
           for pkg in "${pkgs[@]}"; do
             echo "$pkg"
@@ -403,7 +445,7 @@ jobs:
         run: |
           shopt -s nullglob
           cd release
-          files=(*.dmg *.zip *.pkg mas*/*.pkg *.exe *.appx *.AppImage *.deb *.rpm *.tar.gz *.snap)
+          files=(*.dmg *.zip *.pkg *.exe *.appx *.AppImage *.deb *.rpm *.tar.gz *.snap)
           if [ ${#files[@]} -gt 0 ]; then
             if command -v sha256sum >/dev/null; then sha256sum "${files[@]}"; else shasum -a 256 "${files[@]}"; fi > SHA256SUMS-${{ matrix.channel }}.txt
             cat SHA256SUMS-${{ matrix.channel }}.txt
@@ -412,23 +454,17 @@ jobs:
       # ── Snap Store ─────────────────────────────────────────────────
       # Uploads this leg's one .snap to the `candidate` channel on a v* tag,
       # and only when SNAPCRAFT_STORE_CREDENTIALS is set. Never `stable`: a
-      # person publishes the draft release and promotes the snap, so a tag run
-      # cannot hand the app to every install on its own
+      # person publishes the draft release and promotes the snap
       # (docs/linux-stores.md → "Promote the snap"). The draft-release job
-      # still attaches no snap.
-      #
-      # linux-x64 only: it is the one leg that builds a snap, and
-      # snap-publish.mjs requires exactly one .snap in the directory — on arm64
-      # it would find none and fail the leg as soon as the credential is set.
+      # attaches no snap.
       - name: Upload to the Snap Store
-        if: matrix.channel == 'linux-x64' && steps.signing.outputs.mode != 'skip'
+        if: runner.os == 'Linux' && steps.signing.outputs.mode != 'skip'
         shell: bash
         run: node scripts/snap-publish.mjs --dir release
 
       # snap-publish.mjs uploads only from a tag with the credential set
       # (snapPublishPlan); otherwise it prints a notice and exits 0, which is
-      # no ship. The channel is the plan's: SNAP_PRERELEASE_CHANNEL for a
-      # prerelease tag, SNAP_RELEASE_CHANNEL otherwise.
+      # no ship. Recorded once, from the x64 leg, for both architectures.
       - name: Record the Snap Store upload
         if: matrix.channel == 'linux-x64' && steps.signing.outputs.mode != 'skip' && github.ref_type == 'tag' && env.SNAPCRAFT_STORE_CREDENTIALS != ''
         uses: ./.github/actions/record-ship
@@ -450,9 +486,10 @@ jobs:
   # ── Draft GitHub Release (tags only) ─────────────────────────────────
   # Runs only when every leg succeeded. scripts/desktop-release-draft.mjs
   # decides what is attached (lib/desktop-release.mjs → releasePlan): signed
-  # mac and win downloads, every Linux download, and each feed, after checking
-  # that every file a feed names is attached with the sha512 and size it
-  # states. `-unsigned` files and store packages are never attached; an
+  # mac and win downloads, every Linux download, the Electron feeds and
+  # latest.json, after checking that every file a feed names is attached with
+  # the sha512 and size it states and every latest.json URL names an attached
+  # payload. `-unsigned` files and store packages are never attached; an
   # unsigned mac or win leg is a warning on the run, so the person publishing
   # sees which platform is missing. A release that is already published is
   # never touched: a new build needs a new tag.
@@ -479,7 +516,7 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      # For electron-updater's js-yaml, which reads the feeds as the app does.
+      # For js-yaml, the parser electron-updater reads the legacy feeds with.
       - name: Install deps
         run: pnpm install --frozen-lockfile --ignore-scripts
 
@@ -491,7 +528,7 @@ jobs:
       # Writes stagingPercentage into each feed, then checks the rewritten
       # feeds against the attached files the same way as the originals.
       - name: Collect the release files
-        run: node scripts/desktop-release-draft.mjs --artifacts artifacts --out release-files --staging-percentage "$STAGING_PERCENTAGE"
+        run: node scripts/desktop-release-draft.mjs --artifacts artifacts --out release-files --staging-percentage "$STAGING_PERCENTAGE" --repo "$GITHUB_REPOSITORY"
 
       - name: Refuse a release that is already published
         shell: bash
@@ -514,7 +551,7 @@ jobs:
           else
             offered="every installed copy that updates itself"
           fi
-          printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to %s.\n' "$version" "$offered" > notes.md
+          printf 'Track Your Time %s.\n\nSee CHANGELOG.md for what changed. Publishing this release offers it to %s, Electron installs (0.3.0 and earlier) included.\n' "$version" "$offered" > notes.md
           if [ "${exists:-}" = "true" ]; then
             # A re-dispatch with another staging percentage rewrites the
             # feeds; the notes must name the same share.

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Track Your Time",
+  "mainBinaryName": "Track Your Time",
+  "version": "../../package.json",
+  "identifier": "com.ricoslabs.trackyourtime",
+  "build": {
+    "frontendDist": "../../packages/client/out-desktop"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "freezePrototype": false
+    },
+    "macOSPrivateApi": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "category": "Productivity",
+    "shortDescription": "Free, open-source time tracking",
+    "longDescription": "Free, open-source time tracker for freelancers that turns billable hours into reports and invoices, hosted or self-hosted.",
+    "publisher": "Ricos Labs LLC",
+    "copyright": "© Rico Trebeljahr",
+    "homepage": "https://trackyourtime.dev",
+    "license": "AGPL-3.0-or-later",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "hardenedRuntime": true,
+      "entitlements": "../../build/entitlements.tauri.plist"
+    },
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "deb": {},
+      "rpm": {},
+      "appimage": { "bundleMediaFramework": false }
+    }
+  }
+}
