@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Sign-in now runs on better-auth 1.7.15, which fixes four security
+  advisories (GHSA-44jh-23m7-hpcf, GHSA-965c-763c-88jm, GHSA-q84f-53jg-9ppm,
+  GHSA-r4xp-prcw-77qf). This release is migration-bearing: migration 5 checks
+  that no two sign-in accounts share a provider key (the server refuses to
+  start until a duplicate is resolved) and adds unique indexes for device
+  sign-in codes. Older releases can still read the database afterwards.
+- A sign-in link sent before the upgrade no longer works; ask for a new one.
+- Someone who signed up with a password but never confirmed the email, and
+  then signs in with an emailed link, loses that unconfirmed password and is
+  signed out on other devices. The emailed link proves the inbox; the
+  password did not. Set a new one with **Forgot password**.
+
 ### Changed
 
 - The desktop app runs on Tauri instead of Electron. It uses the system's own
