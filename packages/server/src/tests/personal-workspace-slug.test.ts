@@ -57,7 +57,7 @@ describe("createPersonalWorkspace", () => {
       email: "olivia@example.com",
       name: "Olivia",
       emailVerified: true,
-    });
+    }, { method: "admin" });
     const owner = { id: String(user.id), email: "olivia@example.com", name: "Olivia" };
 
     const first = await createPersonalWorkspace(auth.api, owner);
@@ -101,7 +101,7 @@ describe("the workspace kind on the organization row", () => {
       email: "pia@example.com",
       name: "Pia",
       emailVerified: true,
-    });
+    }, { method: "admin" });
     const owner = { id: String(user.id), email: "pia@example.com", name: "Pia" };
 
     const workspaceId = await createPersonalWorkspace(kinded.api as never, owner);
