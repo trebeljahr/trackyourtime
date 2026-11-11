@@ -245,7 +245,7 @@ export function EnableTwoFactorDialog({
       .enable({ password: secret })
       .catch(() => ({ data: null, error: { code: "FAILED" } }));
     setBusy(false);
-    if (refusal || !data || !("totpURI" in data)) {
+    if (refusal || !data) {
       setError(
         refusal?.code === "INVALID_PASSWORD"
           ? t("twoFactor.invalidPassword")
