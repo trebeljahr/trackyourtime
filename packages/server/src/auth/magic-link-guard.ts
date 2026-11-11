@@ -11,8 +11,7 @@ export const magicLinkGuard = createAuthMiddleware(async (ctx) => {
 
   const token = ctx.query?.token;
   if (typeof token !== "string" || !token) return;
-  // Better Auth 1.7 stores the hashed token under a "magic-link:" prefix.
-  const identifier = `magic-link:${createHash("sha256").update(token).digest("base64url")}`;
+  const identifier = createHash("sha256").update(token).digest("base64url");
   const record = await ctx.context.internalAdapter.findVerificationValue(identifier);
   if (!record || record.expiresAt < new Date()) return;
   let email: unknown;
