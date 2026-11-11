@@ -113,6 +113,9 @@ card. `manifest.json` lists every file below with its size and SHA-256
 | `screenshots/phone-track-light.jpg` | 1170×2532 (390×844 at 3×) | social preview C |
 | `social-preview/social-preview-{a,b,c}.png` | 1280×640, each under 1 MB | the three options for the repository's social preview |
 | `social-preview/template.html` | — | the cards' HTML; `?v=a`, `b` or `c` picks one |
+| `social-preview/og-wordmark.png` | 1200×630 | og:image: card B (mark, headline, platforms) laid out at 1.91:1, its background 16 px taller at the top and bottom |
+| `social-preview/og-clean.png` | 1200×630 | og:image without text: the dark reports capture with the phone view on card B's background |
+| `social-preview/og-clean.html` | — | the HTML of `og-clean.png` |
 
 Captured 2026-11-06 from the seeded demo account. To make them again:
 
@@ -129,6 +132,11 @@ pnpm marketing:readme-screenshots http://localhost:<web-port> <demo-email> <demo
 pnpm marketing:social-preview
 pnpm marketing:manifest
 ```
+
+`pnpm marketing:social-preview` also writes the two og:image cards;
+`pnpm marketing:social-preview --og` writes only those. They are laid out at
+1280×672 CSS px, shot at 2× and downscaled to exactly 1200×630 with
+ImageMagick, so `magick` must be installed (`brew install imagemagick`).
 
 The seed's month is relative to the moment it runs, so seed right before
 capturing. The capture script answers the one-time recovery-key card with

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-06",
+  "generated": "2026-11-11",
   "files": [
     {
       "path": "screenshots/phone-track-light.jpg",
@@ -54,6 +54,24 @@
       "bytes": 395970,
       "sha256": "80be23be4b2d40830b0075356c8fa0553207bf79276a4ea8076932890f8520bd",
       "source": "scripts/marketing/capture-readme.mjs against a local server seeded by seed-demo.mjs"
+    },
+    {
+      "path": "social-preview/og-clean.png",
+      "purpose": "og:image without text, 1200×630: dark reports with the phone view (og-clean.html).",
+      "width": 1200,
+      "height": 630,
+      "bytes": 225978,
+      "sha256": "e95bdd9d7c51dc31b3b0b98ebb8fae6742700d6a1d604223afb312d94f8cc7da",
+      "source": "scripts/marketing/render-social-preview.mjs over social-preview/og-clean.html"
+    },
+    {
+      "path": "social-preview/og-wordmark.png",
+      "purpose": "og:image, 1200×630: social preview B laid out at 1.91:1.",
+      "width": 1200,
+      "height": 630,
+      "bytes": 281688,
+      "sha256": "5ed71a9331ee24782412396acf6ab2fec1999d992f971e3ff8a8e9179a53542d",
+      "source": "scripts/marketing/render-social-preview.mjs over social-preview/template.html"
     },
     {
       "path": "social-preview/social-preview-a.png",

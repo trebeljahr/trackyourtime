@@ -1,0 +1,37 @@
+<!doctype html>
+<!--
+  Text-free og:image card for Track Your Time, 1280x672 CSS px, rendered at 2×
+  and downscaled to 1200x630 (og-clean.png) by
+  scripts/marketing/render-social-preview.mjs.
+  The .dark background of template.html?v=b with the dark reports capture and
+  the phone capture overlapping its lower right corner; the frames reuse the
+  template's .frame / .frame.phone styles. The desktop frame is 864x510, the
+  phone 210x454 overlaps it by 110 px, and the pair is centred, 18 px above
+  the middle.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Track Your Time og:image, clean</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 672px; overflow: hidden; }
+  .card { position: relative; width: 1280px; height: 672px; overflow: hidden; }
+  .dark { background: radial-gradient(120% 120% at 100% 0%, #312e81 0%, #1e1b4b 45%, #0b0b1a 100%); }
+  .frame { position: absolute; overflow: hidden; border-radius: 16px; background: #fff;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .1); }
+  .frame img { position: absolute; display: block; left: 0; top: 0; }
+  .desk { left: 158px; top: 63px; width: 864px; height: 510px; background: #0a0a0a; }
+  .desk img { width: 100%; }
+  .phone { left: 912px; top: 155px; width: 210px; height: 454px; border-radius: 30px;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, .6), 0 0 0 6px #17172a, 0 0 0 7px rgba(255, 255, 255, .18); }
+  .phone img { width: 100%; }
+</style>
+</head>
+<body>
+<section class="card dark">
+  <div class="frame desk"><img src="../screenshots/web-reports-dark.jpg" alt=""></div>
+  <div class="frame phone"><img src="../screenshots/phone-track-light.jpg" alt=""></div>
+</section>
+</body>
+</html>
