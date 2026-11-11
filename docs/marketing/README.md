@@ -17,7 +17,11 @@ Page social cards are generated from the route registry, EN/DE catalogs and
 existing product captures. Rebuild them with
 `node scripts/marketing/render-graphics.mjs --social-only`. Output under
 `packages/client/public/marketing/og/{en,de}/` is committed. Both Open Graph and
-Twitter metadata reference the matching page and language. The press-kit ZIP
+Twitter metadata reference the matching page and language. The English home
+card is the exception: `og/en/home-wordmark.jpg` is
+`social-preview/og-wordmark.png` re-encoded as JPEG by the same script, so the
+landing page and every page without a language of its own share the wordmark
+card. The press-kit ZIP
 keeps its nine original product captures and excludes these preview cards.
 
 Last updated 2026-11-06 (GitHub set: README screenshots and social preview cards).

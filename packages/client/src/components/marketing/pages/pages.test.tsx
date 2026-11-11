@@ -103,4 +103,13 @@ describe("public pages in English", () => {
     const images = privacyMetadata("en").openGraph?.images;
     expect(images).toEqual([expect.objectContaining({ url: "/marketing/og/en/privacy.png", alt: expect.stringContaining("Track Your Time") })]);
   });
+
+  it("uses the wordmark card for the English home page and keeps the German one generated", () => {
+    expect(landingMetadata("en").openGraph?.images).toEqual([
+      expect.objectContaining({ url: "/marketing/og/en/home-wordmark.jpg", type: "image/jpeg", width: 1200, height: 630 }),
+    ]);
+    expect(landingMetadata("de").openGraph?.images).toEqual([
+      expect.objectContaining({ url: "/marketing/og/de/home.png", type: "image/png" }),
+    ]);
+  });
 });

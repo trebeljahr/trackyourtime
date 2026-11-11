@@ -2,17 +2,25 @@ import type { Metadata } from "next";
 import type { Locale } from "@starter/shared";
 
 import { getTranslator } from "@/i18n/translator";
-import { socialCardPath } from "@/lib/marketing-pages";
+import { HOME_WORDMARK_CARD, socialCardPath } from "@/lib/marketing-pages";
 
-export type OgImage = { url: string; width: number; height: number; alt: string };
+export type OgImage = { url: string; type: string; width: number; height: number; alt: string };
+
+// The English home card shows the wordmark, the headline and the platforms.
+const HOME_WORDMARK_ALT =
+  "Track Your Time logo above the headline Time tracking on your own server, with Web, macOS, Windows, Linux, Chrome, Firefox and Raycast";
 
 /** The link-preview card, with its description in `locale`. */
-export const ogImage = (locale: Locale, path = "/"): OgImage => ({
-  url: socialCardPath(locale, path),
-  width: 1200,
-  height: 630,
-  alt: getTranslator(locale, "marketing")("meta.ogImageAlt"),
-});
+export const ogImage = (locale: Locale, path = "/"): OgImage => {
+  const url = socialCardPath(locale, path);
+  return {
+    url,
+    type: url.endsWith(".jpg") ? "image/jpeg" : "image/png",
+    width: 1200,
+    height: 630,
+    alt: url === HOME_WORDMARK_CARD ? HOME_WORDMARK_ALT : getTranslator(locale, "marketing")("meta.ogImageAlt"),
+  };
+};
 
 /** The English card, for the root layout and every page without a language of its own. */
 export const OG_IMAGE: OgImage = ogImage("en");

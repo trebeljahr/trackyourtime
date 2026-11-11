@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { marketing as en } from "../../packages/client/src/i18n/messages/en/marketing";
 import { marketing as de } from "../../packages/client/src/i18n/messages/de/marketing";
 import { GUIDES } from "../../packages/client/src/components/marketing/guide-content";
-import { MARKETING_PAGES, socialCardPath } from "../../packages/client/src/lib/marketing-pages";
+import { HOME_WORDMARK_CARD, MARKETING_PAGES, socialCardPath } from "../../packages/client/src/lib/marketing-pages";
 
 const root = resolve(import.meta.dirname, "../..");
 const out = resolve(process.argv[2] || resolve(root, "packages/client/public"));
@@ -25,6 +25,16 @@ function wrap(value: string, max = 23): string[] {
 for (const locale of ["en", "de"] as const) {
   const catalog = (locale === "en" ? en : de) as unknown as Record<string, { meta?: { title: string }; hero?: { title: string } }>;
   for (const path of MARKETING_PAGES) {
+    // The English home card is the wordmark card from docs/marketing/social-preview
+    // (render-social-preview.mjs --og), re-encoded as JPEG for link previews.
+    if (socialCardPath(locale, path) === HOME_WORDMARK_CARD) {
+      const destination = resolve(out, HOME_WORDMARK_CARD.slice(1));
+      await mkdir(dirname(destination), { recursive: true });
+      await sharp(resolve(root, "docs/marketing/social-preview/og-wordmark.png"))
+        .jpeg({ quality: 88, chromaSubsampling: "4:4:4", progressive: true })
+        .toFile(destination);
+      continue;
+    }
     const slug = path.replace(/^\/+|\/+$/g, "");
     const guide = GUIDES[locale][slug];
     const title = guide?.title ?? catalog[namespace[path]]?.hero?.title ?? catalog[namespace[path]]?.meta?.title
