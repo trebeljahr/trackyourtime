@@ -95,6 +95,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop -> target
+      - name: Use Ubuntu's own mirror when Azure's does not resolve
+        # GitHub's runners list azure.archive.ubuntu.com first in apt's mirror file, and
+        # apt does not move to the next mirror when a name fails to resolve. During an
+        # Azure DNS outage (2026-11-11, hours) every package download failed.
+        if: runner.os == 'Linux'
+        run: |
+          if ! getent hosts azure.archive.ubuntu.com >/dev/null && [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            echo "azure.archive.ubuntu.com does not resolve; apt uses the next mirror"
+          fi
       - name: Install the desktop app's build dependencies
         run: |
           sudo apt-get update
@@ -173,6 +183,16 @@ jobs:
       - run: bash scripts/mongo-replica-set-container.sh mongo-e2e 27018
       - run: pnpm run build
 
+      - name: Use Ubuntu's own mirror when Azure's does not resolve
+        # GitHub's runners list azure.archive.ubuntu.com first in apt's mirror file, and
+        # apt does not move to the next mirror when a name fails to resolve. During an
+        # Azure DNS outage (2026-11-11, hours) every package download failed.
+        if: runner.os == 'Linux'
+        run: |
+          if ! getent hosts azure.archive.ubuntu.com >/dev/null && [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            echo "azure.archive.ubuntu.com does not resolve; apt uses the next mirror"
+          fi
       - run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
@@ -213,6 +233,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop -> target
+      - name: Use Ubuntu's own mirror when Azure's does not resolve
+        # GitHub's runners list azure.archive.ubuntu.com first in apt's mirror file, and
+        # apt does not move to the next mirror when a name fails to resolve. During an
+        # Azure DNS outage (2026-11-11, hours) every package download failed.
+        if: runner.os == 'Linux'
+        run: |
+          if ! getent hosts azure.archive.ubuntu.com >/dev/null && [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            echo "azure.archive.ubuntu.com does not resolve; apt uses the next mirror"
+          fi
       - name: Install the desktop app's build and run dependencies
         run: |
           sudo apt-get update
