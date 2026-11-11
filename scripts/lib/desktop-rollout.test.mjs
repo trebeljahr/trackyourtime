@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import yaml from "js-yaml";
+import yaml from "./electron-yaml.mjs";
 
 import { tauriFeedText } from "./desktop-release.mjs";
 import {

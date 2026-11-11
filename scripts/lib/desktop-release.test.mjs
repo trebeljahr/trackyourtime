@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import yaml from "js-yaml";
+import yaml from "./electron-yaml.mjs";
 
 import {
   ALL_SIGNING_VARS,

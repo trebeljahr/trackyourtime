@@ -31,7 +31,7 @@ import { appendFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import yaml from "js-yaml";
+import yaml from "./lib/electron-yaml.mjs";
 
 import { UPDATE_FEED } from "./lib/desktop-release.mjs";
 import {
