@@ -120,7 +120,7 @@ describe("keyset cursors seek through an index ending in _id", { skip: skipWitho
         const { result, ops } = await profiled(Invoice.collection.name, () =>
           caller.list({ limit: 10, ...(status ? { status } : {}), ...(cursor ? { cursor } : {}) }));
         assert.ok(ops.length > 0);
-        for (const op of ops) assert.equal(op.hasSortStage ?? false, false, op.planSummary);
+        for (const op of ops) assert.equal(op.hasSortStage ?? false, false, op.planSummary ?? "sort stage");
         // One page and its look-ahead row, plus the cursor's own ties.
         assert.ok(ops.reduce((sum, op) => sum + (op.docsExamined ?? 0), 0) <= 13);
         ids.push(...result.invoices.map((invoice) => invoice.id));
@@ -137,7 +137,7 @@ describe("keyset cursors seek through an index ending in _id", { skip: skipWitho
     do {
       const { result, ops } = await profiled(Invoice.collection.name, () =>
         caller.list({ overdue: true, limit: 4, ...(cursor ? { cursor } : {}) }));
-      for (const op of ops) assert.equal(op.hasSortStage ?? false, false, op.planSummary);
+      for (const op of ops) assert.equal(op.hasSortStage ?? false, false, op.planSummary ?? "sort stage");
       ids.push(...result.invoices.map((invoice) => invoice.id));
       cursor = result.nextCursor;
     } while (cursor);
@@ -152,7 +152,7 @@ describe("keyset cursors seek through an index ending in _id", { skip: skipWitho
       const { result, ops } = await profiled(WebhookDelivery.collection.name, () =>
         caller.deliveries({ subscriptionId: String(SUBSCRIPTION), limit: 10, ...(cursor ? { cursor } : {}) }));
       assert.equal(ops.length, 1);
-      assert.equal(ops[0]!.hasSortStage ?? false, false, ops[0]!.planSummary);
+      assert.equal(ops[0]!.hasSortStage ?? false, false, ops[0]!.planSummary ?? "sort stage");
       assert.ok((ops[0]!.docsExamined ?? 0) <= 13);
       ids.push(...result.deliveries.map((delivery) => delivery.id));
       cursor = result.nextCursor;
