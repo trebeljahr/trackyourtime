@@ -23,13 +23,13 @@
     "test": "node --import tsx --test src/tests/*.test.ts"
   },
   "dependencies": {
+    "@starter/invoice-pdf": "workspace:*",
     "@starter/shared": "workspace:*",
     "zod": "^4.6.7",
-    "zustand": "^5.0.16",
-    "@starter/invoice-pdf": "workspace:*"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
-    "@types/node": "^25.9.9",
+    "@types/node": "^26.6.6",
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
