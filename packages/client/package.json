@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@better-auth/passkey": "1.7.17",
-    "@hatchkit/dev-plugin-next": "^0.2.19",
+    "@hatchkit/dev-plugin-next": "^0.3.1",
     "@radix-ui/react-avatar": "^1.3.1",
     "@radix-ui/react-checkbox": "^1.4.1",
     "@radix-ui/react-dialog": "^1.3.1",
