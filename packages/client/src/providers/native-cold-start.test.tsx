@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { StrictMode } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const harness = vi.hoisted(() => ({
   read: (): Promise<string | null> => Promise.resolve(null),
@@ -61,6 +61,11 @@ beforeEach(() => {
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+// better-auth 1.7's session store drops its cross-tab listener one second after
+// the last subscriber unmounts (nanostores' unmount delay), and that cleanup
+// touches `window`. Let it run while jsdom still exists, or on a slow runner it
+// fires after teardown as an unhandled "window is not defined".
+afterAll(() => new Promise((resolve) => setTimeout(resolve, 1_100)));
 
 async function mount(strict = false) {
   const { AuthProvider, useAuth } = await import("./auth-provider");
