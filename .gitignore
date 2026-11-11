@@ -131,3 +131,8 @@ npm-debug.log*
 
 # Isolated extension HMR output
 packages/extension/dist-hmr/
+
+# A global "Icon?" pattern (meant for macOS's Icon\r file) matches "icons" on a
+# case-insensitive file system and once kept every file below out of the Tauri
+# switch, which then failed CI for want of them. Never ignore it.
+!desktop/src-tauri/icons/
