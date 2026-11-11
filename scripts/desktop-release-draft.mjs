@@ -34,7 +34,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import yaml from "js-yaml";
+import yaml from "./lib/electron-yaml.mjs";
 
 import {
   feedProblems,

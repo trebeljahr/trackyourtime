@@ -68,7 +68,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import yaml from "js-yaml";
+import yaml from "./lib/electron-yaml.mjs";
 
 import { describeChildFailure } from "./lib/child-failure.mjs";
 import { appleSigning, createNotarizer } from "./lib/desktop-apple.mjs";
