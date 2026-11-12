@@ -58,7 +58,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           # All three tools need only Java 11; 21 matches mobile-release.yml.
