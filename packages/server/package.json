@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@better-auth/passkey": "1.7.15",
-    "@dotenvx/dotenvx": "^1.75.1",
+    "@dotenvx/dotenvx": "^2.38.2",
     "@sentry/node": "^11.10.0",
     "@starter/core": "workspace:*",
     "@starter/invoice-pdf": "workspace:*",
