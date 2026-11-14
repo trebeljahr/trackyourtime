@@ -96,7 +96,7 @@ describe("with a DSN", () => {
     expect(names).not.toContain("BrowserTracing");
     expect(names).not.toContain("Replay");
     expect(sdk.breadcrumbsIntegration).toHaveBeenCalledWith(
-      expect.objectContaining({ console: false, dom: false }),
+      expect.objectContaining({ dom: false }),
     );
   });
 

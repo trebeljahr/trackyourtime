@@ -133,7 +133,7 @@ export function createErrorReporter(options: ErrorReporterOptions): ErrorReporte
             client.eventFiltersIntegration(),
             client.functionToStringIntegration(),
             client.browserApiErrorsIntegration(),
-            client.breadcrumbsIntegration({ console: false, dom: false, sentry: false, fetch: true, xhr: true, history: true }),
+            client.breadcrumbsIntegration({ dom: false, sentry: false, fetch: true, xhr: true, history: true }),
             client.globalHandlersIntegration(),
             client.linkedErrorsIntegration(),
             client.dedupeIntegration(),

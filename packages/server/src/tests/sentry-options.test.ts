@@ -57,7 +57,7 @@ describe("sentryOptions", () => {
     const event: TransactionEvent = {
       type: "transaction",
       contexts: { trace: { span_id: "1", trace_id: "2", data: headerData() } },
-      spans: [{ span_id: "3", trace_id: "2", start_timestamp: 0, data: headerData() }],
+      spans: [{ span_id: "3", trace_id: "2", start_timestamp: 0, status: "ok", data: headerData() }],
     };
     const sent = await options.beforeSendTransaction?.(event, {});
     const kept = { "http.request.header.user_agent": "node-test", "http.route": "/boom" };
