@@ -116,6 +116,24 @@ describe("turning two-factor on", () => {
     for (const code of CODES) expect(codes).toHaveTextContent(code);
   });
 
+  it("reads better-auth 1.7's tagged answer, and refuses an OTP-only one", async () => {
+    enable.mockResolvedValueOnce({ data: { method: "totp", totpURI: URI, backupCodes: CODES }, error: null });
+    const { unmount } = render(<TwoFactorRow hasPassword />);
+    fireEvent.click(screen.getByTestId("two-factor-enable"));
+    type("two-factor-password", "password1234");
+    fireEvent.click(screen.getByTestId("two-factor-password-submit"));
+    expect(await screen.findByTestId("two-factor-secret")).toHaveTextContent("JBSWY3DPEHPK3PXP");
+    unmount();
+
+    enable.mockResolvedValueOnce({ data: { method: "otp" }, error: null });
+    render(<TwoFactorRow hasPassword />);
+    fireEvent.click(screen.getByTestId("two-factor-enable"));
+    type("two-factor-password", "password1234");
+    fireEvent.click(screen.getByTestId("two-factor-password-submit"));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByTestId("two-factor-qr")).toBeNull();
+  });
+
   it("keeps the QR step and no codes when the code is wrong", async () => {
     verifyTotp.mockResolvedValue({ error: { code: "INVALID_CODE" } });
     render(<TwoFactorRow hasPassword />);

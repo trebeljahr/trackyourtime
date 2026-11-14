@@ -5,7 +5,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { magicLink } from "better-auth/plugins/magic-link";
 
-import { magicLinkGuard } from "../auth/magic-link-guard.js";
+import { magicLinkGuard, magicLinkVerificationIdentifier } from "../auth/magic-link-guard.js";
 import { twoFactorPlugin } from "../auth/account-security.js";
 
 type Row = Record<string, unknown> & { id: string };
@@ -38,7 +38,11 @@ describe("magic-link sign-in", () => {
     await auth.api.signInMagicLink({ body: { email, callbackURL: "/app" }, headers: new Headers() });
     assert.equal(links.length, 1);
     assert.equal(db.verification.length, 1);
-    assert.notEqual(db.verification[0].identifier, new URL(links[0]).searchParams.get("token"));
+    const token = new URL(links[0]).searchParams.get("token");
+    assert.ok(token);
+    assert.notEqual(db.verification[0].identifier, token);
+    // The guard must find the row the plugin wrote, or it fails open.
+    assert.equal(db.verification[0].identifier, magicLinkVerificationIdentifier(token));
 
     // Turning 2FA on after the email is sent still blocks redemption.
     user.twoFactorEnabled = true;

@@ -472,7 +472,14 @@ An upgrade is a deliberate change, released as migration-bearing:
    shape, so a rollback refuses to start instead of reading it wrong.
 4. Run the auth integration tests (`two-factor-integration`,
    `session-lifetime-integration`, `organization-http-lockdown`,
-   `account-deletion-integration`) against a copy of a real database.
+   `account-deletion-integration`, `magic-link-integration`) against a copy
+   of a real database.
+
+Stored shape includes the `verification` identifiers our guards look up
+themselves. 1.7 renamed magic-link rows to `magic-link:<hash>`; a guard still
+reading the bare hash finds nothing and lets a two-factor account in by link.
+`magic-link-integration` pins `magicLinkVerificationIdentifier` against the
+row the plugin writes, so the next rename fails a test instead of opening.
 
 ### Durable entry writes (API 12)
 
