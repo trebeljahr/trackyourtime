@@ -25,7 +25,10 @@ export default defineConfig({
       command: "bash e2e/start-server.sh",
       url: `http://127.0.0.1:${E2E_SERVER_PORT}/api/health`,
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      // Covers a Mongo container recreated with new flags
+      // (scripts/mongo-replica-set-container.sh) and a dev server booting on
+      // a loaded machine; 30 s ran out for both.
+      timeout: 120_000,
       env: {
         NODE_ENV: "test",
         E2E_DISABLE_AUTH_RATE_LIMIT: "1",

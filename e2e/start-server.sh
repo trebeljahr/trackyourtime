@@ -36,10 +36,18 @@ if [ -z "${CI:-}" ]; then
   # need transactions. A new container name, because a standalone
   # `starter-e2e-mongo` from before this would otherwise be reused.
   # The old standalone one is stopped (not removed) so it frees the port.
+  #
+  # The data dir is on the Colima VM's disk (the image's anonymous volume),
+  # not tmpfs. A tmpfs counts against the VM's memory, which is 2 GiB and
+  # shared with every other session's containers, so a long suite filled it
+  # and the kernel OOM-killed mongod (exit 137, 2026-11-14). A bounded tmpfs
+  # would turn that into ENOSPC, still a dead run. Disk is slower per write
+  # but holds a test database many times over. The script recreates a
+  # container still on the old tmpfs flags once nothing is connected to it.
   if docker ps --format '{{.Names}}' | grep -qx starter-e2e-mongo; then
     docker stop starter-e2e-mongo >/dev/null
   fi
-  bash scripts/mongo-replica-set-container.sh starter-e2e-mongo-rs 27018 --tmpfs /data/db
+  bash scripts/mongo-replica-set-container.sh starter-e2e-mongo-rs 27018
 
   # Redis on port 6380
   ensure_container starter-e2e-redis -p 6380:6379 --tmpfs /data redis:7-alpine
