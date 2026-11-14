@@ -30,6 +30,6 @@
   "devDependencies": {
     "@types/pdfkit": "^0.17.7",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }

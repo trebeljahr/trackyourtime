@@ -1,6 +1,11 @@
 {
   "extends": "@docusaurus/tsconfig",
   "compilerOptions": {
-    "baseUrl": "."
+    // TypeScript 7 removed baseUrl (TS5102); unset the one @docusaurus/tsconfig
+    // sets and declare @site/* relative to this file instead.
+    "baseUrl": null,
+    "paths": {
+      "@site/*": ["./*"]
+    }
   }
 }

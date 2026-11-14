@@ -109,7 +109,7 @@
     "mongodb": "7.8.0",
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.1",
