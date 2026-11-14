@@ -27,7 +27,7 @@
     "@radix-ui/react-switch": "^1.4.1",
     "@radix-ui/react-tabs": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
-    "@sentry/browser": "^10.78.0",
+    "@sentry/browser": "^11.10.0",
     "@starter/core": "workspace:*",
     "@starter/invoice-pdf": "workspace:*",
     "@starter/shared": "workspace:*",

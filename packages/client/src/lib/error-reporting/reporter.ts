@@ -25,6 +25,22 @@ import type * as Sdk from "./sdk";
 /** The SDK surface the reporter uses: the named re-exports in `sdk.ts`. */
 type Sentry = typeof Sdk;
 
+/** What the SDK may collect at all: no user (and so no IP), no cookies, no
+ *  header but the browser identifier, no bodies, no query strings. */
+export const BROWSER_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: { request: { allow: ["user-agent"] }, response: false },
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  mcp: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+} as const satisfies NonNullable<Parameters<Sentry["init"]>[0]>["dataCollection"];
+
 /** The host a report came from. The `platform` tag on every event. */
 export type ReportingPlatform = "web" | "electron" | "ios" | "android";
 
@@ -104,7 +120,9 @@ export function createErrorReporter(options: ErrorReporterOptions): ErrorReporte
           dsn: options.dsn,
           release: options.release,
           environment: options.environment,
-          sendDefaultPii: false,
+          // Sentry 11 removed `sendDefaultPii` and collects by default; this
+          // is the same policy as scrub.ts, applied before an event is built.
+          dataCollection: BROWSER_DATA_COLLECTION,
           sendClientReports: false,
           // No tracing: no tracesSampleRate and no browserTracingIntegration.
           // The list replaces the SDK defaults, leaving out the session

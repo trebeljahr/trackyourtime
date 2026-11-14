@@ -3820,8 +3820,10 @@ fallback in `build-and-deploy.yml`, `desktop-release.yml` and
 - **What a report may carry is `scrub.ts` and nothing else** (`beforeSend`
   and `beforeBreadcrumb`): no user, no query strings anywhere, no cookies or
   headers but the browser identifier, no bodies, no console or DOM
-  breadcrumbs, `sendDefaultPii: false`, `defaultIntegrations: false`. The
-  privacy page states the same list; change both.
+  breadcrumbs, a restrictive `dataCollection` (Sentry 11 dropped
+  `sendDefaultPii` and collects headers, cookies and bodies by default), and
+  `defaultIntegrations: false`. The server sets its own `dataCollection` in
+  `sentry-options.ts`. The privacy page states the same list; change both.
 - **No tracing, replay or sessions.** Tracing adds `sentry-trace`/`baggage`
   to every API request, and a header the API does not allow fails the CORS
   preflight — sign-in would break in the name of monitoring.

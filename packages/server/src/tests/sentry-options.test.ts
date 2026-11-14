@@ -71,8 +71,14 @@ describe("sentryOptions", () => {
     assert.deepEqual(await options.beforeSend?.(event, {}), { type: undefined, message: "boom" });
   });
 
-  test("replaces the integrations that read the body and cookies", () => {
-    const names = Array.isArray(options.integrations) ? options.integrations.map((i) => i.name) : [];
-    assert.deepEqual(names, ["Http", "RequestData"]);
+  test("collects no user, cookies, headers, bodies or query strings", () => {
+    const collection = options.dataCollection;
+    assert.equal(collection?.userInfo, false);
+    assert.equal(collection?.cookies, false);
+    assert.deepEqual(collection?.httpHeaders, { request: false, response: false });
+    assert.deepEqual(collection?.httpBodies, []);
+    assert.equal(collection?.urlQueryParams, false);
+    assert.equal(collection?.stackFrameVariables, false);
+    assert.equal(collection?.databaseQueryData, false);
   });
 });

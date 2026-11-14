@@ -8,8 +8,9 @@ import { isChunkLoadError } from "@/lib/chunk-reload";
  *
  * The policy, which the privacy page states in plain words:
  *
- *  - No person. `user` is dropped whole, and `sendDefaultPii` stays off, so
- *    the SDK never asks the tracker to keep an IP address either.
+ *  - No person. `user` is dropped whole, and `dataCollection.userInfo` is
+ *    off (reporter.ts), so the SDK never asks the tracker to keep an IP
+ *    address either.
  *  - No query string and no fragment, anywhere a URL appears: the page
  *    address, every stack frame, every breadcrumb and any URL inside an error
  *    message. `/invite/?id=`, `/app/device/?user_code=` and `?next=` carry

@@ -1,10 +1,11 @@
 // Options for the server's Sentry/GlitchTip client. Kept out of
 // instrument.ts so tests can check them without starting the SDK.
 //
-// By default @sentry/node puts the request headers (Cookie included), the
-// parsed cookies (the better-auth session token) and up to 10 KB of the
-// request body on every event. Leaving `sendDefaultPii` unset does not
-// stop that, so the body is never read and the hooks strip the rest.
+// By default @sentry/node 11 puts the request headers (Cookie included), the
+// parsed cookies (the better-auth session token), HTTP bodies, query strings
+// and the inferred user on every event. `dataCollection` turns all of that
+// off, and the hooks below strip credentials again in case an integration
+// copies them anyway (span attributes, a future default).
 
 import * as Sentry from "@sentry/node";
 
@@ -48,15 +49,28 @@ export function scrubRequest<T extends Sentry.Event>(event: T): T {
   return event;
 }
 
+/** What the SDK may collect at all: no user (and so no IP), cookies,
+ *  headers, bodies, query strings, local variables or database values. */
+export const SERVER_DATA_COLLECTION: NonNullable<Sentry.NodeOptions["dataCollection"]> = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: { request: false, response: false },
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  mcp: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+};
+
 export function sentryOptions(dsn: string): Sentry.NodeOptions {
   return {
     dsn,
     environment: process.env.NODE_ENV ?? "development",
     tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
-    integrations: [
-      Sentry.httpIntegration({ maxIncomingRequestBodySize: "none" }),
-      Sentry.requestDataIntegration({ include: { cookies: false, data: false } }),
-    ],
+    dataCollection: SERVER_DATA_COLLECTION,
     beforeSend: scrubRequest,
     beforeSendTransaction: scrubRequest,
   };
