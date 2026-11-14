@@ -3909,6 +3909,9 @@ pnpm --filter @starter/server exec dotenvx set STRIPE_SECRET_KEY sk_live_... -f 
 pnpm --filter @starter/server exec dotenvx rotate -f .env.production
 ```
 
+dotenvx 2 has no `rotate` command (removed in 2.0, not yet back); rotating a
+key means decrypting and encrypting the file again under a new keypair.
+
 Both act on the local untracked file only. Keep `.env.keys` out of commits —
 `.gitignore` enforces this.
 
