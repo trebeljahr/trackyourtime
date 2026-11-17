@@ -222,7 +222,7 @@ packages/
   raycast/     Raycast extension — menu bar timer, commands, catalog CRUD
 
 e2e/           Playwright specs and their harness
-docs/          deploy.md, dev-setup.md
+docs/          deploy.md
 docs-site/     Docusaurus site, served at trackyourtime.dev/docs/
 scripts/       dev orchestration, extension id, icon and newsletter scripts
 desktop/       the desktop app: one Cargo workspace with the Tauri 2 shell

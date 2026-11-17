@@ -25,10 +25,6 @@
     "client": 6477,
     "nativeHmr": 7130
   },
-  "localDev": {
-    "slug": "tracktime",
-    "domain": "local.trebeljahr.com"
-  },
   "email": {
     "transactional": "listmonk-ses",
     "mailingList": "listmonk-ses"

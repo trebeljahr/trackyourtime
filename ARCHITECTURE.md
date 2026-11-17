@@ -66,7 +66,7 @@ build before anything resolves them — hence the ordering in `pnpm run build`.
 | Path | What it is |
 |---|---|
 | `e2e/` | Playwright suite: 10 specs, `helpers.ts`, `db-utils.ts`, `serve-static.mjs`, `start-server.sh` (starts its own Mongo/Redis outside CI) |
-| `docs/` | `deploy.md` (the production topology) and `dev-setup.md` (a Tailscale/Caddy dev-URL guide that needs a private CLI) |
+| `docs/` | `deploy.md` (the production topology) |
 | `scripts/` | Root tooling: `dev.mjs` (port resolution for `dev` / `dev:auto` / `dev:fixed`), `extension-id.mjs` + `lib/`, icon scripts, `newsletter-*.ts`, mobile dev shells |
 | `desktop/` | The desktop app, Tauri 2 (releases up to 0.3.0 were Electron). One Cargo workspace: `crates/wire` (serde mirrors of `packages/shared/src/desktop-bridge.ts`, with a contract test against the TypeScript), `crates/model` (the pure decisions: tray, updater, settings, shortcuts, windows, trust, CSP, profile, secure store), `crates/activity` (desktop activity capture and Autopilot) and `src-tauri`, the app: `protocol.rs` serves the export, embedded in the binary, on `app://-` (`http://app.localhost` on Windows), `bridge.js` installs `window.electronAPI` before any page script, `ipc.rs` checks the sender of every bridge call, `secure.rs` encrypts the session token under a key the OS keychain holds, `platform.rs` binds the tray, shortcuts and notifications, `updater.rs` binds tauri-plugin-updater, and `legacy.rs` / `migrate.rs` carry an Electron install's data over. `PORTING.md` in each crate maps it to the TypeScript it replaced. Built by `scripts/build-desktop.mjs`, tested by `pnpm test:desktop` and `pnpm test:e2e:desktop`, released by `.github/workflows/desktop-release.yml` |
 | `packaging/` | Templates for the Homebrew cask, winget and Flathub manifests, filled from a published release by `scripts/desktop-manifests.mjs` |
@@ -462,10 +462,6 @@ Beyond those, four things that fail *quietly*:
   on one domain, why the API lives under `/api`, the load-bearing compose service
   names, and everything that must agree on the API origin. Nothing about
   deployment is repeated here.
-- [`docs/dev-setup.md`](docs/dev-setup.md) — a Tailscale + Caddy guide for
-  serving dev over a real hostname. It is not general local setup and its
-  commands need a CLI that is not installable from this repo; README's
-  Development section is the one to follow.
 - [CLAUDE.md](CLAUDE.md) — invariants not repeated here: tags, import/export,
   the Raycast conventions, the dev-port rationale. See
   [CONTRIBUTING.md](CONTRIBUTING.md#repository-layout) for what it is and the

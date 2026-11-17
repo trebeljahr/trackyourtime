@@ -27,7 +27,7 @@ final — the App ID, the App Store Connect record and a Play package name
 cannot be renamed.
 
 What still says `tracktime`, on purpose: the `*.tracktime.trebeljahr.com` hosts
-in the deploy history and the hatchkit dev URL, the `tracktime` slug in
+in the deploy history, the `tracktime` slug in
 `.hatchkit.json` and the Listmonk lists and templates named after it, because
 those name live infrastructure that code cannot move; and the on-disk checkout
 path `~/projects/tracktime`. Mail moved on 2026-09-29: the sender is

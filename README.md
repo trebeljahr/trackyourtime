@@ -266,7 +266,6 @@ The desktop checks in `test:unit` and `typecheck` compile the Rust app, so they 
 | [`CLAUDE.md`](CLAUDE.md) | Instructions for AI coding agents, not contributor documentation — but worth knowing about. [CONTRIBUTING.md](CONTRIBUTING.md#repository-layout) explains when to reach for it. |
 | [`docs/deploy.md`](docs/deploy.md) | The production topology: two Coolify apps on two hosts — the web app on the apex, the API on `api.` — why the domain moved, and the four places that must agree on the API origin. |
 | [`docs/self-hosting.md`](docs/self-hosting.md) | Running your own instance: `docker-compose.selfhost.yml`, one domain behind a reverse proxy, SMTP, backup, restore and upgrades. |
-| [`docs/dev-setup.md`](docs/dev-setup.md) | The maintainer's own Tailscale/Caddy dev-URL setup. Needs a private CLI that is not installable from this repo — skip it. |
 | `docs-site/` | The Docusaurus site served at [trackyourtime.dev/docs](https://trackyourtime.dev/docs/): self-hosting, choosing a tracker, the MCP server and the REST API. It is built into the web app's image ([`docs/deploy.md`](docs/deploy.md#the-docs-are-part-of-the-client-image)). Every build also writes a Markdown copy of each page and an `llms.txt`. Run it locally with `pnpm run dev:docs`. |
 
 ## Contributing

@@ -135,7 +135,7 @@ cp packages/server/.env.example packages/server/.env.development   # set BETTER_
 mongod --dbpath <tmp-dir> --port <mongo-port> --replSet rs0 --fork --logpath <tmp-dir>/mongod.log
 mongosh --port <mongo-port> --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:<mongo-port>"}]})'
 PORT=<web-port> API_PORT=<api-port> MONGODB_URI="mongodb://127.0.0.1:<mongo-port>/tyt-capture?replicaSet=rs0" \
-  HATCHKIT_LOCAL_DEV=0 pnpm run dev
+  pnpm run dev
 node scripts/marketing/seed-demo.mjs http://127.0.0.1:<api-port> http://localhost:<web-port>   # prints the demo login
 pnpm marketing:readme-screenshots http://localhost:<web-port> <demo-email> <demo-password>
 pnpm marketing:social-preview

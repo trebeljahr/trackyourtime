@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 import type { NextConfig } from "next";
 
 /**
@@ -166,44 +165,4 @@ const baseConfig: NextConfig = {
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
 };
 
-/**
- * Import a module without letting Next's config bundler rewrite the call.
- *
- * Next compiles next.config.ts to CommonJS, which turns a literal `import()`
- * into `require()` — and `require()` of an ESM-only package throws
- * ERR_PACKAGE_PATH_NOT_EXPORTED. Building the function from a string keeps the
- * import opaque to the bundler, so it survives as a real dynamic import.
- */
-const esmImport = new Function(
-  "specifier",
-  "return import(specifier);",
-) as (specifier: string) => Promise<unknown>;
-
-type LocalDevPlugin = {
-  withLocalDev: (config: NextConfig, options: { slug: string }) => NextConfig;
-};
-
-/**
- * `@hatchkit/dev-plugin-next` is ESM-only and only does work during
- * `next dev` (it writes the project's Caddy fragment and prints the
- * Tailscale-URL banner), so it is loaded lazily in that phase alone. A
- * failure to load degrades to the plain config rather than breaking the
- * dev server or the build.
- */
-export default async function config(phase: string): Promise<NextConfig> {
-  if (phase !== PHASE_DEVELOPMENT_SERVER) return baseConfig;
-
-  try {
-    const plugin = (await esmImport(
-      "@hatchkit/dev-plugin-next",
-    )) as LocalDevPlugin;
-    return plugin.withLocalDev(baseConfig, { slug: "trackyourtime" });
-  } catch (err) {
-    console.warn(
-      "[next.config] @hatchkit/dev-plugin-next could not be loaded — " +
-        "continuing without the local-dev integration.",
-      err instanceof Error ? err.message : err,
-    );
-    return baseConfig;
-  }
-}
+export default baseConfig;

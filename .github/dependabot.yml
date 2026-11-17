@@ -37,8 +37,6 @@ updates:
         update-types: ["version-update:semver-minor"]
       - dependency-name: "class-variance-authority"
         update-types: ["version-update:semver-minor"]
-      - dependency-name: "@hatchkit/dev-plugin-next"
-        update-types: ["version-update:semver-minor"]
       - dependency-name: "@types/chrome"
         update-types: ["version-update:semver-minor"]
       # @types/node is ^25 everywhere but Raycast, which pins the 22.x its

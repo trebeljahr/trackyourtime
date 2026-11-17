@@ -28,7 +28,7 @@
 #   LAN_IP=<ip>         override host (default: localhost — simulators
 #                       share the Mac's network namespace)
 #   CAP_DEV_URL=<url>   full WebView dev URL override, e.g.
-#                       https://<slug>.local.<your-domain>/
+#                       http://<your-mac-lan-ip>:51730/
 #   IOS_HEADLESS=1      boot with simctl only, never open Simulator.app (agent
 #                       runs; screenshot with `xcrun simctl io`). Otherwise
 #                       Simulator.app is opened with `open -g`, in the
